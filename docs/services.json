@@ -1,0 +1,72 @@
+{
+  "_comment": "ISSUE-018：唯一受支持服务清单（机器可读）。README/runbook/handbook 的端口与启动命令必须与本文件一致。",
+  "generated_at": "2026-08-01",
+  "architecture": "cascade（sku_v4 YOLO 画框 + ResNet18 分类器精识别，失败关闭，禁 COCO 回退）",
+  "services": [
+    {
+      "name": "label-studio",
+      "port": 8300,
+      "command": "docker compose up -d label-studio（或本地 venv: label-studio start --port 8300）",
+      "health": "http://127.0.0.1:8300/health",
+      "role": "标注/审核平台",
+      "writable": true,
+      "status": "supported"
+    },
+    {
+      "name": "ml-backend",
+      "port": 8301,
+      "command": "python -m src.ls_ml_backend.yolo_backend --port 8301",
+      "health": "http://127.0.0.1:8301/health",
+      "role": "Label Studio 自动预标注（级联识别）",
+      "writable": false,
+      "status": "supported"
+    },
+    {
+      "name": "orchestrator",
+      "port": 8304,
+      "command": "python -m src.ls_platform.orchestrator --port 8304",
+      "health": "http://127.0.0.1:8304/health",
+      "role": "平台编排 API（导入/导出/复训/模型切换/webhook）",
+      "writable": true,
+      "status": "supported"
+    },
+    {
+      "name": "recognize",
+      "port": 8091,
+      "command": "python -m src.recognize.service --port 8091",
+      "health": "http://127.0.0.1:8091/v2/health",
+      "role": "在线级联识别服务（/v2 契约）",
+      "writable": false,
+      "status": "supported"
+    },
+    {
+      "name": "monitor",
+      "port": 8092,
+      "command": "bash scripts/monitor_watchdog.sh（看门狗守护，勿直接 nohup）",
+      "health": "http://127.0.0.1:8092/api/live",
+      "role": "训练/平台统一监控仪表盘",
+      "writable": false,
+      "status": "supported"
+    },
+    {
+      "name": "review-server",
+      "port": 8090,
+      "command": "python -m src.labeling.review_server --port 8090",
+      "health": "http://127.0.0.1:8090/api/photos",
+      "role": "早期单机人工审核界面",
+      "writable": true,
+      "status": "legacy",
+      "legacy_note": "只用于历史回归验证，禁止生产；生产审核走 Label Studio(:8300) + 编排层(:8304)"
+    },
+    {
+      "name": "recognize-v1-api",
+      "port": 8091,
+      "command": "python -m src.recognize.api --port 8091",
+      "health": "http://127.0.0.1:8091/v1/health",
+      "role": "早期 KB+VLM 单模型识别接口（/v1 契约）",
+      "writable": false,
+      "status": "legacy",
+      "legacy_note": "只用于历史回归验证，禁止生产；在线识别统一走级联 /v2"
+    }
+  ]
+}
