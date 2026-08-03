@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import shutil
 import sys
 import time
 from pathlib import Path
@@ -99,9 +100,19 @@ def freeze_backbone(model: nn.Module, backbone: str):
 
 def train(backbone: str = "resnet18", epochs: int = 80, batch: int = 64,
           lr0: float = 1e-3, patience: int = 10, size: int = 224,
-          freeze: bool = False, run_tag: str = ""):
+          freeze: bool = False, run_tag: str = "", promote: bool = False):
     device = torch.device("mps" if torch.backends.mps.is_available() else "cpu")
     OUT_DIR.mkdir(parents=True, exist_ok=True)
+    # 复核修订（RA-012）：禁止可变 best.pt 被静默覆盖。每个 run 写入独立实验目录
+    # run_<tag>，run_tag 已存在则 fail-closed；生产 best.pt 仅在显式 --promote
+    # 时更新，且先归档旧版本。
+    if not run_tag:
+        run_tag = time.strftime("%Y%m%d_%H%M%S")
+    exp_dir = OUT_DIR / f"run_{run_tag}"
+    if exp_dir.exists():
+        raise RuntimeError(f"实验目录已存在，拒绝覆盖: {exp_dir}（换一个 --run-tag）")
+    exp_dir.mkdir(parents=True)
+    run_tag = "_" + run_tag  # 历史/曲线文件名后缀兼容
 
     train_ds, val_ds = get_datasets(size)
     n_classes = len(train_ds.classes)
@@ -194,14 +205,15 @@ def train(backbone: str = "resnet18", epochs: int = 80, batch: int = 64,
                        ensure_ascii=False, indent=2), encoding="utf-8")
         print(f"  ep{epoch}: train_acc={train_acc:.4f} val_acc={val_acc:.4f} val_loss={val_loss:.4f} lr={cur_lr:.2e}", flush=True)
 
-        # 保存最佳
+        # 保存最佳（复核修订：写入实验目录，不再直接覆盖生产 best.pt）
         if val_acc > best_acc:
             best_acc = val_acc
             best_epoch = epoch
             no_improve = 0
             torch.save({"model": model.state_dict(), "backbone": backbone, "n_classes": n_classes,
-                        "classes": train_ds.classes, "val_acc": val_acc, "epoch": epoch},
-                       OUT_DIR / "best.pt")
+                        "classes": train_ds.classes, "val_acc": val_acc, "epoch": epoch,
+                        "run_tag": run_tag.lstrip("_")},
+                       exp_dir / "best.pt")
         else:
             no_improve += 1
 
@@ -229,8 +241,20 @@ def train(backbone: str = "resnet18", epochs: int = 80, batch: int = 64,
     elapsed = time.time() - t0
     print(f"\n=== 训练完成 ({elapsed:.0f}s) ===")
     print(f"  最佳 val_acc: {best_acc:.4f} (epoch {best_epoch})")
-    print(f"  权重: {OUT_DIR/'best.pt'}")
-    return {"best_acc": best_acc, "best_epoch": best_epoch, "elapsed": elapsed}
+    print(f"  权重: {exp_dir/'best.pt'}")
+    # 复核修订：生产 best.pt 只在显式 promote 时更新，且先归档旧权重
+    if promote:
+        prod = OUT_DIR / "best.pt"
+        if prod.exists():
+            bak = OUT_DIR / f"best_prev_{time.strftime('%Y%m%d%H%M%S')}.pt"
+            shutil.copy2(prod, bak)
+            print(f"  旧生产权重已归档: {bak.name}")
+        shutil.copy2(exp_dir / "best.pt", prod)
+        print(f"  已 promote 为生产 best.pt: {prod}")
+    else:
+        print("  未 --promote：生产 best.pt 保持不变，发布需经 bundle 流程")
+    return {"best_acc": best_acc, "best_epoch": best_epoch, "elapsed": elapsed,
+            "exp_dir": str(exp_dir)}
 
 
 def _plot_curves(history, run_tag=""):
@@ -263,5 +287,8 @@ if __name__ == "__main__":
     ap.add_argument("--size", type=int, default=224)
     ap.add_argument("--freeze", action="store_true", help="冻结骨干仅训分类头（增量微调）")
     ap.add_argument("--run-tag", default="")
+    ap.add_argument("--promote", action="store_true",
+                    help="显式将本 run 最佳权重提升为生产 best.pt（旧版先归档）")
     a = ap.parse_args()
-    train(a.backbone, a.epochs, a.batch, a.lr0, a.patience, a.size, a.freeze, a.run_tag)
+    train(a.backbone, a.epochs, a.batch, a.lr0, a.patience, a.size, a.freeze,
+          a.run_tag, promote=a.promote)

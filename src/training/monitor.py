@@ -97,16 +97,17 @@ def _load_ckpt_meta(bp: Path) -> dict:
     """读取 checkpoint 元数据，带 mtime 缓存。
 
     RA-001：监控绝不在每次请求时 torch.load（每 3 秒双请求曾导致 RSS 16GiB）。
-    仅当文件 mtime/size 变化时才重新加载一次并缓存。
-    """
+    复核修订：缓存命中条件以 mtime/size 是否变化为唯一门槛；TTL 到期但文件
+    未变化时不再重复 torch.load（与注释语义一致）。"""
     global _CKPT_CACHE, _CKPT_CACHE_AT
     try:
         st = bp.stat()
     except OSError:
         return {}
     now = time.time()
-    if _CKPT_CACHE and now - _CKPT_CACHE_AT < _CKPT_CACHE_TTL \
-            and _CKPT_CACHE.get("mtime") == st.st_mtime and _CKPT_CACHE.get("size") == st.st_size:
+    if _CKPT_CACHE and _CKPT_CACHE.get("mtime") == st.st_mtime \
+            and _CKPT_CACHE.get("size") == st.st_size:
+        _CKPT_CACHE_AT = now  # 文件未变化：续期缓存，不重新加载
         return _CKPT_CACHE
     meta: dict = {"mtime": st.st_mtime, "size": st.st_size}
     try:
@@ -273,10 +274,21 @@ def read_live_classifier() -> dict:
     live["finished"] = finished
     live["best_acc"] = best_acc
     live["best_epoch"] = best_epoch
+    # RA-021 复核修订：训练已结束（非活跃）时，live 展示的 best 必须取自当前生产
+    # best.pt（真实线上权重），旧训练历史降级为 history_best_acc，不得混展。
     if finished:
+        meta = _load_ckpt_meta(MODELS_DIR / "classifier" / "best.pt")
+        if meta.get("val_acc") is not None:
+            live["history_best_acc"] = best_acc
+            live["best_acc"] = float(meta["val_acc"])
+            live["best_epoch"] = meta.get("epoch")
+            live["best_source"] = "current_best_pt"
+        else:
+            live["best_source"] = "history_file"
         live["final_epochs"] = n_epochs
         live["active"] = False
     else:
+        live["best_source"] = "live_history"
         live["active"] = age <= 120
     return live
 

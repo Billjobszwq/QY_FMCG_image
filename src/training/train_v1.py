@@ -35,26 +35,35 @@ def code_hash():
 def _content_manifest_hash(base: Path, train_rel: str, val_rel: str) -> tuple[str, int]:
     """RA-013：数据集内容指纹 —— 逐文件 sha256（图片+标签），覆盖实际内容而非仅 YAML。
 
-    返回 (manifest_hash, 文件数)。同一内容必得同一哈希，任何图片/标签/切分变化都会改变哈希。"""
+    返回 (manifest_hash, 文件数)。同一内容必得同一哈希，任何图片/标签/切分变化都会改变哈希。
+    复核修订：YOLO 数据集的 labels/<split> 目录与图片目录同等参与哈希（图片不变时改
+    label 必须改变哈希）；哈希键用相对路径而非仅文件名，并纳入 split 目录名。"""
     h = hashlib.sha256()
     n = 0
     for split_rel in (train_rel, val_rel):
-        d = (base / split_rel) if not Path(split_rel).is_absolute() else Path(split_rel)
-        h.update(f"|{split_rel}".encode())
-        if not d.exists():
-            continue
-        files = sorted(f for f in d.rglob("*") if f.is_file())
-        for f in files:
-            n += 1
-            h.update(f.name.encode())
-            fh = hashlib.sha256()
-            with f.open("rb") as fp:
-                while True:
-                    b = fp.read(1 << 20)
-                    if not b:
-                        break
-                    fh.update(b)
-            h.update(fh.digest())
+        targets = [split_rel]
+        # 图片目录 images/<split> 对应同层级标签目录 labels/<split>，一并入哈希
+        sp = Path(split_rel)
+        if not sp.is_absolute() and sp.parts and sp.parts[0] == "images" and len(sp.parts) > 1:
+            targets.append(str(Path("labels", *sp.parts[1:])))
+        for rel in targets:
+            d = (base / rel) if not Path(rel).is_absolute() else Path(rel)
+            h.update(f"|{rel}".encode())
+            if not d.exists():
+                continue
+            files = sorted((f for f in d.rglob("*") if f.is_file()),
+                           key=lambda f: f.relative_to(d).as_posix())
+            for f in files:
+                n += 1
+                h.update(f.relative_to(d).as_posix().encode())
+                fh = hashlib.sha256()
+                with f.open("rb") as fp:
+                    while True:
+                        b = fp.read(1 << 20)
+                        if not b:
+                            break
+                        fh.update(b)
+                h.update(fh.digest())
     return h.hexdigest()[:16], n
 
 

@@ -119,13 +119,16 @@ class RecognitionEngine:
             from ..cascade.cascade_inference import CascadeRecognizer
 
             # RA-006：优先从当前生产 bundle 解析全部资产（权重+registry+阈值）；
-            # 无 CURRENT 指针时退回默认路径逻辑
+            # 无 CURRENT 指针时退回默认路径逻辑。
+            # 复核修订：resolve_weights 内置逐文件哈希校验；校验失败（BundleError）
+            # 必须失败关闭，不得静默退回默认路径加载未验证权重。
             bundle_info = None
             try:
                 from ..models import bundle as _bundle
                 bundle_info = _bundle.resolve_weights()
-            except Exception:
-                bundle_info = None
+            except Exception as e:
+                raise ModelUnavailableError(
+                    f"bundle 哈希校验失败，拒绝加载未验证权重: {e}") from e
             thr = (bundle_info or {}).get("threshold_values") or {}
 
             if bundle_info and Path(bundle_info["detector"]).exists() \
@@ -164,6 +167,9 @@ class RecognitionEngine:
                 kwargs["conf_thr"] = float(thr["conf"])
             if isinstance(thr.get("margin"), (int, float)):
                 kwargs["margin_thr"] = float(thr["margin"])
+            # RA-006：bundle 自带 registry 时传入识别器，消除对全局文件的外部依赖
+            if source == "bundle":
+                kwargs["registry"] = registry
             cascade = CascadeRecognizer(yolo_weight=str(weight), clf_weight=str(clf_weight), **kwargs)
             n_yolo = len(cascade.yolo.names) if hasattr(cascade.yolo, "names") else 0
             if n_yolo and n_yolo != n_classes_expected:
@@ -185,6 +191,10 @@ class RecognitionEngine:
                 "classifier_sha256": sha256_file(clf_weight)[:16],
                 "n_classes": n_classes_expected,
                 "conf_threshold": cascade.conf_thr,
+                "margin_threshold": cascade.margin_thr,
+                # 复核修订：如实报告阈值来源（bundle / code_default），不再混淆
+                "threshold_source": (bundle_info or {}).get("threshold_source") or
+                                     {"conf": "code_default", "margin": "code_default"},
                 "loaded_at": self.loaded_at,
             }
             # 补充分类器最佳轮信息
