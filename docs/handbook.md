@@ -4,10 +4,11 @@
 > 本手册固化项目至今的完整进展，供后续会话快速恢复上下文。更新时间：2026-08-04。
 > 2026-08-04 二次复核修订：整改代码大部分已落地，但不能再表述为 RA-001～RA-024 全部关闭。严格证据和逐项状态见 [`latest-handbook-reverification-2026-08-04.md`](./latest-handbook-reverification-2026-08-04.md)。
 > 2026-08-04 晚：按两份执行计划完成系统整改（s1-s7）、数据协议冻结（m1）与 E0 基线（m2），并建立 Git 源码-only 版本控制基线（`app-v0.1.0`）。每一项均有自动化测试或运行证据，见第 9 节。
+> 2026-08-04 最终训练复核：Apple M3 Max 的原生 arm64/MPS 张量和当前级联推理已通过；但旧 v6 lineage、协议门店别名、builder、严格 IoU 和 E0 precision 口径仍阻断正式全量训练。最终执行入口见 [`2026-08-04-final-training-execution-gate.md`](./superpowers/plans/2026-08-04-final-training-execution-gate.md)。
 
 ## 一句话概括
 
-用「YOLO 画框（冻结 sku_v4）+ ResNet18 分类器精识别 + 拒识门禁」的级联架构识别货架 SKU。线上 recognize 当前加载 **immutable model bundle** `prod_20260804_v4_r2`（加载前逐文件哈希校验，失败即拒绝服务）；其分类器为 208 类闭集模型，`__unknown__` 仍是下一轮目标而非当前产物，但拒识契约已修复：top1 为 `__unknown__` 时无论置信度多高一律 needs_review（代码 + 7 项测试保证）。四个新协议集（gold_v2/dev_v1/calibration_v1/diagnostic_v1）已从未见门店冻结并通过四键零泄漏审计；E0 基线已在 dev_v1 上完成。后续训练方案见 [`2026-08-04-model-training-next-phase.md`](./superpowers/plans/2026-08-04-model-training-next-phase.md)。
+用「YOLO 画框（冻结 sku_v4）+ ResNet18 分类器精识别 + 拒识门禁」的级联架构识别货架 SKU。线上 recognize 当前加载 **immutable model bundle** `prod_20260804_v4_r2`（加载前逐文件哈希校验，失败即拒绝服务）；其分类器为 208 类闭集模型，`__unknown__` 仍是下一轮目标而非当前产物，但拒识契约已修复：top1 为 `__unknown__` 时无论置信度多高一律 needs_review（代码 + 7 项测试保证）。四个新协议集已冻结且彼此 ID/SHA/精确门店无交集，但 dev_v1 有 2 个规范化别名与 batch2 重叠，旧 v6 也与四个协议集有门店级重叠；因此不得直接续跑旧 v6。Apple M3 Max/MPS 已确认可用，正式训练仍需先关闭最终执行手册 G1～G6。
 
 ---
 
@@ -75,7 +76,7 @@ python -m src.models.bundle rollback    # 回滚到 previous_bundle_id（无记�
 
 ## 4. 数据协议（RA-002 / RA-008 / RA-009）
 
-**协议集现状（2026-08-04 晚冻结，`.data_protocol/*.json` 只读 444，已存在拒绝覆盖）**：
+**协议集现状（2026-08-04 晚冻结；文件当前权限为 644，主要依靠 Git/代码拒绝覆盖，不应再称文件系统只读 444）**：
 
 | 集合 | 规模 | 门店 | 类覆盖 | 角色 |
 |---|---|---|---|---|
@@ -85,9 +86,9 @@ python -m src.models.bundle rollback    # 回滚到 previous_bundle_id（无记�
 | `calibration_v1` | 403 张 | 199 | — | 温度缩放/阈值/risk-coverage 校准 |
 | `dev_v1` | 800 张 | 332 | 205/208 | 实验迭代和错误分析（E0 基线已在此集完成） |
 
-**四键隔离（冻结时断言通过，任一违反即不合格）**：① SHA256 内容去重（含与 batch2 跨批次）；② 精确门店码；③ 归一化门店名（与 batch2 训练门店零交集）；④ 采集会话——按门店整组分配自动满足。候选池：14429 张新门店照片 / 6420 新门店，seed=20260804，脚本 `src/data/protocol_sets.py`。
+**隔离复核现状**：四个协议集彼此之间 photo ID、SHA256 和精确门店交集为 0，blob 与 SHA 对账通过；但 `_norm_store` 目前只做 trim/casefold，dev_v1 有 2 个经 Unicode/中英文括号统一后与 batch2 重叠的门店别名。采集会话也没有独立持久化键和完整 fail-closed 证明。后续必须发布追加版 dev_v2，并把规范门店、模糊别名和 session 纳入 builder 阻断。
 
-**构建器全局 fail-closed（本轮修复）**：`build_sku_v6_dataset` 在抽样后和与旧数据合并后各做一次协议泄漏检查（`_protocol_no_leak`）：与冻结集 photo_id/SHA 交集即报错终止；legacy 角色仅报告交集不阻断；旧 batch2 合并时额外检查与 batch3 val 的门店重叠。
+**构建器 fail-closed 仍不完整**：`build_sku_v6_dataset` 的 `_protocol_no_leak` 只阻断 photo ID/SHA，不检查规范门店、别名或 session。默认 seed/budget 的只读模拟会直接命中四个冻结集并抛错；即使先去除这些照片，仍会留下大量门店重叠。当前不能运行默认 builder 开始正式训练。
 
 **覆盖驱动抽样（目标协议）**：稀有类达 min_per_class(20) → 新门店覆盖 → 随机填充；train/val 按门店 group split；产物含 `build_audit.json`。当前 `.datasets/sku_v6` 仍是修复前旧制品（train/val 149 门店重叠），下一轮构建时必须先重建。
 
@@ -145,21 +146,22 @@ python -m src.models.bundle rollback    # 回滚到 previous_bundle_id（无记�
 
 **调优方法论**：基准推理 → 差异挖掘（漏检/误检/混淆矩阵）→ 痛点诊断 → 定向调参 → 强制早停（patience=10）。详见 `docs/tuning-methodology.md`。
 
-### 7.1 E0 基线（当前 bundle 在 dev_v1 未见门店，2026-08-04 晚）
+### 7.1 E0 基线（dev_v1 宽松诊断口径，2026-08-04 晚）
 
 脚本 `src/eval/e0_baseline.py`（bundle/数据/阈值固定，一对一 point-in-box，逐样本错误账本），报告 `docs/experiments/E0-current-bundle-baseline.md`，明细 `.eval/e0/dev_v1_details.json`。
 
 | 指标 | 值 | 解读 |
 |---|---:|---|
 | 检测覆盖（GT 被 proposal 覆盖） | 25.5% | 冻结 sku_v4 在新门店是首要瓶颈（missed_detection=15135） |
-| accepted precision | 89.0% | 距 95% 发布线有差距 |
+| matched-conditional accepted precision | 89.0% | 仅统计已匹配 proposal，不是业务 precision |
+| business accepted precision | **60.45%** | 纳入 fp_accepted=2190 后的真实 accepted 分母 |
 | 端到端召回（accepted 且正确 / GT） | 20.3% | 受检测覆盖直接压制 |
 | 已匹配中进入 review 比例 | 10.5% | 门禁未过度保守 |
 | FP / 照片 | 3.17 | fp_accepted=2190，需压 |
 | 照片全对率（exact-set） | 0.0% | 大照片多目标，全对极难 |
 | count MAE | 16.9 | 计数口径随检测覆盖失真 |
 
-错误账本主因：missed_detection 15135 ≫ fp_accepted 2190 > classifier_confusion 439 > unknown_false_accept 70（GT 为未注册品但被 accepted，即拒识缺口）> known_false_reject 501。结论：下一轮优先解决检测覆盖与 FP，而非单纯提分类器精度。
+错误账本主因：missed_detection 15135 ≫ fp_accepted 2190 > classifier_confusion 439 > unknown_false_accept 70（GT 为未注册品但被 accepted，即拒识缺口）> known_false_reject 501。当前还是 point-in-box，且 dev_v1 有 2 个规范化门店别名重叠；该结果只能定位瓶颈，不能用于发布。下一轮优先解决检测覆盖与 FP，而非单纯提分类器精度。
 
 ---
 
@@ -172,7 +174,7 @@ python -m src.models.bundle {create|publish|rollback|verify|list|current}
 # gold holdout 协议
 python -m src.data.gold_holdout {create|status|check-photo}
 
-# 数据集构建（执行前先按新方案冻结 gold-v2；当前制品不满足新协议）
+# 数据集构建（当前命令禁止执行；先关闭最终执行手册 G1～G6）
 python -m src.training.build_sku_v6_dataset
 python -m src.cascade.build_crop_dataset --size 224 --val-ratio 0.2
 python -m src.cascade.build_yolo_crop_dataset --unknown-ratio 0.3
@@ -202,8 +204,8 @@ python -m pytest tests/ -q
 2026-08-04 晚整改后新增证据（s1-s7 + m1/m2 落地项）：
 - `pytest tests -q` **46 通过**（原 22 + 新增 bundle 治理 6 / 协议隔离 5 / 级联门禁 7 / dataset hash 4 / 运行时安全 2 等），`compileall src` 通过
 - 8091/8092 已重启加载新代码并在线冒烟：`/v2/health` 200（bundle 哈希校验后加载）、端到端识别正常且无 unknown 被 accepted、`/api/live` 报 83.67%（best_source=current_best_pt）
-- 四协议集冻结 + 四键零交集断言通过；E0 基线完成（见 7.1）
-- 仍不能声明全部 24 项关闭：严格 IoU 评估、209 类训练与制品重建、exporter/importer 在线联调未做；Git 远端未配置
+- 四协议集已冻结，ID/SHA/精确门店内部零交集；最终复核发现 dev_v1 仍有 2 个规范化别名与 batch2 重叠，旧 v6 lineage 也与协议集门店重叠
+- 仍不能声明全部 24 项关闭：严格 IoU、真实框、训练制品重建、规范门店/session fail-closed、209 类训练和 exporter/importer 在线联调未做；Git 远端现已配置
 
 ---
 
@@ -227,14 +229,15 @@ python -m pytest tests/ -q
 | 二次复核报告 | `docs/latest-handbook-reverification-2026-08-04.md` |
 | Git 实施手册 | `docs/superpowers/plans/2026-08-04-git-version-control.md` |
 | 后续训练方案 | `docs/superpowers/plans/2026-08-04-model-training-next-phase.md` |
+| 最终训练执行手册 | `docs/superpowers/plans/2026-08-04-final-training-execution-gate.md` |
 
 ---
 
 ## 11. Git 版本控制（2026-08-04 晚建立）
 
-- 源码-only 仓库（121 文件）；训练数据/权重/DB/凭据/大照片目录全部 Git 外（`.gitignore` 白名单式管控，禁 `git add .`）
-- 初始提交 `3c0364e`，标签 `app-v0.1.0`；模型制品变更打 `model-*` 标签、数据集变更打 `data-*` 标签（见 Git 实施手册）
-- Conventional Commits；远端尚未配置（待用户提供私有仓库地址）
+- 源码-only 仓库（本次复核 134 个 tracked 文件）；训练数据/权重/DB/凭据/大照片目录全部 Git 外（`.gitignore` 白名单式管控，禁 `git add .`）
+- 当前 HEAD `3f13fa6`，标签 `app-v0.1.0`、`app-v0.2.0`；模型制品变更打 `model-*` 标签、数据集变更打 `data-*` 标签（见 Git 实施手册）
+- Conventional Commits；`origin/main` 已配置并与本地 HEAD 对齐，远端仓库隐私属性本次未独立验证
 - `requirements-lock.txt` 因含本地 file:// 路径暂被忽略，待重新生成可移植版本后解除
 
 ---

@@ -2,6 +2,8 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+> **2026-08-04 最终复核状态：** 本计划保留训练方法论和任务分解，但其中部分“待冻结”描述已被后续执行改变。当前准入结论、Apple M3 Max/MPS 规范、协议泄漏审计、E0 指标纠偏和最终实验顺序，以 [`2026-08-04-final-training-execution-gate.md`](./2026-08-04-final-training-execution-gate.md) 为唯一执行入口。当前禁止续跑旧 v6 checkpoint，也禁止立即开始全量训练。
+
 **Goal:** 基于现有真实数据和失败证据，重建可信评估基线，定位级联系统的检测、裁剪、分类和拒识损失，并以最少、可证伪的实验决定后续数据建设、算法路线与模型发布。
 
 **Architecture:** 保留“检测器提出商品框 + 分类器识别 SKU + 拒识/人工复核”的级联主线，但把训练流程拆成四个可独立测量的阶段：检测 oracle、分类 oracle、预测框分类、完整级联。数据按门店、采集会话、内容 SHA 和相似门店名称隔离；gold-v2 在任何后续训练前冻结；每个实验绑定 Git commit、数据哈希、registry 顺序、seed 和 bundle manifest。

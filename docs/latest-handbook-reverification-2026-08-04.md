@@ -1,5 +1,7 @@
 # 最新手册整改复核报告
 
+> **后续状态提示：** 本文件记录较早一轮的 22-test / 未初始化 Git 快照，已被晚些时候的 46-test、Git 和协议复核更新。最终训练准入与 Apple Silicon 结论见 [`2026-08-04-final-training-execution-gate.md`](./superpowers/plans/2026-08-04-final-training-execution-gate.md)。本文件保留作为历史审计证据，不再代表最新系统状态。
+
 > 复核日期：2026-08-04  
 > 复核基准：`docs/handbook.md` 02:01:33 版本  
 > 边界：本次只读检查代码、制品、数据库、进程和测试；不修改任何代码、配置、数据、数据库或模型  

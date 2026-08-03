@@ -3,6 +3,7 @@
 > 截止 2026-08-01 的历史决策记录。sku_v6 phase2 训练已暂停（当时按手册认为 20 个 ISSUE 已全部修复，见
 > [`project-issue-register-and-remediation.md`](./project-issue-register-and-remediation.md)）。
 > 2026-08-04 二次复核发现整改代码、自动化测试、当前制品和在线状态并未全部闭环；最新结论以 [`latest-handbook-reverification-2026-08-04.md`](./latest-handbook-reverification-2026-08-04.md) 为准。本文记录历史演进，不作为当前关闭证明。
+> 2026-08-04 最终训练复核进一步确认：旧 v6 lineage 与新协议集存在门店重叠，**不得恢复 sku_v6 phase2**；Apple M3 Max/MPS 已实测可用，但正式训练仍为 NO-GO。当前唯一执行入口为 [`2026-08-04-final-training-execution-gate.md`](./superpowers/plans/2026-08-04-final-training-execution-gate.md)。
 > 本文档供重新评估训练路线使用。所有数字均来自 `.models/*/train_meta.json`、`results.csv`、
 > `training_history.json` 与历次穿透测试的实测记录。
 
@@ -124,21 +125,23 @@ graph LR
 
 ---
 
-## 6. 当前状态与待决策点
+## 6. 当前状态与已确认决策（2026-08-04 最终复核）
 
-### 现状
-- sku_v6 phase2（lr 1e-5、44 轮、从 sku_v6_ep6.pt 续训）**已暂停**；phase1 权重备份在 `.models/sku_v6_p1/`。
-- 全部工程 bug 已修复并通过回归（22 项测试 + 11 项冒烟），训练前置校验已生效（恢复训练时会先跑数据集校验）。
-- 修复前基线哈希清单：`.platform/baseline_hashes.json`（11 项权重/库/配置）。
+### 当前事实
 
-### 待你决策的问题
-1. **是否恢复 sku_v6 phase2？** 既定计划：跑到总 Epoch ~15 做穿透测试——
-   - ✅ 任意框定位召回突破 60%（尤其美橙 34.5%→60%+）→ YOLO 定位任务完成，跑完剩余轮次后冻结；
-   - ❌ 仍无增长 → 放弃 YOLO 微调，切**方案 B**：难例完全交给级联分类器。
-2. **YOLO 继续投入是否值得？** 备选：接受当前召回，把精力全部转向分类器（升级骨干/难例增量微调闭环，10-20 分钟一轮的快速迭代模式）。
-3. **分类器下一步**：83.67% 平台化，距 94% 目标差距 10+ 点；选项：EfficientNet-B0 骨干、难例增强、低温微调分类头抗过拟合。
-4. **数据侧**：是否需要继续补难例 SKU 实拍（美橙/拉罐/芬达），还是用现有数据把模型潜力榨干。
+- sku_v6 phase2 仍处于暂停状态；phase1 权重保留在 `.models/sku_v6_p1/`，只作历史对照。
+- fresh 测试已增至 46 passed；但测试尚未覆盖 builder 端到端安全构建、规范门店/session 隔离和严格 IoU。
+- 当前 `.datasets/sku_v6`、`crop_dataset`、`crop_dataset_yolo` 都不是新协议下可直接使用的正式制品。
+- E0 的 89.0% 是 matched-conditional precision；纳入 accepted FP 后业务 accepted precision 为 60.45%。
+- Apple M3 Max 原生 arm64 Python、MPS 张量计算、当前级联 MPS 推理均已通过；硬件不是阻断项。
 
-### 恢复训练注意事项（供参考）
-- `train_v1.py` 现已强制训练前数据集校验（ISSUE-001），恢复时直接传原 data.yaml 即可，校验会自动执行。
-- 监控看门狗与训练并行无冲突；phase2 断点权重为 `.models/sku_v6_ep6.pt`。
+### 已确认、不再待决策的事项
+
+1. **不恢复 sku_v6 phase2。** 旧 v6 训练门店与 calibration/dev/diagnostic/gold 分别重叠 51/102/68/168 个门店，继续训练会使新协议集失去未见门店意义。
+2. **新 detector lineage 从 v4 或 COCO 开始。** 首先对比 class-agnostic `product` detector 的两个初始化，而不是继续 208 类 v6。
+3. **先做 detector，不先扩大 classifier。** E0 检测覆盖只有 25.49%，是端到端第一瓶颈。
+4. **先 pilot，再全量。** 2,000 train + 300 val、3 epoch、MPS、batch 4；胜出后单 seed 10 epoch，有明确收益才开三 seed。
+5. **classifier 先做 oracle 和数据分布修复。** true-box / predicted-box / unknown 分层验证后，才决定是否升级 backbone。
+6. **正式训练必须先关闭数据门禁。** active protocol 的 ID/SHA/规范门店/别名/session 全部零交集，新数据集唯一目录和 fail-closed 防覆盖。
+
+详细命令、Apple 资源配置、停止条件和发布门槛见最终训练执行手册。此前所有“从 `sku_v6_ep6.pt` 恢复”的文字仅作为历史记录，不再具有执行效力。

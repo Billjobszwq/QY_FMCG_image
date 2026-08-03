@@ -2,7 +2,7 @@
 
 > 货架陈列巡检 · **知识库驱动的自动标注 + YOLO** · 人机协同 · **本机原生优先（不依赖 Docker）**
 
-> **当前入口（2026-08-04）：** 本页前半部分保留早期系统说明；级联生产架构和整改状态以 [`handbook.md`](./handbook.md) 为准，严格复核以 [`latest-handbook-reverification-2026-08-04.md`](./latest-handbook-reverification-2026-08-04.md) 为准。当前不能宣称所有 RA 项已关闭。
+> **当前入口（2026-08-04）：** 本页前半部分保留早期系统说明；级联生产架构以 [`handbook.md`](./handbook.md) 为准，最终训练准入、Apple M3 Max/MPS 规范和最新阻断项以 [`2026-08-04-final-training-execution-gate.md`](./superpowers/plans/2026-08-04-final-training-execution-gate.md) 为准。较早的严格复核保留在 [`latest-handbook-reverification-2026-08-04.md`](./latest-handbook-reverification-2026-08-04.md) 作为历史证据。
 
 用多模态大模型当"老师"自动打标签、人工把关，训出 YOLO 当"学生"上识别热路径。原始资产只读、标签追加式留痕、张张过人工才进训练。
 
@@ -43,6 +43,7 @@ python -m src.recognize.api --port 8091    # 识别接口
 | [`latest-handbook-reverification-2026-08-04.md`](./latest-handbook-reverification-2026-08-04.md) | **最新严格复核**：24 项整改证据、当前制品/运行状态、训练前阻断项 |
 | [`superpowers/plans/2026-08-04-git-version-control.md`](./superpowers/plans/2026-08-04-git-version-control.md) | **Git 实施手册**：源码/数据分轨、初始提交、分支/标签、CI、DVC 和恢复演练 |
 | [`superpowers/plans/2026-08-04-model-training-next-phase.md`](./superpowers/plans/2026-08-04-model-training-next-phase.md) | **下一阶段训练方案**：gold-v2、检测/分类 oracle、实验矩阵、性能与发布门禁 |
+| [`superpowers/plans/2026-08-04-final-training-execution-gate.md`](./superpowers/plans/2026-08-04-final-training-execution-gate.md) | **最终训练执行手册**：Apple Silicon/MPS 核验、数据与评估阻断项、算力预算、pilot→全量→发布门禁 |
 | [`project-issue-register-and-remediation.md`](./project-issue-register-and-remediation.md) | **项目问题清单与技术修复指南**：分级问题、代码证据、修复方案、验收标准、测试矩阵与实施顺序 |
 
 **立项与治理背景（早于"原生优先"转向，作背景保留）**
@@ -80,15 +81,18 @@ python -m src.recognize.api --port 8091    # 识别接口
 python -m pytest tests/unit tests/contract -q     # 不变性/对齐/命名/别名 契约
 ```
 
-## 当前状态（2026-08-04 二次复核快照）
+## 当前状态（2026-08-04 最终训练复核快照）
 
 - ✅ recognize 当前能从 `prod_20260804_v4_r2` 加载 detector/classifier，bundle 的 16 个文件通过校验；8091 health 返回 200。
-- ✅ monitor 新进程内存已从上一轮约 16.3 GiB 降到约 261 MiB，但仍需 2 小时长稳验证。
+- ✅ monitor 新进程内存约 248 MiB，仍需 2 小时长稳验证。
+- ✅ 本机为 Apple M3 Max / arm64 / 128 GB；真实终端中的 MPS 张量与当前级联 MPS 推理均已通过，硬件路线 GO。
 - ⏹️ 当前训练已停止；生产 classifier 为 208 类 ResNet18，记录 val_acc 83.67%，不含 `__unknown__`。
 - ⚠️ 复核时实际监听 8091/8092；8300 Label Studio、8301 ML backend、8304 orchestrator 均未运行。
-- 🟥 当前 977 张 holdout 全部被 v4 detector 见过，不能评价当前模型的未见泛化；`.datasets/sku_v6` 和 crop 数据仍是整改前旧制品。
-- 🟥 完成本次文档纠偏后的 RA 状态为 5 项基本关闭/有主要证据、14 项部分修复、5 项未关闭；当前 22 项测试不覆盖本轮核心整改。
-- ⏳ 下一步先冻结 fresh-store gold-v2 并做 detector/classifier oracle 实验，再决定是否重训；不要直接续跑现有训练命令。
+- ✅ Git 已初始化并与 `origin/main` 对齐；本次 fresh 测试为 46 passed。
+- 🟥 新协议集虽已冻结，但 dev_v1 有 2 个规范化门店别名与 batch2 重叠，旧 v6 与四协议集也有大量门店重叠；不得续跑 v6 checkpoint。
+- 🟥 `.datasets/sku_v6` 和两个 crop 数据仍是旧制品；默认 builder 会命中冻结集并失败，且门店/session 隔离未进入 fail-closed。
+- 🟥 E0 的 89.0% 是 matched-conditional precision；纳入 accepted FP 后业务 precision 为 60.45%，且当前仍是 point-in-box 而非严格 IoU。
+- ⏳ 下一步先关闭最终手册 G1～G6，再运行 MPS 小规模 detector pilot；不要立即执行正式全量训练。
 
 ## 维护约定
 
