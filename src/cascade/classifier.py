@@ -52,6 +52,14 @@ def build_model(backbone: str, n_classes: int) -> nn.Module:
 
 
 def get_datasets(size: int = 224, data_dir=None):
+    """构建训练/验证数据集。
+
+    G6 门禁：data_dir 必须显式指定。旧默认目录 crop_dataset 存在
+    summary 与实际不一致、与生产链路脱钩的历史问题（G3），禁止
+    静默回退读取。"""
+    if not data_dir:
+        raise RuntimeError(
+            "必须显式指定数据目录（--data-dir），禁止默认读取旧 crop_dataset（G6）")
     train_tf = transforms.Compose([
         transforms.RandomResizedCrop(size, scale=(0.7, 1.0)),
         transforms.RandomRotation(15),
@@ -67,7 +75,7 @@ def get_datasets(size: int = 224, data_dir=None):
         transforms.ToTensor(),
         transforms.Normalize(IMAGENET_MEAN, IMAGENET_STD),
     ])
-    base = Path(data_dir) if data_dir else CROP_DIR
+    base = Path(data_dir)
     train_ds = datasets.ImageFolder(str(base / "train"), transform=train_tf, allow_empty=True)
     val_ds = datasets.ImageFolder(str(base / "val"), transform=val_tf, allow_empty=True)
     return train_ds, val_ds
@@ -100,7 +108,13 @@ def freeze_backbone(model: nn.Module, backbone: str):
 
 def train(backbone: str = "resnet18", epochs: int = 80, batch: int = 64,
           lr0: float = 1e-3, patience: int = 10, size: int = 224,
-          freeze: bool = False, run_tag: str = "", promote: bool = False):
+          freeze: bool = False, run_tag: str = "", promote: bool = False,
+          data_dir: str | None = None):
+    # G6 门禁：数据目录必须显式指定（fail-closed），不得默认读旧 crop_dataset
+    if not data_dir:
+        raise RuntimeError(
+            "classifier.train 必须显式指定 data_dir（--data-dir），"
+            "禁止默认读取旧 crop_dataset（G6：旧目录 summary 不一致且未经审计）")
     device = torch.device("mps" if torch.backends.mps.is_available() else "cpu")
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     # 复核修订（RA-012）：禁止可变 best.pt 被静默覆盖。每个 run 写入独立实验目录
@@ -114,14 +128,15 @@ def train(backbone: str = "resnet18", epochs: int = 80, batch: int = 64,
     exp_dir.mkdir(parents=True)
     run_tag = "_" + run_tag  # 历史/曲线文件名后缀兼容
 
-    train_ds, val_ds = get_datasets(size)
+    train_ds, val_ds = get_datasets(size, data_dir=data_dir)
     n_classes = len(train_ds.classes)
     print(f"=== 分类器训练 ({backbone}) ===")
     print(f"  设备: {device} | 类别: {n_classes} | 训练 {len(train_ds)} / 验证 {len(val_ds)}")
     print(f"  batch={batch}, lr0={lr0}, epochs={epochs}, patience={patience}, freeze={freeze}")
 
-    # 保存类别列表（推理用，ImageFolder 按文件夹名排序）
-    (OUT_DIR / "classes.json").write_text(json.dumps(train_ds.classes, ensure_ascii=False, indent=2), encoding="utf-8")
+    # 保存类别列表（G6：写入实验目录而非全局 OUT_DIR，避免跨 run 覆盖；
+    # 推理所需 classes 已内嵌 checkpoint）
+    (exp_dir / "classes.json").write_text(json.dumps(train_ds.classes, ensure_ascii=False, indent=2), encoding="utf-8")
 
     sampler = build_sampler(train_ds)
     train_loader = torch.utils.data.DataLoader(train_ds, batch_size=batch, sampler=sampler, num_workers=4, pin_memory=True)
@@ -287,8 +302,10 @@ if __name__ == "__main__":
     ap.add_argument("--size", type=int, default=224)
     ap.add_argument("--freeze", action="store_true", help="冻结骨干仅训分类头（增量微调）")
     ap.add_argument("--run-tag", default="")
+    ap.add_argument("--data-dir", default=None,
+                    help="分类器数据集目录（必填，G6：禁止默认读旧 crop_dataset）")
     ap.add_argument("--promote", action="store_true",
                     help="显式将本 run 最佳权重提升为生产 best.pt（旧版先归档）")
     a = ap.parse_args()
     train(a.backbone, a.epochs, a.batch, a.lr0, a.patience, a.size, a.freeze,
-          a.run_tag, promote=a.promote)
+          a.run_tag, promote=a.promote, data_dir=a.data_dir)

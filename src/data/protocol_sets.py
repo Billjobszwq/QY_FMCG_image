@@ -27,6 +27,8 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from ..common.config import PROJECT_ROOT
+from ..data.store_norm import norm_store as _norm_store_canon
+from ..data.store_norm import session_of_filename, store_of_filename
 
 PROTOCOL_DIR = PROJECT_ROOT / ".data_protocol"
 CLEAN_MANIFEST = PROJECT_ROOT / ".batch3_clean" / "clean_manifest.json"
@@ -48,12 +50,13 @@ DEFAULT_SEED = 20260804
 
 
 def _norm_store(name: str) -> str:
-    return str(name).strip().casefold()
+    # G4：统一收敛到 store_norm 的 canonical key（NFKC+标点+空白+casefold），
+    # 旧实现只做 trim/casefold，漏掉中英文括号别名（dev_v1 有 2 例）。
+    return _norm_store_canon(name)
 
 
 def _store_of_filename(fn: str) -> str:
-    parts = str(fn).split("_")
-    return parts[1] if len(parts) > 1 else "NA"
+    return store_of_filename(fn)
 
 
 def _load_annotations() -> dict:
@@ -249,6 +252,123 @@ def freeze(seed: int = DEFAULT_SEED, dry_run: bool = False) -> dict:
     return result
 
 
+def make_dev_v2(seed: int = DEFAULT_SEED, dry_run: bool = False) -> dict:
+    """G4：发布 dev_v1 的追加修正版 dev_v2（不修改 dev_v1）。
+
+    dev_v1 有 2 个门店经 Unicode/括号规范化后与 batch2 训练门店重叠
+    （何惠晴(上海如海)、陈娟(承照便利店)），其照片全部移出，并从
+    剩余新门店候选池按同口径补足到目标规模。dev_v2 声明 supersedes=
+    dev_v1，守卫层据此把 dev_v1 降为仅报告。"""
+    clean = json.loads(CLEAN_MANIFEST.read_text(encoding="utf-8"))
+    dev1 = json.loads((PROTOCOL_DIR / "dev_v1.json").read_text(encoding="utf-8"))
+    registry = json.loads(REGISTRY.read_text(encoding="utf-8"))
+
+    # batch2 训练门店（canonical）
+    b2_stores = set()
+    if B2_MANIFEST.exists():
+        m = json.loads(B2_MANIFEST.read_text(encoding="utf-8"))
+        for p in m.get("photos", {}).values():
+            sn = (p.get("meta") or {}).get("sname")
+            if sn:
+                b2_stores.add(_norm_store(sn))
+
+    # 找出 dev_v1 中与 batch2 canonical 重叠的门店及照片
+    bad_stores, bad_pids = set(), []
+    for pid in dev1["photo_ids"]:
+        fn = clean[str(pid)]["filename"]
+        if _norm_store(_store_of_filename(fn)) in b2_stores:
+            bad_stores.add(_store_of_filename(fn))
+            bad_pids.append(str(pid))
+    keep = [p for p in dev1["photo_ids"] if str(p) not in set(bad_pids)]
+    print(f"[dev_v2] 移除重叠门店 {sorted(bad_stores)} / {len(bad_pids)} 张，保留 {len(keep)} 张")
+
+    # 所有需排除的 canonical 门店：四协议集 + dev_v1 保留门店 + batch2
+    exclude = set(b2_stores)
+    for name in ("gold_v2", "calibration_v1", "diagnostic_v1"):
+        rec = json.loads((PROTOCOL_DIR / f"{name}.json").read_text(encoding="utf-8"))
+        exclude |= {_norm_store(s) for s in rec["stores"]}
+    keep_stores = {_norm_store(_store_of_filename(clean[str(p)]["filename"])) for p in keep}
+    exclude |= keep_stores
+    used_shas = {clean[str(p)]["sha256"] for p in keep}
+    for name in ("gold_v2", "calibration_v1", "diagnostic_v1"):
+        rec = json.loads((PROTOCOL_DIR / f"{name}.json").read_text(encoding="utf-8"))
+        used_shas |= set(rec["sha256"])
+    if B2_MANIFEST.exists():
+        for p in json.loads(B2_MANIFEST.read_text(encoding="utf-8")).get("photos", {}).values():
+            sha = (p.get("image") or {}).get("sha256")
+            if sha:
+                used_shas.add(sha)
+
+    # 从全量 clean 中找可补门店组（新门店 + 非灰 + 非协议 + SHA 不重）
+    gray_ids = set()
+    if GRAY_MANIFEST.exists():
+        gray_ids = set(json.loads(GRAY_MANIFEST.read_text(encoding="utf-8")).keys())
+    anns = _load_annotations()
+    groups: dict = collections.defaultdict(list)
+    seen_sha = set()
+    for pid, recd in clean.items():
+        pid = str(pid)
+        if pid in gray_ids or pid in set(map(str, dev1["photo_ids"])):
+            continue
+        fn = recd.get("filename", "")
+        st = _store_of_filename(fn)
+        if _norm_store(st) in exclude:
+            continue
+        sha = recd.get("sha256")
+        if not sha or sha in used_shas or sha in seen_sha:
+            continue
+        if not any(n in registry for n in anns.get(pid, [])):
+            continue
+        seen_sha.add(sha)
+        groups[st].append(pid)
+
+    rng = random.Random(seed)
+    order = sorted(groups.keys())
+    rng.shuffle(order)
+    target = dev1.get("target_photos", 800)
+    fill: list = []
+    for st in order:
+        if len(keep) + len(fill) >= target:
+            break
+        fill.extend(groups[st])
+    ids = sorted(set(map(str, keep)) | set(fill))
+    print(f"[dev_v2] 补充 {len(fill)} 张（{len({ _store_of_filename(clean[p]['filename']) for p in fill })} 门店）→ 总 {len(ids)}")
+
+    stores = sorted({_store_of_filename(clean[p]["filename"]) for p in ids})
+    sessions = sorted({session_of_filename(clean[p]["filename"]) for p in ids})
+    # 自检：与 batch2 canonical 门店零交集
+    assert not ({_norm_store(s) for s in stores} & b2_stores), "dev_v2 仍与 batch2 门店重叠"
+    out = {
+        "frozen": True,
+        "role": "dev_v2",
+        "supersedes": "dev_v1",
+        "supersede_reason": "dev_v1 有 2 个门店经 NFKC/括号规范化后与 batch2 训练门店重叠（G4）",
+        "removed_stores": sorted(bad_stores),
+        "removed_photo_ids": sorted(bad_pids),
+        "usage_policy": "实验迭代和错误分析（取代 dev_v1）",
+        "created_at": time.strftime("%Y-%m-%d %H:%M:%S"),
+        "seed": seed,
+        "source": str(CLEAN_MANIFEST),
+        "target_photos": target,
+        "n_photos": len(ids),
+        "n_stores": len(stores),
+        "stores": stores,
+        "sessions": sessions,
+        "photo_ids": ids,
+        "sha256": sorted(clean[p]["sha256"] for p in ids),
+        "class_stats": _gold_class_stats(ids, anns, registry),
+        "isolation": "store_group_split: 五键（ID/SHA/规范门店/别名/session）与全部 active 协议集及 batch2 零交集",
+        "seen_by_current_model": False,
+    }
+    if not dry_run:
+        fp = PROTOCOL_DIR / "dev_v2.json"
+        if fp.exists():
+            raise RuntimeError(f"dev_v2 已存在，拒绝覆盖: {fp}")
+        fp.write_text(json.dumps(out, ensure_ascii=False, indent=2), encoding="utf-8")
+        print(f"[dev_v2] 已写入 {fp}")
+    return out
+
+
 def status() -> dict:
     out = {}
     for f in sorted(PROTOCOL_DIR.glob("*.json")):
@@ -264,12 +384,14 @@ def status() -> dict:
 
 def main():
     ap = argparse.ArgumentParser(description="数据协议集冻结（gold_v2/dev/calibration/diagnostic）")
-    ap.add_argument("action", choices=["freeze", "status"])
+    ap.add_argument("action", choices=["freeze", "status", "dev_v2"])
     ap.add_argument("--seed", type=int, default=DEFAULT_SEED)
     ap.add_argument("--dry-run", action="store_true")
     a = ap.parse_args()
     if a.action == "freeze":
         freeze(seed=a.seed, dry_run=a.dry_run)
+    elif a.action == "dev_v2":
+        make_dev_v2(seed=a.seed, dry_run=a.dry_run)
     else:
         print(json.dumps(status(), ensure_ascii=False, indent=2))
 

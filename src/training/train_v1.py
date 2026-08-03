@@ -154,6 +154,14 @@ def train(epochs=80, imgsz=640, batch=8, device="mps", model_name="yolo26m.pt",
     print(f"  lr0={lr0}, cos_lr={cos_lr}, dropout={dropout}, close_mosaic={close_mosaic}, patience={patience}, wd={weight_decay}")
     t0 = time.time()
 
+    # G6：run 目录已存在即 fail-closed，禁止覆盖旧实验（Ultralytics
+    # exist_ok=True 会允许覆盖，一并禁用）；训练前冻结 run manifest。
+    run_dir = MODELS_DIR / run_name
+    if run_dir.exists():
+        raise RuntimeError(
+            f"run 目录已存在，拒绝覆盖: {run_dir}（换一个 --run-name，"
+            "旧实验与生产制品不得被静默覆盖）")
+
     # 写入训练元信息（供监控界面读取）
     meta = {
         "model": model_name,
@@ -172,7 +180,7 @@ def train(epochs=80, imgsz=640, batch=8, device="mps", model_name="yolo26m.pt",
         "code_hash": code_hash(),
         "started_at": time.time(),
     }
-    (MODELS_DIR / run_name).mkdir(parents=True, exist_ok=True)
+    (MODELS_DIR / run_name).mkdir(parents=True)
     (MODELS_DIR / run_name / "train_meta.json").write_text(
         json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
 
@@ -187,7 +195,7 @@ def train(epochs=80, imgsz=640, batch=8, device="mps", model_name="yolo26m.pt",
         deterministic=True,
         project=str(MODELS_DIR),
         name=run_name,
-        exist_ok=True,
+        exist_ok=False,
         patience=patience,
         save=True,
         plots=True,
