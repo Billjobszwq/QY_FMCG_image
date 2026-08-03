@@ -155,14 +155,17 @@ def train(epochs=80, imgsz=640, batch=8, device="mps", model_name="yolo26m.pt",
     t0 = time.time()
 
     # G6：run 目录已存在即 fail-closed，禁止覆盖旧实验（Ultralytics
-    # exist_ok=True 会允许覆盖，一并禁用）；训练前冻结 run manifest。
+    # exist_ok=True 会允许覆盖，一并禁用）。
+    # 注意：不得在训练前预建 run 目录/写 meta，否则 Ultralytics
+    # exist_ok=False 发现目录已存在会自动递增命名（run_name-2），
+    # 破坏唯一 run-name 约束；meta 改为训练完成后写入。
     run_dir = MODELS_DIR / run_name
     if run_dir.exists():
         raise RuntimeError(
             f"run 目录已存在，拒绝覆盖: {run_dir}（换一个 --run-name，"
             "旧实验与生产制品不得被静默覆盖）")
 
-    # 写入训练元信息（供监控界面读取）
+    # 训练元信息（训练完成后随 run 目录落盘，供监控/审计读取）
     meta = {
         "model": model_name,
         "model_display": model_name.replace(".pt", "").upper(),
@@ -180,9 +183,6 @@ def train(epochs=80, imgsz=640, batch=8, device="mps", model_name="yolo26m.pt",
         "code_hash": code_hash(),
         "started_at": time.time(),
     }
-    (MODELS_DIR / run_name).mkdir(parents=True)
-    (MODELS_DIR / run_name / "train_meta.json").write_text(
-        json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
 
     model = YOLO(model_name)
     results = model.train(
@@ -224,6 +224,10 @@ def train(epochs=80, imgsz=640, batch=8, device="mps", model_name="yolo26m.pt",
     )
 
     elapsed = time.time() - t0
+    # G6：run 目录由 Ultralytics 创建（exist_ok=False），meta 在训练完成后写入
+    meta["elapsed_sec"] = round(elapsed, 1)
+    (MODELS_DIR / run_name / "train_meta.json").write_text(
+        json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
     best = MODELS_DIR / run_name / "weights" / "best.pt"
     last = MODELS_DIR / run_name / "weights" / "last.pt"
     wp = best if best.exists() else last
