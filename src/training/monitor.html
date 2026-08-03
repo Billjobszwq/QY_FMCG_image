@@ -1,0 +1,385 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SKU 识别 · 后台管理端</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#0A0A0B; --card:#141416; --card2:#1A1A1C;
+  --ink:#F5F6F8; --dim:#9CA3AF; --faint:#6B7280;
+  --disp:'Space Grotesk',sans-serif; --mono:'IBM Plex Mono',monospace;
+  --r:24px;
+}
+/* 每个标签页的渐变 + 强调色（切换联动） */
+body{--grad:linear-gradient(137deg,#FFFFFF 0%,#7DD3FC 45%,#06B6D4 100%);--a1:#22D3EE;--glow:rgba(6,182,212,.12)}
+body[data-tab="yolo"]{--grad:linear-gradient(137deg,#FF3D77 0%,#FFB1CE 45%,#FF9D3C 100%);--a1:#FF5C8A;--glow:rgba(255,61,119,.12)}
+body[data-tab="clf"]{--grad:linear-gradient(137deg,#4361EE 0%,#E0AEFF 45%,#F72585 100%);--a1:#A78BFA;--glow:rgba(122,87,238,.13)}
+body[data-tab="data"]{--grad:linear-gradient(137deg,#FF9D3C 0%,#FFB1CE 45%,#FF3D77 100%);--a1:#FFB1CE;--glow:rgba(255,157,60,.12)}
+body[data-tab="models"]{--grad:linear-gradient(137deg,#4361EE 0%,#7DD3FC 45%,#06B6D4 100%);--a1:#7DA6FF;--glow:rgba(67,97,238,.13)}
+body[data-tab="svc"]{--grad:linear-gradient(137deg,#06B6D4 0%,#7DD3FC 45%,#FFFFFF 100%);--a1:#67E8F9;--glow:rgba(6,182,212,.12)}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:var(--mono);color:var(--ink);min-height:100vh;display:flex;background:var(--bg);
+  background-image:radial-gradient(900px 480px at 85% -10%, var(--glow), transparent 60%),radial-gradient(700px 420px at -8% 108%, rgba(67,97,238,.08), transparent 60%);
+  background-attachment:fixed;transition:background .5s}
+svg.ic{width:17px;height:17px;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round;flex-shrink:0}
+/* ===== 侧边栏（深色 + 随标签渐变） ===== */
+.side{width:220px;flex-shrink:0;border-radius:0 28px 28px 0;padding:26px 16px;display:flex;flex-direction:column;gap:6px;position:sticky;top:0;height:100vh;
+  background:linear-gradient(180deg,#111113,#0B0B0D);border-right:1px solid rgba(255,255,255,.06);box-shadow:0 12px 40px rgba(0,0,0,.5);transition:.5s}
+.logo{display:flex;align-items:center;gap:11px;color:#fff;padding:0 8px 22px}
+.logo .mark{width:38px;height:38px;border-radius:12px;background:var(--grad);color:#0A0A0B;display:flex;align-items:center;justify-content:center;box-shadow:0 0 22px var(--glow)}
+.logo b{font-family:var(--disp);font-size:16px;font-weight:700;letter-spacing:.2px}
+.logo small{display:block;font-size:8.5px;opacity:.6;letter-spacing:2px}
+.nav{display:flex;flex-direction:column;gap:4px}
+.nav button{display:flex;align-items:center;gap:12px;border:0;background:transparent;color:rgba(255,255,255,.6);font-family:var(--mono);font-size:13px;font-weight:600;padding:11px 13px;border-radius:13px;cursor:pointer;text-align:left;transition:.2s}
+.nav button:hover{background:rgba(255,255,255,.06);color:#fff}
+.nav button.on{background:var(--grad);color:#0A0A0B;box-shadow:0 0 26px var(--glow),0 6px 18px rgba(0,0,0,.4)}
+.side .foot{margin-top:auto;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.08);border-radius:16px;padding:14px;color:#fff}
+.side .foot b{font-size:12px}
+.side .foot p{font-size:10px;opacity:.6;margin-top:5px;line-height:1.6}
+/* ===== 主区 ===== */
+.main{flex:1;padding:26px 30px;min-width:0}
+.topbar{display:flex;align-items:center;gap:12px;margin-bottom:22px}
+.topbar h1{font-family:var(--disp);font-size:22px;font-weight:700;color:#fff}
+.topbar .crumb{font-size:11px;color:var(--dim)}
+.topbar .right{margin-left:auto;display:flex;align-items:center;gap:10px}
+.livepill{display:flex;align-items:center;gap:8px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);border-radius:999px;padding:8px 15px;font-size:11px;font-weight:700;color:#fff}
+.livepill .d{width:8px;height:8px;border-radius:50%;background:var(--a1);animation:pul 1.6s infinite}
+@keyframes pul{0%,100%{box-shadow:0 0 0 0 var(--glow)}50%{box-shadow:0 0 0 6px transparent}}
+.ts{font-size:10px;color:var(--dim)}
+.tab{display:none}
+.tab.on{display:block;animation:fade .3s}
+@keyframes fade{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+.grid{display:grid;gap:16px}
+.g4{grid-template-columns:repeat(4,1fr)}.g3{grid-template-columns:repeat(3,1fr)}.g2{grid-template-columns:repeat(2,1fr)}
+/* 发光卡片：深色面板 + 渐变描边 + 外发光 */
+.card{position:relative;border-radius:var(--r);padding:18px 20px;transition:transform .18s,box-shadow .3s;
+  background:linear-gradient(var(--card2),var(--card2)) padding-box, var(--grad) border-box;
+  border:1.5px solid transparent;box-shadow:0 8px 34px rgba(0,0,0,.5),0 0 30px var(--glow)}
+.card:hover{transform:translateY(-2px);box-shadow:0 10px 40px rgba(0,0,0,.55),0 0 44px var(--glow)}
+.card h3{font-family:var(--disp);font-size:13px;font-weight:700;margin-bottom:14px;display:flex;align-items:center;gap:9px;color:#fff}
+.card h3 .dot{width:8px;height:8px;border-radius:3px}
+/* 统计卡 */
+.stat{position:relative;overflow:hidden}
+.stat .lb{font-size:10px;font-weight:700;color:var(--dim);letter-spacing:.6px;text-transform:uppercase}
+.stat .vl{font-family:var(--disp);font-size:30px;font-weight:700;margin:8px 0 2px;line-height:100%}
+.stat .sb{font-size:11px;color:var(--dim)}
+.stat .tag{position:absolute;top:14px;right:14px;width:36px;height:36px;border-radius:12px;display:flex;align-items:center;justify-content:center}
+/* 药丸 */
+.pill{display:inline-block;font-size:10px;font-weight:700;padding:3px 11px;border-radius:999px}
+.pill.g{background:rgba(52,211,153,.16);color:#34D399}.pill.y{background:rgba(251,191,36,.16);color:#FBBF24}
+.pill.r{background:rgba(248,113,113,.16);color:#F87171}.pill.b{background:rgba(96,165,250,.16);color:#60A5FA}
+.pill.p{background:rgba(167,139,250,.16);color:#A78BFA}.pill.n{background:rgba(156,163,175,.14);color:var(--dim)}
+/* 实时进度 */
+.live{display:flex;gap:22px;align-items:center}
+.ring{position:relative;width:118px;height:118px;flex-shrink:0}
+.ring svg.rg{transform:rotate(-90deg);width:118px;height:118px}
+.ring .bgc{stroke:rgba(255,255,255,.08);fill:none;stroke-width:10}
+.ring .fgc{fill:none;stroke-width:10;stroke-linecap:round;transition:stroke-dashoffset .6s}
+.ring .ct{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center}
+.ring .ct b{font-family:var(--disp);font-size:24px;font-weight:700;color:#fff}
+.ring .ct span{font-size:9px;color:var(--dim)}
+.live .info{flex:1;min-width:0}
+.live .nm{font-family:var(--disp);font-size:16px;font-weight:700;display:flex;align-items:center;gap:10px;color:#fff}
+.live .mrow{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-top:14px}
+.mt{background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.07);border-radius:13px;padding:10px 12px}
+.mt .k{font-size:9px;color:var(--dim);font-weight:700;text-transform:uppercase}
+.mt .v{font-family:var(--disp);font-size:17px;font-weight:700;margin-top:3px;color:#fff}
+.bar{height:9px;background:rgba(255,255,255,.08);border-radius:99px;overflow:hidden;margin-top:12px}
+.bar i{display:block;height:100%;border-radius:99px;background:var(--grad);transition:width .5s}
+.idle{color:var(--dim);font-size:13px;text-align:center;padding:26px 0}
+table{width:100%;border-collapse:collapse;font-size:12px}
+th{font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.5px;text-align:left;padding:8px 10px;border-bottom:1px solid rgba(255,255,255,.08)}
+td{padding:9px 10px;border-bottom:1px solid rgba(255,255,255,.06);font-weight:500;color:#E5E7EB}
+tr:last-child td{border-bottom:0}
+canvas{width:100%!important;height:230px!important}
+.legend{display:flex;gap:14px;margin-top:10px;flex-wrap:wrap}
+.legend span{font-size:10px;color:var(--dim);display:flex;gap:5px;align-items:center}
+.legend i{width:12px;height:3px;border-radius:2px}
+.dsc{display:flex;align-items:center;gap:14px}
+.dsc .ic{width:42px;height:42px;border-radius:13px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.dsc .nm{font-family:var(--disp);font-size:14px;font-weight:700;color:#fff}
+.dsc .ct{font-size:11px;color:var(--dim);margin-top:2px}
+.dsc .num{margin-left:auto;text-align:right}
+.dsc .num b{font-family:var(--disp);font-size:20px;font-weight:700;color:#fff}
+.dsc .num span{display:block;font-size:9px;color:var(--dim)}
+@media(max-width:1100px){.g4{grid-template-columns:repeat(2,1fr)}.g3,.g2{grid-template-columns:1fr}}
+</style>
+</head>
+<body data-tab="overview">
+<aside class="side">
+  <div class="logo"><div class="mark"><svg class="ic" viewBox="0 0 24 24"><path d="M21 8l-9-5-9 5v8l9 5 9-5V8z"/><path d="M3 8l9 5 9-5"/><path d="M12 13v8"/></svg></div><div><b>SKU 识别</b><small>ADMIN CONSOLE</small></div></div>
+  <nav class="nav" id="nav">
+    <button data-tab="overview" class="on"><svg class="ic" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>概览</button>
+    <button data-tab="yolo"><svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg>YOLO 检测训练</button>
+    <button data-tab="clf"><svg class="ic" viewBox="0 0 24 24"><rect x="7" y="7" width="10" height="10" rx="2"/><path d="M9 3v4M15 3v4M9 17v4M15 17v4M3 9h4M3 15h4M17 9h4M17 15h4"/></svg>级联分类器</button>
+    <button data-tab="data"><svg class="ic" viewBox="0 0 24 24"><ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v14c0 1.7 3.6 3 8 3s8-1.3 8-3V5"/><path d="M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3"/></svg>数据集</button>
+    <button data-tab="models"><svg class="ic" viewBox="0 0 24 24"><path d="M21 8l-9-5-9 5v8l9 5 9-5V8z"/><path d="M3 8l9 5 9-5"/></svg>模型库</button>
+    <button data-tab="svc"><svg class="ic" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="7" rx="2"/><rect x="3" y="13" width="18" height="7" rx="2"/><path d="M7 7.5h.01M7 16.5h.01"/></svg>服务状态</button>
+  </nav>
+  <div class="foot"><b>方法论</b><p>先评估诊断 → 痛点定位 → 定向调优 → 验证（闭环迭代）</p></div>
+</aside>
+
+<main class="main">
+  <div class="topbar">
+    <div><h1 id="pageTitle">概览</h1><div class="crumb" id="crumb">后台管理端 / 概览</div></div>
+    <div class="right"><span class="livepill"><span class="d"></span><span id="activeLabel">检测中</span></span><span class="ts" id="ts">—</span></div>
+  </div>
+
+  <section class="tab on" id="tab-overview">
+    <div class="grid g4" style="margin-bottom:16px" id="ovStats"></div>
+    <div class="grid g2">
+      <div class="card"><h3><span class="dot" style="background:var(--a1)"></span>当前活跃训练</h3><div id="ovLive"></div></div>
+      <div class="card"><h3><span class="dot" style="background:var(--a1)"></span>YOLO 各轮 mAP@50</h3><canvas id="ovChart"></canvas></div>
+    </div>
+    <div class="grid g2" style="margin-top:16px">
+      <div class="card"><h3><span class="dot" style="background:var(--a1)"></span>数据质量护栏（第三批拦截）</h3><div id="ovIntercept"></div></div>
+      <div class="card"><h3><span class="dot" style="background:var(--a1)"></span>难例 SKU 关注（召回率）</h3><div id="ovHard"></div></div>
+    </div>
+  </section>
+
+  <section class="tab" id="tab-yolo">
+    <div class="card" style="margin-bottom:16px"><h3><span class="dot" style="background:var(--a1)"></span>实时训练进度</h3><div id="yoloLive"></div></div>
+    <div class="grid g2">
+      <div class="card"><h3><span class="dot" style="background:var(--a1)"></span>指标曲线（最佳轮）</h3><canvas id="yoloChart"></canvas>
+        <div class="legend"><span><i style="background:#34D399"></i>mAP@50</span><span><i style="background:#60A5FA"></i>Precision</span><span><i style="background:#FBBF24"></i>Recall</span></div></div>
+      <div class="card"><h3><span class="dot" style="background:var(--a1)"></span>训练轮次记录</h3>
+        <table><thead><tr><th>轮次</th><th>epochs</th><th>最佳 mAP@50</th><th>最佳轮</th><th>状态</th></tr></thead><tbody id="yoloTable"></tbody></table></div>
+    </div>
+    <div class="grid g2" style="margin-top:16px">
+      <div class="card"><h3><span class="dot" style="background:var(--a1)"></span>损失曲线（box / cls）</h3><canvas id="yoloLossChart"></canvas>
+        <div class="legend"><span><i style="background:#60A5FA"></i>box_loss</span><span><i style="background:#FBBF24"></i>cls_loss</span></div></div>
+      <div class="card"><h3><span class="dot" style="background:var(--a1)"></span>本轮训练配置</h3><div id="yoloCfg"></div></div>
+    </div>
+    <div class="card" style="margin-top:16px"><h3><span class="dot" style="background:var(--a1)"></span>难例 SKU 召回跟踪</h3><div id="yoloHard"></div></div>
+  </section>
+
+  <section class="tab" id="tab-clf">
+    <div class="card" style="margin-bottom:16px"><h3><span class="dot" style="background:var(--a1)"></span>实时训练进度</h3><div id="clfLive"></div></div>
+    <div class="card"><h3><span class="dot" style="background:var(--a1)"></span>Top-1 准确率曲线</h3><canvas id="clfChart"></canvas>
+      <div class="legend"><span><i style="background:#34D399"></i>val_acc</span><span><i style="background:#60A5FA"></i>train_acc</span></div></div>
+    <div class="grid g2" style="margin-top:16px">
+      <div class="card"><h3><span class="dot" style="background:var(--a1)"></span>Top 混淆对（GT→误判）</h3><div id="clfConf"></div></div>
+      <div class="card"><h3><span class="dot" style="background:var(--a1)"></span>分类裁剪数据（GT框 vs YOLO框）</h3><div id="clfCrop"></div></div>
+    </div>
+  </section>
+
+  <section class="tab" id="tab-data">
+    <div class="card" style="margin-bottom:16px"><h3><span class="dot" style="background:var(--a1)"></span>拦截分布（坏图原因）</h3><div id="dataIntercept"></div></div>
+    <div class="grid g2" id="dataCards"></div></section>
+
+  <section class="tab" id="tab-models">
+    <div class="grid g2" style="margin-bottom:16px">
+      <div class="card"><h3><span class="dot" style="background:var(--a1)"></span>各轮 mAP@50 对比</h3><canvas id="modelsChart"></canvas></div>
+      <div class="card"><h3><span class="dot" style="background:var(--a1)"></span>级联架构</h3><div id="modelsNote"></div></div>
+    </div>
+    <div class="card"><h3><span class="dot" style="background:var(--a1)"></span>模型注册表</h3>
+      <table><thead><tr><th>模型</th><th>类型</th><th>核心指标</th><th>最佳轮</th><th>总轮</th><th>状态</th></tr></thead><tbody id="modelTable"></tbody></table></div>
+  </section>
+
+  <section class="tab" id="tab-svc">
+    <div class="grid g2" style="margin-bottom:16px">
+      <div class="card"><h3><span class="dot" style="background:var(--a1)"></span>训练进程</h3><div id="svcProc"></div></div>
+      <div class="card"><h3><span class="dot" style="background:var(--a1)"></span>守护与端口</h3><div id="svcGuard"></div></div>
+    </div>
+    <div class="grid g3" id="svcCards"></div></section>
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script>
+const $=id=>document.getElementById(id);
+const C={green:'#34D399',gold:'#FBBF24',teal:'#2DD4BF',purple:'#A78BFA',red:'#F87171',blue:'#60A5FA'};
+// 线性 SVG 图标（无 emoji）
+const I={
+ file:'<svg class="ic" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg>',
+ check:'<svg class="ic" viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5"/></svg>',
+ scale:'<svg class="ic" viewBox="0 0 24 24"><path d="M12 3v18M8 21h8"/><path d="M5 7l7-4 7 4"/><path d="M5 7l-3 7a3 3 0 0 0 6 0zM19 7l-3 7a3 3 0 0 0 6 0z"/></svg>',
+ crop:'<svg class="ic" viewBox="0 0 24 24"><path d="M6 2v14a2 2 0 0 0 2 2h14"/><path d="M18 22V8a2 2 0 0 0-2-2H2"/></svg>',
+ target:'<svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3"/></svg>',
+ db:'<svg class="ic" viewBox="0 0 24 24"><ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v14c0 1.7 3.6 3 8 3s8-1.3 8-3V5"/><path d="M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3"/></svg>',
+ chip:'<svg class="ic" viewBox="0 0 24 24"><rect x="7" y="7" width="10" height="10" rx="2"/><path d="M9 3v4M15 3v4M9 17v4M15 17v4M3 9h4M3 15h4M17 9h4M17 15h4"/></svg>',
+ server:'<svg class="ic" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="7" rx="2"/><rect x="3" y="13" width="18" height="7" rx="2"/><path d="M7 7.5h.01M7 16.5h.01"/></svg>',
+ tag:'<svg class="ic" viewBox="0 0 24 24"><path d="M20 12l-8 8-9-9V4h7z"/><path d="M7 7h.01"/></svg>',
+ grid:'<svg class="ic" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>'
+};
+let charts={}, curTab='overview';
+const TITLES={overview:'概览',yolo:'YOLO 检测训练',clf:'级联分类器',data:'数据集',models:'模型库',svc:'服务状态'};
+document.querySelectorAll('#nav button').forEach(b=>b.onclick=()=>{
+  document.querySelectorAll('#nav button').forEach(x=>x.classList.remove('on'));
+  b.classList.add('on'); curTab=b.dataset.tab;
+  document.body.dataset.tab=curTab; // 侧边栏/强调色联动
+  document.querySelectorAll('.tab').forEach(t=>t.classList.remove('on'));
+  $('tab-'+curTab).classList.add('on');
+  $('pageTitle').textContent=TITLES[curTab]; $('crumb').textContent='后台管理端 / '+TITLES[curTab];
+  refresh();
+});
+function mkChart(id,labels,datasets){
+  if(charts[id]){charts[id].data.labels=labels;datasets.forEach((d,i)=>charts[id].data.datasets[i].data=d.data);charts[id].update('none');return;}
+  charts[id]=new Chart($(id).getContext('2d'),{type:'line',data:{labels,datasets},options:{responsive:true,maintainAspectRatio:false,
+    plugins:{legend:{display:false}},interaction:{mode:'index',intersect:false},
+    scales:{x:{grid:{display:false},ticks:{color:'#9CA3AF',font:{size:9}}},y:{grid:{color:'rgba(255,255,255,.06)'},ticks:{color:'#9CA3AF',font:{size:9}}}},
+    elements:{point:{radius:1.5},line:{tension:.35,borderWidth:2}}}});
+}
+function ring(pct,color){const r=52,circ=2*Math.PI*r,off=circ*(1-Math.min(1,pct));
+  return `<div class="ring"><svg class="rg" viewBox="0 0 118 118"><circle class="bgc" cx="59" cy="59" r="${r}"/><circle class="fgc" cx="59" cy="59" r="${r}" stroke="${color}" stroke-dasharray="${circ}" stroke-dashoffset="${off}"/></svg><div class="ct"><b>${Math.round(pct*100)}%</b><span>本轮进度</span></div></div>`;}
+function liveHTML(lv,kind){
+  if(!lv||!lv.active){
+    if(lv&&lv.finished&&kind==='clf')return `<div class="idle">分类器训练已完成 · 最佳 val_acc <b>${(lv.best_acc*100).toFixed(2)}%</b> @ ep${lv.best_epoch}</div>`;
+    return `<div class="idle">当前无${kind==='yolo'?' YOLO 检测':'分类器'}训练在运行</div>`;
+  }
+  const pct=lv.epoch_progress||0;
+  const m = kind==='yolo'
+    ? `<div class="mt"><div class="k">Box Loss</div><div class="v">${lv.box_loss!=null?lv.box_loss.toFixed(3):'—'}</div></div>
+       <div class="mt"><div class="k">Cls Loss</div><div class="v">${lv.cls_loss!=null?lv.cls_loss.toFixed(3):'—'}</div></div>
+       <div class="mt"><div class="k">已完成轮 mAP@50</div><div class="v">${lv.last_map50!=null?lv.last_map50.toFixed(3):'—'}</div></div>
+       <div class="mt"><div class="k">已完成轮 Recall</div><div class="v">${lv.last_recall!=null?lv.last_recall.toFixed(3):'—'}</div></div>`
+    : `<div class="mt"><div class="k">Train Acc</div><div class="v">${lv.running_acc!=null?(lv.running_acc*100).toFixed(1)+'%':'—'}</div></div>
+       <div class="mt"><div class="k">Val Loss</div><div class="v">${lv.running_loss!=null?lv.running_loss.toFixed(3):'—'}</div></div>
+       <div class="mt"><div class="k">学习率</div><div class="v">${lv.lr!=null?lv.lr.toExponential(1):'—'}</div></div>
+       <div class="mt"><div class="k">最佳 Val Acc</div><div class="v">${lv.best_acc!=null?(lv.best_acc*100).toFixed(1)+'%':'—'}</div></div>`;
+  const eta=lv.eta_epoch_sec||0;
+  return `<div class="live">${ring(pct,kind==='yolo'?C.green:C.purple)}
+    <div class="info"><div class="nm">${kind==='yolo'?'YOLO 检测训练':'级联分类器'} <span class="pill g">实时</span><span style="font-size:11px;color:var(--dim)">${lv.name||''}</span></div>
+    <div style="font-size:12px;color:var(--dim);margin-top:6px">Epoch <b style="color:var(--ink)">${lv.epoch}</b> / ${lv.total_epochs} · batch ${lv.batch}/${lv.total_batches} · 本轮剩余 ${Math.floor(eta/60)}分${eta%60}秒</div>
+    <div class="bar"><i style="width:${Math.round(pct*100)}%"></i></div>
+    <div class="mrow">${m}</div></div></div>`;
+}
+async function api(p){try{return await fetch(p).then(r=>r.json());}catch(e){return null;}}
+async function refresh(){
+  const [ov,ly,lc,ds,md,sv,ic,cf,cg,hc]=await Promise.all([api('/api/overview'),api('/api/live/yolo'),api('/api/live/classifier'),api('/api/datasets'),api('/api/models'),api('/api/services'),api('/api/intercept'),api('/api/confusion'),api('/api/config'),api('/api/hardcase')]);
+  $('ts').textContent='更新于 '+new Date().toLocaleTimeString();
+  $('activeLabel').textContent=(ly&&ly.active)?'YOLO 训练中':(lc&&lc.active)?'分类器训练中':'空闲';
+  if(ov)renderOverview(ov,ly,lc);
+  if(ly)$('yoloLive').innerHTML=liveHTML(ly,'yolo');
+  if(lc)$('clfLive').innerHTML=liveHTML(lc,'clf');
+  if(ov){renderYoloTable(ov);renderYoloChart(ov);renderClfChart(ov);renderModelsChart(ov);}
+  if(ds)renderData(ds);
+  if(md)renderModels(md);
+  if(sv)renderSvc(sv);
+  if(ic){renderIntercept(ic);}
+  if(hc&&hc.items)renderHard(hc);
+  if(cf)renderConf(cf);
+  if(cg)renderCfg(cg);
+  if(ds)renderCrop(ds);
+  if(sv)renderProc(sv);
+  renderGuard(); renderModelsNote();
+}
+function renderOverview(ov,ly,lc){
+  const by=ov.best_yolo, cl=ov.classifier;
+  const t=(c,i)=>`<div class="tag" style="background:${c}1a;color:${c}">${i}</div>`;
+  $('ovStats').innerHTML=`
+    <div class="card stat">${t(C.green,I.target)}<div class="lb">最佳 YOLO mAP@50</div><div class="vl" style="color:var(--a1)">${by?by.map50.toFixed(4):'—'}</div><div class="sb">${by?by.run+' @ ep'+by.epoch:''}</div></div>
+    <div class="card stat">${t(C.purple,I.chip)}<div class="lb">分类器 Val Acc</div><div class="vl" style="color:var(--a1)">${cl&&cl.best_acc?(cl.best_acc*100).toFixed(1)+'%':'—'}</div><div class="sb">${cl?'ep'+(cl.best_epoch||'—'):''}</div></div>
+    <div class="card stat">${t(C.gold,I.grid)}<div class="lb">YOLO 训练轮次</div><div class="vl" style="color:var(--a1)">${ov.yolo_runs.length}</div><div class="sb">sku_v1 ~ v6</div></div>
+    <div class="card stat">${t(C.blue,I.server)}<div class="lb">在线服务</div><div class="vl" style="color:var(--a1)">${Object.values(ov.services).filter(s=>s==='up').length}</div><div class="sb">/ ${Object.keys(ov.services).length} 个</div></div>`;
+  $('ovLive').innerHTML=(ly&&ly.active)?liveHTML(ly,'yolo'):(lc&&lc.active)?liveHTML(lc,'clf'):liveHTML(lc,'clf');
+}
+function renderYoloTable(ov){
+  $('yoloTable').innerHTML=ov.yolo_runs.map(r=>{
+    const st=r.run==='sku_v4'?'<span class="pill b">冻结</span>':r.run==='sku_v6'?'<span class="pill g">训练中</span>':'<span class="pill n">历史</span>';
+    return `<tr><td><b>${r.run}</b></td><td>${r.n_epochs}</td><td>${r.best.map50.toFixed(4)}</td><td>ep${r.best.epoch}</td><td>${st}</td></tr>`;}).join('');
+}
+function renderYoloChart(ov){
+  const best=ov.yolo_runs.find(r=>r.run==='sku_v6')||ov.yolo_runs[ov.yolo_runs.length-1];
+  if(!best)return;
+  mkChart('yoloChart',best.epochs.map(e=>e.epoch),[
+    {label:'mAP50',data:best.epochs.map(e=>e.map50),borderColor:C.green},
+    {label:'P',data:best.epochs.map(e=>e.precision),borderColor:C.blue},
+    {label:'R',data:best.epochs.map(e=>e.recall),borderColor:C.gold}]);
+  mkChart('ovChart',ov.yolo_runs.map(r=>r.run),[{label:'mAP50',data:ov.yolo_runs.map(r=>r.best.map50),borderColor:C.green}]);
+}
+function renderClfChart(ov){
+  const cl=ov.classifier; if(!cl||!cl.epochs)return;
+  mkChart('clfChart',cl.epochs.map(e=>e.epoch),[
+    {label:'val_acc',data:cl.epochs.map(e=>e.val_acc),borderColor:C.green},
+    {label:'train_acc',data:cl.epochs.map(e=>e.train_acc),borderColor:C.blue}]);
+}
+function renderData(ds){
+  const icons=[I.file,I.file,I.file,I.check,I.scale,I.crop,I.crop,I.target];
+  const cols=[C.green,C.blue,C.gold,C.teal,C.purple,C.red,C.gold,C.green];
+  $('dataCards').innerHTML=ds.map((d,i)=>`<div class="card dsc"><div class="ic" style="background:${cols[i%8]}1a;color:${cols[i%8]}">${icons[i%8]}</div>
+    <div><div class="nm">${d.name}</div><div class="ct">${d.kind} · ${d.note}</div></div>
+    <div class="num"><b>${d.photos.toLocaleString()}</b><span>张</span></div></div>`).join('');
+}
+function renderModels(md){
+  $('modelTable').innerHTML=md.map(m=>{
+    const st=m.status==='训练中'?'<span class="pill g">训练中</span>':m.status==='冻结'?'<span class="pill b">冻结</span>':m.status==='已收敛'?'<span class="pill p">已收敛</span>':'<span class="pill n">历史</span>';
+    return `<tr><td><b>${m.name}</b></td><td>${m.type}</td><td>${m.metric}</td><td>ep${m.epoch}</td><td>${m.epochs}</td><td>${st}</td></tr>`;}).join('');
+}
+function renderSvc(sv){
+  $('svcCards').innerHTML=Object.entries(sv.services).map(([n,s])=>`<div class="card dsc"><div class="ic" style="background:${s==='up'?'rgba(31,160,107,.12)':'rgba(226,92,92,.12)'};color:${s==='up'?C.green:C.red}">${I.server}</div>
+    <div><div class="nm">${n}</div><div class="ct">${s==='up'?'运行中':'已停止'}</div></div>
+    <div class="num"><span class="pill ${s==='up'?'g':'r'}">${s==='up'?'UP':'DOWN'}</span></div></div>`).join('');
+}
+function barRow(label,pct,color,extra){
+  return `<div style="margin-bottom:12px"><div style="display:flex;justify-content:space-between;font-size:11px;margin-bottom:5px"><span style="font-weight:600">${label}</span><span style="color:var(--dim)">${extra}</span></div><div class="bar" style="margin-top:0"><i style="width:${Math.max(2,Math.round(pct*100))}%;background:${color}"></i></div></div>`;
+}
+function renderIntercept(ic){
+  if(!ic||!ic.total){const e='<div class="idle">暂无拦截报告</div>';$('ovIntercept').innerHTML=e;$('dataIntercept').innerHTML=e;return;}
+  const rd=ic.reason_distribution||{}; const bad=ic.bad||0;
+  const sum=`<div style="display:flex;gap:26px;margin-bottom:16px">
+    <div><div class="lb" style="font-size:10px;color:var(--dim)">原始总数</div><div style="font-family:var(--disp);font-size:26px;font-weight:700">${ic.total.toLocaleString()}</div></div>
+    <div><div class="lb" style="font-size:10px;color:var(--dim)">好图</div><div style="font-family:var(--disp);font-size:26px;font-weight:700;color:${C.green}">${(ic.clean||0).toLocaleString()}</div></div>
+    <div><div class="lb" style="font-size:10px;color:var(--dim)">拦截坏图</div><div style="font-family:var(--disp);font-size:26px;font-weight:700;color:${C.red}">${bad}</div></div>
+    <div><div class="lb" style="font-size:10px;color:var(--dim)">坏图率</div><div style="font-family:var(--disp);font-size:26px;font-weight:700">${((ic.bad_rate||0)*100).toFixed(2)}%</div></div></div>`;
+  const mx=Math.max(rd.blurry||0,rd.reflection||0,rd.screen||0,1);
+  const bars=barRow('模糊',(rd.blurry||0)/mx,C.gold,`${rd.blurry||0} 张`)+barRow('反光',(rd.reflection||0)/mx,C.red,`${rd.reflection||0} 张`)+barRow('翻拍/摩尔纹',(rd.screen||0)/mx,C.purple,`${rd.screen||0} 张`);
+  $('ovIntercept').innerHTML=sum+bars;
+  $('dataIntercept').innerHTML=sum+bars+`<div style="font-size:11px;color:var(--dim)">阈值：反光&gt;0.10 / 摩尔纹&gt;1.45 / 模糊&lt;40（保护微距小罐）。灰名单 187 张以 50% 降采样参与训练。</div>`;
+}
+function renderHard(hc){
+  const html=hc.items.map(it=>barRow(it.sku, it.recall, it.recall<0.15?C.red:it.recall<0.25?C.gold:C.green, `召回 ${(it.recall*100).toFixed(1)}%${it.note?' · '+it.note:''}`)).join('');
+  $('ovHard').innerHTML=html;
+  $('yoloHard').innerHTML=`<div style="font-size:11px;color:var(--dim);margin-bottom:12px">来源：${hc.source||''} · 更新 ${hc.updated||''}。sku_v6 召回专项重点提升以下 SKU。</div>`+html;
+}
+function renderConf(cf){
+  if(!cf.length){$('clfConf').innerHTML='<div class="idle">暂无混淆数据</div>';return;}
+  $('clfConf').innerHTML=cf.map(c=>`<div style="display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid rgba(120,128,140,.12);font-size:12px">
+    <span style="font-weight:600">${c.gt}</span><span style="color:var(--dim)">→</span><span style="color:${C.red}">${c.pred}</span>
+    <span class="pill r" style="margin-left:auto">${c.count}</span></div>`).join('');
+}
+function renderCfg(cg){
+  if(!cg||!cg.imgsz){$('yoloCfg').innerHTML='<div class="idle">暂无配置</div>';return;}
+  const kv=[['输入分辨率',cg.imgsz],['Batch',cg.batch],['学习率 lr0',cg.lr0],['分类权重 cls',cg.cls_weight],['定位权重 box',cg.box_weight!=null?cg.box_weight:8.0],['Mosaic',cg.mosaic],['MixUp',cg.mixup],['RandomErasing',cg.erasing!=null?cg.erasing:0.5],['亮度抖动 hsv_v',cg.hsv_v!=null?cg.hsv_v:0.6],['余弦退火',cg.cos_lr?'开':'关'],['早停 patience',cg.patience],['设备',cg.device]];
+  $('yoloCfg').innerHTML=`<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px">`+kv.map(([k,v])=>`<div class="mt"><div class="k">${k}</div><div class="v" style="font-size:14px">${v}</div></div>`).join('')+`</div>`;
+}
+function renderCrop(ds){
+  const gt=ds.find(d=>d.name.startsWith('crop_dataset ')); const yo=ds.find(d=>d.name.startsWith('crop_dataset_yolo'));
+  $('clfCrop').innerHTML=`<div style="display:flex;gap:16px">
+    <div class="mt" style="flex:1"><div class="k">GT 框裁剪</div><div class="v">${gt?gt.photos.toLocaleString():'—'}</div><div style="font-size:10px;color:var(--dim)">分类器 v1 训练</div></div>
+    <div class="mt" style="flex:1"><div class="k">YOLO 框裁剪</div><div class="v">${yo?yo.photos.toLocaleString():'—'}</div><div style="font-size:10px;color:var(--dim)">推理一致性校准</div></div></div>
+    <div style="font-size:11px;color:var(--dim);margin-top:12px">用 YOLO 预测框重剪训练分类器，弥合「训练用 GT 框 / 推理用 YOLO 框」的域偏移。</div>`;
+}
+function renderProc(sv){
+  const p=sv.processes||{};
+  const row=(n,on)=>`<div style="display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid rgba(120,128,140,.12)"><span class="pill ${on?'g':'n'}">${on?'RUN':'IDLE'}</span><span style="font-size:12px;font-weight:600">${n}</span></div>`;
+  $('svcProc').innerHTML=row('YOLO 检测训练 (train_v1)',p.yolo_training)+row('级联分类器训练',p.classifier_training);
+}
+function renderGuard(){
+  $('svcGuard').innerHTML=`<div style="font-size:12px;line-height:1.7">
+    <div style="display:flex;gap:8px;align-items:center"><span class="pill g">WATCHDOG</span>监控守护脚本每 10s 探活，挂了自动拉起</div>
+    <div style="margin-top:8px;color:var(--dim)">监控端口 <b style="color:var(--ink)">8092</b> · 日志 <code>.models/monitor_watchdog.log</code></div>
+    <div style="color:var(--dim)">重启：<code>nohup bash scripts/monitor_watchdog.sh &amp; disown</code></div></div>`;
+}
+function renderModelsNote(){
+  $('modelsNote').innerHTML=`<div style="font-size:12px;line-height:1.8">
+    <div style="display:flex;flex-direction:column;gap:8px">
+      <div class="mt"><div class="k">① 检测</div><div class="v" style="font-size:13px">YOLO v4/v6 画框（v4 冻结）</div></div>
+      <div class="mt"><div class="k">② 裁剪</div><div class="v" style="font-size:13px">逐框等比缩放 224×224</div></div>
+      <div class="mt"><div class="k">③ 精识别</div><div class="v" style="font-size:13px">ResNet18 分类器</div></div>
+      <div class="mt"><div class="k">④ 兑底</div><div class="v" style="font-size:13px">conf&lt;0.6 回退/人工复核</div></div>
+    </div></div>`;
+}
+function renderModelsChart(ov){
+  mkChart('modelsChart',ov.yolo_runs.map(r=>r.run),[{label:'mAP50',data:ov.yolo_runs.map(r=>r.best.map50),borderColor:C.blue}]);
+  // 损失曲线
+  const best=ov.yolo_runs.find(r=>r.run==='sku_v6')||ov.yolo_runs[ov.yolo_runs.length-1];
+  if(best)mkChart('yoloLossChart',best.epochs.map(e=>e.epoch),[
+    {label:'box',data:best.epochs.map(e=>e.box_loss),borderColor:C.blue},
+    {label:'cls',data:best.epochs.map(e=>e.cls_loss),borderColor:C.gold}]);
+}
+refresh(); setInterval(refresh,3000);
+</script>
+</body>
+</html>

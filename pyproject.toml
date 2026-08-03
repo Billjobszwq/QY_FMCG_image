@@ -1,0 +1,36 @@
+[project]
+name = "sku-recog"
+version = "0.3.0"
+description = "货架陈列 SKU 检测/识别平台：YOLO 画框 + 级联分类器 + Label Studio 标注审核闭环"
+requires-python = ">=3.11,<3.14"
+
+# runtime：在线识别与平台服务
+dependencies = [
+    "numpy>=2.2,<3",
+    "pillow>=11.0",
+    "requests>=2.32",
+    "PyYAML>=6.0",
+    "openpyxl>=3.1",
+]
+
+[project.optional-dependencies]
+# training：训练链路（torch 版本与 ultralytics 模型格式兼容性：
+# ultralytics 8.4.x 的 YOLO11 .pt 与 torch 2.13 MPS 后端已验证；
+# 升级 torch/ultralytics 大版本前必须重跑级联集成测试）
+training = [
+    "torch>=2.13,<3",
+    "torchvision>=0.28,<1",
+    "ultralytics>=8.4,<9",
+    "pandas>=2.2",
+]
+# platform：Label Studio 标注平台（可选基础设施）
+platform = [
+    "label-studio>=1.23,<2",
+]
+# dev：测试与质量门
+dev = [
+    "pytest>=8.0",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

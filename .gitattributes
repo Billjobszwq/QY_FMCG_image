@@ -1,0 +1,23 @@
+* text=auto eol=lf
+*.sh text eol=lf
+*.py text eol=lf
+*.md text eol=lf
+*.json text eol=lf
+*.yaml text eol=lf
+*.yml text eol=lf
+*.toml text eol=lf
+*.sql text eol=lf
+*.plist text eol=lf
+*.xml text eol=lf
+*.html text eol=lf
+*.js text eol=lf
+*.css text eol=lf
+*.jpg binary
+*.jpeg binary
+*.png binary
+*.xlsx binary
+*.pt binary
+*.pth binary
+*.onnx binary
+*.sqlite binary
+*.sqlite3 binary

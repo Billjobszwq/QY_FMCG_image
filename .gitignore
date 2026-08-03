@@ -1,0 +1,81 @@
+# ISSUE-020：版本控制忽略清单
+# 凭据与本地密钥
+.env
+.env.*
+# RA-020：示例文件保留在版本控制中（不含真实密钥）
+!.env.example
+*.pem
+*.key
+.claude/settings.local.json
+
+# 运行时数据与产物（可重建或体积大）
+.warehouse/
+.field/
+.kb/
+.labels/
+.platform/
+.training_data/
+.models/
+.datasets/
+.eval/
+.batch3_clean/
+crop_dataset/
+crop_dataset_yolo/
+batch3_gray/
+bad_samples/
+best/
+runs/
+.data_protocol/*.bak.json
+
+# 运行数据库、日志与 PID
+*.db
+*.db-*
+*.sqlite
+*.sqlite3
+*.sqlite3-*
+*.log
+*.pid
+.label-studio/
+
+# 模型权重与导出制品
+*.pt
+*.pth
+*.onnx
+*.engine
+*.safetensors
+
+# 依赖锁（含本机 file:// 路径，待重新生成可移植版本后解除忽略）
+requirements-lock.txt
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+.venv/
+venv/
+.ipynb_checkpoints/
+*.egg-info/
+
+# 大数据/业务资产（是否纳入版本控制需单独决策，默认忽略）
+照片1106/
+照片1107/
+百事&可口/
+搭建初期P1/
+UI风格设计-1/
+实景照片.xlsx
+第一批训练数据.xlsx
+第二批训练数据.xlsx
+第三批训练数据.xlsx
+
+# 预训练权重
+yolo11n.pt
+yolov8n.pt
+
+# 系统/IDE
+.DS_Store
+.idea/
+.vscode/

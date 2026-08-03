@@ -1,0 +1,82 @@
+name: sku-recog
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: sku_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    ports: ["${POSTGRES_PORT:-5432}:5432"]
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      # ISSUE-016：首次初始化执行完整迁移（扩展 + 业务 schema）
+      - ./migrations/postgres/000_init.sql:/docker-entrypoint-initdb.d/000_init.sql:ro
+      - ./migrations/postgres/001_schema.sql:/docker-entrypoint-initdb.d/001_schema.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+  redis:
+    image: redis:7-alpine
+    container_name: sku_redis
+    restart: unless-stopped
+    ports: ["${REDIS_PORT:-6379}:6379"]
+    volumes: [redisdata:/data]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+  minio:
+    image: minio/minio:latest
+    container_name: sku_minio
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+    ports: ["${MINIO_PORT:-9000}:9000", "${MINIO_CONSOLE_PORT:-9001}:9001"]
+    volumes: [miniodata:/data]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+  minio-init:
+    image: minio/mc:latest
+    container_name: sku_minio_init
+    depends_on:
+      minio: {condition: service_healthy}
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        mc alias set local http://minio:9000 ${MINIO_ROOT_USER} ${MINIO_ROOT_PASSWORD}
+        mc mb -p local/${MINIO_BUCKET_IMAGES:-sku-images} || true
+        mc mb -p local/${MINIO_BUCKET_FIELD:-sku-field} || true
+        echo minio_buckets_ready
+  label-studio:
+    image: humansignal/label-studio:latest
+    container_name: sku_label_studio
+    restart: unless-stopped
+    environment:
+      LABEL_STUDIO_USERNAME: ${LABEL_STUDIO_USERNAME}
+      LABEL_STUDIO_PASSWORD: ${LABEL_STUDIO_PASSWORD}
+      LABEL_STUDIO_DISABLE_SIGNUP_WITHOUT_LINK: "true"  # ISSUE-015：关闭公开注册
+    ports: ["${LABEL_STUDIO_PORT:-8080}:8080"]
+    volumes:
+      - lsdata:/label-studio/data
+      - ./configs/label-studio/label_config.xml:/label-studio/label_config.xml:ro
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 40s
+volumes:
+  pgdata:
+  redisdata:
+  miniodata:
+  lsdata:

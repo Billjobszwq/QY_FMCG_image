@@ -1,0 +1,14 @@
+{
+  "_doc": "SKU 别名注册表：仅登记非平凡映射（跨命名法、错字、KB 缺失）。KB 文件夹名在构建时自动成为各自 canonical 的别名，无需在此重复。",
+  "canonicals": [
+    {"kb_folder": "乌龙茶无糖PET1250ML", "aliases": ["1250ml原味乌龙茶（无糖）"]},
+    {"kb_folder": "乌龙茶无糖PET900ML", "aliases": ["900ml原味乌龙茶（无糖）"]},
+    {"kb_folder": "茉莉乌龙无糖PET1250ML", "aliases": ["1250ml茉莉乌龙（无糖）"]},
+    {"kb_folder": "茉莉乌龙无糖PET900ML", "aliases": ["900ml茉莉乌龙（无糖）"]},
+    {"kb_folder": "利趣拿铁PET480ML", "aliases": ["480ml利趣拿铁"]},
+    {"kb_folder": "利趣醇咖PET480ML", "aliases": ["480ml利趣醇咖"]},
+    {"kb_folder": "植物茶麦茶500ML", "aliases": ["500ml麦茶"]},
+    {"kb_folder": "针叶樱桃味维C饮PET450ML", "aliases": ["针叶楼桃味维C饮PET450ML"]},
+    {"kb_folder": null, "display": "500ml橘皮乌龙（无糖）", "kb_missing": true, "aliases": ["500ml橘皮乌龙（无糖）"]}
+  ]
+}

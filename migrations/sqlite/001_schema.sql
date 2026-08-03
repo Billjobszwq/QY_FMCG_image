@@ -1,0 +1,20 @@
+CREATE TABLE IF NOT EXISTS sku_catalog(canonical_id TEXT PRIMARY KEY, display TEXT, brand TEXT, flavor TEXT, sugar TEXT, volume_ml INTEGER, packaging_version TEXT, barcode TEXT, aliases TEXT, attrs_json TEXT, kb_missing INTEGER DEFAULT 0);
+CREATE TABLE IF NOT EXISTS asset(asset_id TEXT PRIMARY KEY, sha256 TEXT, kind TEXT, uri TEXT, bucket TEXT, width INTEGER, height INTEGER, source TEXT, ingested_at REAL);
+CREATE TABLE IF NOT EXISTS annotation(ann_id INTEGER PRIMARY KEY AUTOINCREMENT, asset_id TEXT, x REAL, y REAL, box TEXT, canonical_id TEXT, source TEXT, confidence REAL, provenance_json TEXT, created_at REAL);
+CREATE TABLE IF NOT EXISTS auto_label(label_id INTEGER PRIMARY KEY AUTOINCREMENT, asset_id TEXT, box TEXT, canonical_id TEXT, method TEXT, confidence TEXT, evidence_json TEXT, needs_review INTEGER, created_at REAL);
+CREATE TABLE IF NOT EXISTS review_event(event_id INTEGER PRIMARY KEY AUTOINCREMENT, asset_id TEXT, reviewer TEXT, status TEXT, before_json TEXT, after_json TEXT, created_at REAL);
+CREATE TABLE IF NOT EXISTS dataset_version(dv_id TEXT PRIMARY KEY, split_info TEXT, filter_query TEXT, n_images INTEGER, n_labels INTEGER, source_label_ids TEXT, created_at REAL);
+CREATE TABLE IF NOT EXISTS model_version(mv_id TEXT PRIMARY KEY, task TEXT, code_hash TEXT, data_version TEXT, hyperparams TEXT, seed INTEGER, metrics_json TEXT, weight_uri TEXT, weight_sha TEXT, status TEXT, created_at REAL);
+CREATE TABLE IF NOT EXISTS recognition_run(run_id TEXT PRIMARY KEY, asset_id TEXT, model_versions TEXT, knowledge_version TEXT, prompt_version TEXT, decisions_json TEXT, created_at REAL);
+CREATE TABLE IF NOT EXISTS model_bundle(bundle_id TEXT PRIMARY KEY, manifest_json TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'created' CHECK(status IN ('created','production','retired')), previous_bundle_id TEXT, published_at REAL, created_at REAL);
+CREATE TABLE IF NOT EXISTS webhook_event(event_key TEXT PRIMARY KEY, action TEXT, payload_sha TEXT, created_at REAL);
+-- RA-017：审计 outbox —— recognition_run 写失败时完整事件落此表，后台重放幂等补写，绝不静默丢审计
+CREATE TABLE IF NOT EXISTS audit_outbox(run_id TEXT PRIMARY KEY, asset_id TEXT, payload_json TEXT NOT NULL, attempts INTEGER NOT NULL DEFAULT 0, created_at REAL, last_try REAL);
+CREATE TRIGGER IF NOT EXISTS wh_no_upd BEFORE UPDATE ON webhook_event BEGIN SELECT RAISE(ABORT,'webhook_event append-only'); END;
+CREATE TRIGGER IF NOT EXISTS wh_no_del BEFORE DELETE ON webhook_event BEGIN SELECT RAISE(ABORT,'webhook_event append-only'); END;
+CREATE TRIGGER IF NOT EXISTS ann_no_upd BEFORE UPDATE ON annotation BEGIN SELECT RAISE(ABORT,'annotation append-only'); END;
+CREATE TRIGGER IF NOT EXISTS ann_no_del BEFORE DELETE ON annotation BEGIN SELECT RAISE(ABORT,'annotation append-only'); END;
+CREATE TRIGGER IF NOT EXISTS al_no_upd BEFORE UPDATE ON auto_label BEGIN SELECT RAISE(ABORT,'auto_label append-only'); END;
+CREATE TRIGGER IF NOT EXISTS al_no_del BEFORE DELETE ON auto_label BEGIN SELECT RAISE(ABORT,'auto_label append-only'); END;
+CREATE TRIGGER IF NOT EXISTS re_no_upd BEFORE UPDATE ON review_event BEGIN SELECT RAISE(ABORT,'review_event append-only'); END;
+CREATE TRIGGER IF NOT EXISTS re_no_del BEFORE DELETE ON review_event BEGIN SELECT RAISE(ABORT,'review_event append-only'); END;

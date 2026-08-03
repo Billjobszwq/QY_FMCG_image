@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SKU 标注工作台</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f5f5f5; }
+.header { background: #1a1a2e; color: #fff; padding: 12px 24px; display: flex; align-items: center; gap: 16px; }
+.header h1 { font-size: 18px; font-weight: 600; }
+.header .stats { font-size: 13px; color: #aaa; margin-left: auto; }
+.tabs { display: flex; background: #16213e; padding: 0 24px; }
+.tab { padding: 10px 20px; color: #aaa; cursor: pointer; border-bottom: 2px solid transparent; font-size: 14px; }
+.tab.active { color: #fff; border-bottom-color: #4fc3f7; }
+.container { display: flex; height: calc(100vh - 90px); }
+.sidebar { width: 320px; background: #fff; border-right: 1px solid #e0e0e0; overflow-y: auto; flex-shrink: 0; }
+.main { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+.toolbar { padding: 8px 16px; background: #fff; border-bottom: 1px solid #e0e0e0; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.toolbar select, .toolbar input, .toolbar button { padding: 6px 12px; border: 1px solid #ddd; border-radius: 4px; font-size: 13px; }
+.toolbar button { background: #4fc3f7; color: #fff; border: none; cursor: pointer; font-weight: 500; }
+.toolbar button:hover { background: #039be5; }
+.toolbar button.danger { background: #ef5350; }
+.toolbar button.success { background: #66bb6a; }
+.toolbar button.warn { background: #ffa726; }
+.canvas-wrap { flex: 1; position: relative; overflow: auto; background: #222; display: flex; align-items: center; justify-content: center; }
+.canvas-wrap canvas { max-width: 100%; max-height: 100%; cursor: crosshair; }
+.photo-list { padding: 8px; }
+.photo-item { padding: 8px 12px; border-radius: 6px; cursor: pointer; margin-bottom: 4px; font-size: 13px; border: 1px solid #eee; }
+.photo-item:hover { background: #e3f2fd; }
+.photo-item.active { background: #bbdefb; border-color: #4fc3f7; }
+.photo-item .meta { color: #666; font-size: 11px; margin-top: 2px; }
+.badge { display: inline-block; padding: 1px 6px; border-radius: 3px; font-size: 11px; font-weight: 500; }
+.badge-pending { background: #fff3e0; color: #e65100; }
+.badge-assigned { background: #e3f2fd; color: #1565c0; }
+.badge-annotated { background: #e8f5e9; color: #2e7d32; }
+.badge-approved { background: #c8e6c9; color: #1b5e20; }
+.badge-rework { background: #fce4ec; color: #c62828; }
+.badge-rejected { background: #ffebee; color: #b71c1c; }
+.panel { padding: 16px; }
+.panel h3 { font-size: 14px; margin-bottom: 8px; color: #333; }
+.region-list { max-height: 200px; overflow-y: auto; }
+.region-item { display: flex; align-items: center; gap: 8px; padding: 4px 8px; font-size: 12px; border-bottom: 1px solid #f0f0f0; }
+.region-item select { flex: 1; font-size: 12px; padding: 2px 4px; }
+.region-item button { border: none; background: #ef5350; color: #fff; border-radius: 3px; cursor: pointer; padding: 2px 6px; }
+.mode-selector { display: flex; gap: 8px; margin-bottom: 12px; }
+.mode-btn { padding: 8px 16px; border: 2px solid #ddd; border-radius: 6px; cursor: pointer; font-size: 13px; }
+.mode-btn.active { border-color: #4fc3f7; background: #e1f5fe; }
+.search-box { width: 100%; padding: 8px 12px; border: 1px solid #ddd; border-radius: 4px; margin-bottom: 8px; font-size: 13px; }
+.pagination { display: flex; gap: 8px; padding: 8px; justify-content: center; }
+.pagination button { padding: 4px 12px; border: 1px solid #ddd; background: #fff; border-radius: 4px; cursor: pointer; }
+.empty { text-align: center; padding: 40px; color: #999; }
+.toast { position: fixed; top: 20px; right: 20px; padding: 12px 20px; background: #333; color: #fff; border-radius: 6px; font-size: 13px; z-index: 9999; display: none; }
+</style>
+</head>
+<body>
+<div class="header">
+  <h1>SKU 标注工作台</h1>
+  <div class="stats" id="globalStats">加载中...</div>
+</div>
+<div class="tabs">
+  <div class="tab active" data-tab="annotate">标注</div>
+  <div class="tab" data-tab="review">审核</div>
+  <div class="tab" data-tab="assign">任务分配</div>
+</div>
+<div class="container">
+  <div class="sidebar">
+    <div class="panel">
+      <input class="search-box" id="searchInput" placeholder="搜索门店/类型...">
+      <div id="filterBar" style="margin-bottom:8px;display:flex;gap:4px;flex-wrap:wrap;">
+        <select id="statusFilter" style="font-size:12px;padding:4px;">
+          <option value="">全部状态</option>
+          <option value="pending">待标注</option>
+          <option value="assigned">已分配</option>
+          <option value="annotated">已标注</option>
+          <option value="approved">已通过</option>
+          <option value="rework">返工</option>
+        </select>
+      </div>
+    </div>
+    <div class="photo-list" id="photoList"><div class="empty">加载中...</div></div>
+    <div class="pagination" id="pagination"></div>
+  </div>
+  <div class="main">
+    <div class="toolbar" id="toolbar">
+      <div class="mode-selector">
+        <div class="mode-btn active" data-mode="B">模式B (种子辅助)</div>
+        <div class="mode-btn" data-mode="A">模式A (从零标注)</div>
+      </div>
+      <button onclick="saveAnnotation()">保存标注</button>
+      <button class="success" onclick="submitReview('approved')">通过</button>
+      <button class="warn" onclick="submitReview('rework')">返工</button>
+      <button class="danger" onclick="submitReview('rejected')">驳回</button>
+    </div>
+    <div class="canvas-wrap" id="canvasWrap">
+      <canvas id="canvas"></canvas>
+    </div>
+    <div class="panel" style="max-height:220px;overflow-y:auto;border-top:1px solid #e0e0e0;background:#fff;">
+      <h3>标注区域 (<span id="regionCount">0</span>)</h3>
+      <div class="region-list" id="regionList"></div>
+    </div>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+const API = '';
+let state = { photos: [], current: null, regions: [], mode: 'B', page: 1, registry: [], tab: 'annotate' };
+let drawing = false, startX = 0, startY = 0, scale = 1;
+// RA-020：所有动态值插入 innerHTML/属性前必须转义，防 XSS
+function esc(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+
+// 初始化
+async function init() {
+  const [stats, reg] = await Promise.all([
+    fetch(API + '/api/stats').then(r => r.json()),
+    fetch(API + '/api/registry').then(r => r.json())
+  ]);
+  state.registry = Object.keys(reg).sort();
+  document.getElementById('globalStats').textContent =
+    `照片: ${stats.total_photos} | 已下载: ${stats.downloaded} | SKU: ${stats.registry_size} | 已通过: ${(stats.tasks_by_status||{}).approved||0}`;
+  loadPhotos();
+}
+
+async function loadPhotos() {
+  const status = document.getElementById('statusFilter').value;
+  const params = new URLSearchParams({ page: state.page, per_page: 50 });
+  if (status) params.set('status', status);
+  if (state.tab === 'review') params.set('status', 'annotated');
+  const data = await fetch(API + '/api/photos?' + params).then(r => r.json());
+  state.photos = data.items;
+  renderPhotoList(data);
+}
+
+function renderPhotoList(data) {
+  const el = document.getElementById('photoList');
+  if (!data.items.length) { el.innerHTML = '<div class="empty">暂无照片</div>'; return; }
+  el.innerHTML = data.items.map(p => `
+    <div class="photo-item ${state.current === p.id ? 'active' : ''}" onclick="loadPhoto('${esc(p.id)}')">
+      <div><strong>${esc(p.sname || p.id)}</strong> <span class="badge badge-${esc(p.status) || 'pending'}">${esc(statusText(p.status))}</span></div>
+      <div class="meta">${esc(p.typename || '')} | ${esc(p.n_annotations)} 标注 | ${p.mode ? '模式'+esc(p.mode) : ''}</div>
+    </div>`).join('');
+  const pages = Math.ceil(data.total / data.per_page);
+  document.getElementById('pagination').innerHTML = pages > 1 ?
+    `<button ${state.page<=1?'disabled':''} onclick="state.page--;loadPhotos()">上一页</button>
+     <span style="font-size:12px;line-height:28px;">${state.page}/${pages} (共${data.total})</span>
+     <button ${state.page>=pages?'disabled':''} onclick="state.page++;loadPhotos()">下一页</button>` : '';
+}
+
+function statusText(s) { return {pending:'待标注',assigned:'已分配',annotated:'已标注',approved:'已通过',rework:'返工',rejected:'已驳回'}[s] || s || '待标注'; }
+
+async function loadPhoto(id) {
+  state.current = id;
+  const data = await fetch(API + '/api/photo/' + id).then(r => r.json());
+  state.photoData = data;
+  // 加载图片到 canvas
+  const img = new Image();
+  img.onload = () => {
+    const canvas = document.getElementById('canvas');
+    const wrap = document.getElementById('canvasWrap');
+    const maxW = wrap.clientWidth - 20, maxH = wrap.clientHeight - 20;
+    scale = Math.min(maxW / img.width, maxH / img.height, 1);
+    canvas.width = img.width * scale;
+    canvas.height = img.height * scale;
+    state.imgW = img.width; state.imgH = img.height; state.img = img;
+    // 初始化 regions（模式B用种子标注）
+    if (state.mode === 'B' && data.annotations && data.annotations.length) {
+      state.regions = data.annotations.map(a => {
+        const bw = 0.07 * img.width, bh = 0.18 * img.height;
+        return { box: [a.x - bw/2, a.y - bh/2, a.x + bw/2, a.y + bh/2], name: a.name || '' };
+      });
+    } else {
+      state.regions = (data.task && data.task.regions) || [];
+    }
+    drawCanvas();
+    renderRegions();
+  };
+  img.src = API + '/img/' + id;
+  document.querySelectorAll('.photo-item').forEach(el => el.classList.remove('active'));
+  event.currentTarget?.classList.add('active');
+}
+
+function drawCanvas() {
+  const canvas = document.getElementById('canvas');
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  if (state.img) ctx.drawImage(state.img, 0, 0, canvas.width, canvas.height);
+  // 画已有框
+  state.regions.forEach((r, i) => {
+    const [x1,y1,x2,y2] = r.box;
+    ctx.strokeStyle = r.name ? '#4caf50' : '#ff9800';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(x1*scale, y1*scale, (x2-x1)*scale, (y2-y1)*scale);
+    ctx.fillStyle = 'rgba(0,0,0,0.6)';
+    ctx.font = '11px sans-serif';
+    const label = r.name || `#${i+1}`;
+    const tw = ctx.measureText(label).width;
+    ctx.fillRect(x1*scale, y1*scale - 14, tw + 6, 14);
+    ctx.fillStyle = '#fff';
+    ctx.fillText(label, x1*scale + 3, y1*scale - 3);
+  });
+}
+
+function renderRegions() {
+  document.getElementById('regionCount').textContent = state.regions.length;
+  const el = document.getElementById('regionList');
+  el.innerHTML = state.regions.map((r, i) => `
+    <div class="region-item">
+      <span>#${i+1}</span>
+      <select onchange="state.regions[${i}].name=this.value;drawCanvas()">
+        <option value="">-- 选择SKU --</option>
+        ${state.registry.map(n => `<option ${r.name===n?'selected':''}>${esc(n)}</option>`).join('')}
+      </select>
+      <button onclick="state.regions.splice(${i},1);drawCanvas();renderRegions()">×</button>
+    </div>`).join('');
+}
+
+// Canvas 交互：拖拽画框
+const canvas = document.getElementById('canvas');
+canvas.addEventListener('mousedown', e => {
+  const rect = canvas.getBoundingClientRect();
+  startX = (e.clientX - rect.left) / scale;
+  startY = (e.clientY - rect.top) / scale;
+  drawing = true;
+});
+canvas.addEventListener('mousemove', e => {
+  if (!drawing) return;
+  const rect = canvas.getBoundingClientRect();
+  const cx = (e.clientX - rect.left) / scale, cy = (e.clientY - rect.top) / scale;
+  drawCanvas();
+  const ctx = canvas.getContext('2d');
+  ctx.strokeStyle = '#2196f3'; ctx.lineWidth = 2; ctx.setLineDash([5,3]);
+  ctx.strokeRect(startX*scale, startY*scale, (cx-startX)*scale, (cy-startY)*scale);
+  ctx.setLineDash([]);
+});
+canvas.addEventListener('mouseup', e => {
+  if (!drawing) return;
+  drawing = false;
+  const rect = canvas.getBoundingClientRect();
+  const cx = (e.clientX - rect.left) / scale, cy = (e.clientY - rect.top) / scale;
+  const x1 = Math.min(startX, cx), y1 = Math.min(startY, cy);
+  const x2 = Math.max(startX, cx), y2 = Math.max(startY, cy);
+  if ((x2-x1) > 5 && (y2-y1) > 5) {
+    state.regions.push({ box: [x1, y1, x2, y2], name: '' });
+    drawCanvas(); renderRegions();
+  }
+});
+
+// 操作
+async function saveAnnotation() {
+  if (!state.current) return toast('请先选择照片');
+  const res = await fetch(API + '/api/annotation/save', {
+    method: 'POST', headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({ photo_id: state.current, regions: state.regions, mode: state.mode })
+  }).then(r => r.json());
+  toast(res.ok ? `已保存 ${res.regions_saved} 个区域` : '保存失败');
+  loadPhotos();
+}
+
+async function submitReview(status) {
+  if (!state.current) return toast('请先选择照片');
+  const res = await fetch(API + '/api/review/submit', {
+    method: 'POST', headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({ photo_id: state.current, status, regions: state.regions, reviewer: 'web' })
+  }).then(r => r.json());
+  toast(res.ok ? `已标记为: ${statusText(status)}` : '提交失败');
+  loadPhotos();
+}
+
+// Tab 切换
+document.querySelectorAll('.tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    tab.classList.add('active');
+    state.tab = tab.dataset.tab;
+    state.page = 1;
+    loadPhotos();
+  });
+});
+
+// 模式切换
+document.querySelectorAll('.mode-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.mode-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    state.mode = btn.dataset.mode;
+    if (state.current) loadPhoto(state.current);
+  });
+});
+
+document.getElementById('statusFilter').addEventListener('change', () => { state.page = 1; loadPhotos(); });
+document.getElementById('searchInput').addEventListener('input', e => { /* TODO: 本地过滤 */ });
+
+function toast(msg) {
+  const el = document.getElementById('toast');
+  el.textContent = msg; el.style.display = 'block';
+  setTimeout(() => el.style.display = 'none', 2500);
+}
+
+init();
+</script>
+</body>
+</html>

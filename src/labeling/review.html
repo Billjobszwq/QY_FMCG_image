@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>SKU 人工审核</title>
+<style>
+  body{font:14px/1.4 system-ui,sans-serif;margin:0;display:flex;flex-direction:column;height:100vh}
+  header{padding:8px 12px;background:#222;color:#eee;display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+  header input,header select,header button{padding:4px 8px}
+  #main{flex:1;display:flex;min-height:0}
+  #canvasWrap{flex:1;overflow:auto;background:#111;position:relative}
+  canvas{display:block;max-width:100%}
+  #side{width:360px;overflow:auto;border-left:1px solid #444;padding:8px;background:#fafafa}
+  .row{border:1px solid #ccc;border-radius:6px;padding:6px;margin-bottom:6px;background:#fff}
+  .row.sel{outline:2px solid #06c}
+  .row.confirmed{border-left:4px solid #2a2}
+  .row.unconf{border-left:4px solid #c80}
+  .row small{color:#666}
+  .row .ctrls{margin-top:4px;display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+  button{cursor:pointer}
+  .st-approved{color:#2a2;font-weight:bold}.st-rework{color:#c80;font-weight:bold}.st-rejected{color:#c00;font-weight:bold}
+  .badge{padding:1px 6px;border-radius:8px;background:#eee;font-size:12px}
+</style>
+</head>
+<body>
+<header>
+  <span>审核人 <input id="reviewer" value="reviewer1" size="10"></span>
+  <button id="prev">◀</button><span id="idx">-</span>/<span id="tot">-</span><button id="next">▶</button>
+  <span>仅看待审 <input type="checkbox" id="onlyPending"></span>
+  <span>照片状态
+    <select id="status"><option value="approved">approved</option><option value="rework">rework</option><option value="rejected">rejected</option></select>
+  </span>
+  <button id="approveAll">一键全确认(=approved)</button>
+  <button id="submit" style="background:#06c;color:#fff">提交审核</button>
+  <span id="cur"></span>
+</header>
+<div id="main">
+  <div id="canvasWrap"><canvas id="cv"></canvas></div>
+  <div id="side">
+    <div>提示：图上拖拽=新增框；点框=选中右行；右行改 SKU/勾选确认/删除。仅 approved 的照片进训练。</div>
+    <div>备注 <input id="notes" style="width:100%" placeholder="可选"></div>
+    <div id="rows"></div>
+  </div>
+</div>
+<script>
+let photos=[],ptr=0,CLASSES=[],cur=null,img=null,regions=[],sel=-1,drawing=null;
+const $=s=>document.querySelector(s);
+const cv=$('#cv'),ctx=cv.getContext('2d');
+function confColor(c){return c==='high'?'#2a2':c==='medium'?'#c80':'#c00'}
+// ISSUE-017：所有动态文本统一转义，防存储型 XSS
+function esc(s){return String(s??'').replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]))}
+async function loadPhotos(){photos=await (await fetch('/api/photos')).json();$('#tot').textContent=photos.length;ptr=0;render()}
+function visibleIdx(){if(!$('#onlyPending').checked)return photos.map((_,i)=>i);return photos.map((p,i)=>p.status==='pending'?i:-1).filter(i=>i>=0)}
+function render(){const v=visibleIdx();if(!photos.length){$('#idx').textContent=0;return}
+  if(ptr<0||ptr>=photos.length)ptr=0;
+  $('#idx').textContent=v.length?(v.indexOf(ptr)+1):0;openPhoto(photos[ptr].id)}
+async function openPhoto(id){
+  cur=await (await fetch('/api/photo/'+encodeURIComponent(id))).json();CLASSES=cur.classes;
+  regions=(cur.proposals||[]).map(p=>({box:p.box,canonical_id:p.decision,confirmed:!p.needs_review,_conf:p.confidence,_method:p.method,_seed:p.seed_name}));
+  if(cur.review){$('#status').value=cur.review.status||'approved';$('#notes').value=cur.review.notes||'';$('#reviewer').value=cur.review.reviewer||$('#reviewer').value;if(cur.review.regions&&cur.review.regions.length)regions=cur.review.regions.map(r=>({...r}))}
+  else{$('#status').value='approved';$('#notes').value=''}
+  // ISSUE-017：状态文本用 DOM API + textContent，不拼 innerHTML
+  const st=(photos.find(p=>p.id===id)||{}).status;
+  const curEl=$('#cur');curEl.innerHTML='';
+  const b=document.createElement('b');b.textContent=id;
+  curEl.append('ID=',b,' 现状态：');
+  const sp=document.createElement('span');sp.className='st-'+(/^[a-z]+$/.test(st||'')?st:'pending');sp.textContent=st||'';curEl.append(sp);
+  img=new Image();img.onload=()=>{cv.width=img.naturalWidth;cv.height=img.naturalHeight;draw()};img.src='/img/'+encodeURIComponent(id);sel=-1;buildRows();
+}
+function draw(){if(!img)return;ctx.clearRect(0,0,cv.width,cv.height);ctx.drawImage(img,0,0);
+  regions.forEach((r,i)=>{const [x1,y1,x2,y2]=r.box;ctx.lineWidth=(i===sel?4:2);ctx.strokeStyle=r.confirmed===false?'#c80':(i===sel?'#06c':'#2a2');ctx.strokeRect(x1,y1,x2-x1,y2-y1);ctx.fillStyle=ctx.strokeStyle;ctx.font='16px sans-serif';const lab=(i+1)+': '+(r.canonical_id||'?');ctx.fillRect(x1,y1-18,Math.min(280,ctx.measureText(lab).width+6),18);ctx.fillStyle='#fff';ctx.fillText(lab,x1+3,y1-4)})}
+function buildRows(){const wrap=$('#rows');wrap.innerHTML='';
+  regions.forEach((r,i)=>{const d=document.createElement('div');d.className='row '+(r.confirmed===false?'unconf':'confirmed')+(i===sel?' sel':'');
+    // ISSUE-017：类别名/方法/种子名等动态值全部转义后拼入模板
+    const opts=CLASSES.map(c=>'<option value="'+esc(c)+'"'+(c===r.canonical_id?' selected':'')+'>'+esc(c)+'</option>').join('');
+    d.innerHTML='<div><b>#'+(i+1)+'</b> <span class="badge">'+esc(r._method)+'</span> <span class="badge" style="color:'+confColor(r._conf)+'">'+esc(r._conf)+'</span>'+(r._seed?' <small>种子:'+esc(r._seed)+'</small>':'')+'</div><div class="ctrls"><input type="checkbox" '+(r.confirmed!==false?'checked':'')+' data-i="'+i+'" class="cf"> 确认 <select data-i="'+i+'" class="sku"><option value="">--SKU--</option>'+opts+'</select> <button data-i="'+i+'" class="del">删除</button></div><small>box '+esc(r.box.map(v=>Math.round(v)).join(','))+'</small>';
+    d.onclick=e=>{if(['BUTTON','SELECT','INPUT'].includes(e.target.tagName))return;sel=i;draw();buildRows()};wrap.appendChild(d)});
+  wrap.querySelectorAll('.cf').forEach(el=>el.onchange=e=>{regions[+e.target.dataset.i].confirmed=e.target.checked;draw();buildRows()});
+  wrap.querySelectorAll('.sku').forEach(el=>el.onchange=e=>{regions[+e.target.dataset.i].canonical_id=e.target.value||null;draw()});
+  wrap.querySelectorAll('.del').forEach(el=>el.onclick=e=>{regions.splice(+e.target.dataset.i,1);sel=-1;draw();buildRows()})}
+function cpos(e){const r=cv.getBoundingClientRect();return [(e.clientX-r.left)*(cv.width/r.width),(e.clientY-r.top)*(cv.height/r.height)]}
+cv.addEventListener('mousedown',e=>{drawing={x0:cpos(e)[0],y0:cpos(e)[1]}});
+cv.addEventListener('mousemove',e=>{if(!drawing)return;draw();const [x,y]=cpos(e);ctx.strokeStyle='#06c';ctx.strokeRect(drawing.x0,drawing.y0,x-drawing.x0,y-drawing.y0)});
+cv.addEventListener('mouseup',e=>{if(!drawing)return;const [x,y]=cpos(e);const box=[Math.min(drawing.x0,x),Math.min(drawing.y0,y),Math.max(drawing.x0,x),Math.max(drawing.y0,y)];drawing=null;if(box[2]-box[0]>6&&box[3]-box[1]>6){regions.push({box,canonical_id:null,confirmed:false,_method:'human_added'});sel=regions.length-1;draw();buildRows()}});
+$('#approveAll').onclick=()=>{regions.forEach(r=>{if(r.canonical_id)r.confirmed=true});$('#status').value='approved';draw();buildRows()};
+// ISSUE-017：翻页索引先用 v.indexOf(ptr) 初始化；空列表禁止翻页
+$('#prev').onclick=()=>{const v=visibleIdx();if(!v.length)return;let k=v.indexOf(ptr);if(k<0)k=0;else k=(k-1+v.length)%v.length;ptr=v[k];render()};
+$('#next').onclick=()=>{const v=visibleIdx();if(!v.length)return;let k=v.indexOf(ptr);if(k<0)k=0;else k=(k+1)%v.length;ptr=v[k];render()};
+$('#onlyPending').onchange=render;
+$('#submit').onclick=async()=>{const body={asset_id:cur.id,reviewer:$('#reviewer').value||'anon',status:$('#status').value,notes:$('#notes').value,regions:regions.map(r=>({box:r.box,canonical_id:r.canonical_id,confirmed:r.confirmed!==false}))};
+  const res=await (await fetch('/api/review',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)})).json();
+  if(res.ok){alert('已提交：'+body.status+(res.approved_written?'  → 已写入训练源(approved)':'  → 已从训练源移除'));const p=photos.find(x=>x.id===cur.id);if(p)p.status=body.status;const v=visibleIdx();if(!v.includes(ptr)&&v.length)ptr=v[0];render()}else alert('错误：'+JSON.stringify(res))};
+loadPhotos();
+</script>
+</body>
+</html>
