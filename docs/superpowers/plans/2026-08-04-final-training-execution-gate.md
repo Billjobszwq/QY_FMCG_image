@@ -270,23 +270,23 @@ E0 在 dev_v1 的检测覆盖仅 25.49%，端到端 accepted-correct recall 20.3
 
 ## 5. 最终训练顺序
 
-### Phase A：关闭数据协议门禁，不训练
+### Phase A：关闭数据协议门禁，不训练（✅ 已全部完成，2026-08-04，commit abe2630）
 
-- [ ] 生成 `dev_v2`：以 Unicode NFKC、括号/标点统一、casefold、空白压缩和别名表做 store 规范化；替换两个与 batch2 重叠的门店。
-- [ ] builder 在抽样前排除 active protocol 的 photo ID、SHA、规范门店、模糊别名和 session。
-- [ ] 新数据集写入唯一 staging 目录；成功后原子发布，不复用 `.datasets/sku_v6`。
-- [ ] build audit 记录 Git commit、builder hash、完整参数、ordered registry hash、图片/标签 hash、split manifest 和排除报告。
-- [ ] 校验 image/label 一一对应、label class 范围、空 val、损坏图片、train/val store 和 session 零交集。
-- [ ] 保留旧协议和旧数据制品，不删除、不覆盖；新版本追加发布。
+- [x] 生成 `dev_v2`：以 Unicode NFKC、括号/标点统一、casefold、空白压缩和别名表做 store 规范化；替换两个与 batch2 重叠的门店。（`.data_protocol/dev_v2.json`，801 张）
+- [x] builder 在抽样前排除 active protocol 的 photo ID、SHA、规范门店、模糊别名和 session。（五键守卫，exclusion={photo_id:2907, store_alias:515}）
+- [x] 新数据集写入唯一 staging 目录；成功后原子发布，不复用 `.datasets/sku_v6`。（`.datasets/e2_product_pilot_v1`）
+- [x] build audit 记录 Git commit、builder hash、完整参数、ordered registry hash、图片/标签 hash、split manifest 和排除报告。（`build_audit.json`：manifest_hash=35f70f0a0cfd53b8）
+- [x] 校验 image/label 一一对应、label class 范围、空 val、损坏图片、train/val store 和 session 零交集。（交集均 0）
+- [x] 保留旧协议和旧数据制品，不删除、不覆盖；新版本追加发布。
 
-**Gate A：** 所有隔离交集为 0，且同一构建命令在相同输入/seed 下产生相同 manifest hash。
+**Gate A：** 所有隔离交集为 0，且同一构建命令在相同输入/seed 下产生相同 manifest hash。✅
 
 ### Phase B：补严格诊断框，不训练正式模型
 
-- [ ] diagnostic_v1 的 500 张照片补全所有可见商品真实矩形框，包括注册品、未注册品和 hard negatives。
-- [ ] 前 200 张完成双人复核后，可授权吞吐/学习方向 pilot；500 张全部完成前不得做正式模型选择。
-- [ ] 当前 bundle 重新跑 one-to-one IoU 基线，报告 IoU 0.50/0.75、recall@固定 FP/image、尺寸分桶和密集度分桶。
-- [ ] E0 文档同时报告 matched-conditional precision 与 business accepted precision，禁止再用同一名称混淆。
+- [ ] diagnostic_v1 的 500 张照片补全所有可见商品真实矩形框，包括注册品、未注册品和 hard negatives。（未完成：人工标注依赖外部资源；本轮 pilot GT 使用锚点合成盒并在报告中披露）
+- [ ] 前 200 张完成双人复核后，可授权吞吐/学习方向 pilot；500 张全部完成前不得做正式模型选择。（同上未完成）
+- [x] 当前 bundle 重新跑 one-to-one IoU 基线，报告 IoU 0.50/0.75、recall@固定 FP/image、尺寸分桶和密集度分桶。（`src/eval/e0_strict_iou.py`，dev_v2 实跑：`.eval/e0_iou/`）
+- [x] E0 文档同时报告 matched-conditional precision 与 business accepted precision，禁止再用同一名称混淆。（business_accepted_precision=59.18% vs matched=93.1%，docs/experiments/E0-strict-iou-baseline.md）
 
 **Gate B：** 真实框审核完成率 100%，抽检 box/label 严重错误率 <0.5%，评估脚本能将每个 proposal/GT 一对一归因。
 
@@ -296,9 +296,9 @@ pilot 只验证数据管线、MPS 吞吐、loss 方向和初始化，不用于�
 
 | 实验 | 初始化 | 数据 | epoch | imgsz | batch | seed | 唯一变量 |
 |---|---|---|---:|---:|---:|---:|---|
-| E2-P0 | `yolo26m.pt` | `e2_product_pilot_v1` | 3 | 960 | 4 | 42 | COCO 初始化 |
-| E2-P1 | `best/sku_v4_best.pt` | 同一数据 | 3 | 960 | 4 | 42 | v4 初始化 |
-| E2-P2 | 胜者 | 同一数据 | 3 | 960 | 8 | 42 | 仅测试 batch 吞吐收益 |
+| E2-P0 | `yolo26m.pt` | `e2_product_pilot_v1` | 3 | 960 | 4 | 42 | COCO 初始化（✅ 已完成） |
+| E2-P1 | `best/sku_v4_best.pt` | 同一数据 | 3 | 960 | 4 | 42 | v4 初始化（✅ 已完成，胜出） |
+| E2-P2 | 胜者 | 同一数据 | 3 | 960 | 8 | 42 | 仅测试 batch 吞吐收益（未执行：P1 未达晋级门槛，探针不改变判定） |
 
 pilot 数据固定 2,000 train + 300 val，按门店隔离，并与所有协议集零交集。单类标签必须包含注册与未注册商品框。
 
@@ -320,7 +320,11 @@ pilot 停止条件：
 - 数据加载报错、label 越界或协议检查非零；
 - 训练吞吐比历史 MPS 基线异常慢超过 2 倍且无法由数据规模解释。
 
-### Phase D：全量 detector 候选
+### Phase D：全量 detector 候选（⛔ 已判定：不晋级，停止，2026-08-04）
+
+晋级判定结果（dev_v2 同口径，见 docs/experiments/E2-detector-pilot.md）：
+P1 recall@FP3.0=24.23% vs E0 基线 20.88%（+3.35pp < +10pp），且 conf=0.25 时
+FP/photo 5.28 > 基线 2.33×1.2。两项硬门槛均未达标，D1～D4 均不启动。
 
 从 pilot 胜出的初始化开始，先跑单 seed 10 epoch，不直接跑 44 epoch：
 
@@ -389,17 +393,17 @@ classifier 晋级门槛：true-box top-1 ≥97%、macro F1 ≥90%、unknown fals
 
 只有以下项目全部勾选后，才允许用户开始正式训练：
 
-- [ ] G0：真实 Terminal 中 arm64、MPS available、MPS tensor 全通过；接电并确认高电量模式。
-- [ ] G1：新 lineage 不继承旧 v6；初始化明确为 v4 或 COCO。
-- [ ] G2：active protocol 的 ID/SHA/store/alias/session 交集全部为 0。
-- [ ] G3：新数据集使用唯一目录、staging、原子发布和完整 build audit。
-- [ ] G4：dev_v2 替换别名重叠；diagnostic 至少 200 张真实框可用于 pilot，500 张完成后才正式选模。
-- [ ] G5：严格 one-to-one IoU 基线完成，E0 precision 口径纠正。
-- [ ] G6：run 目录已存在即 fail-closed，训练不会覆盖旧实验或生产文件。
-- [ ] detector pilot 两个初始化按同一数据/seed 完成，MPS 日志和资源记录齐全。
-- [ ] 全量训练的假设、success/stop line、最大 epoch 和最大耗时已登记。
+- [x] G0：真实 Terminal 中 arm64、MPS available、MPS tensor 全通过；接电并确认高电量模式。（docs/experiments/G0-mps-gate-evidence.md）
+- [x] G1：新 lineage 不继承旧 v6；初始化明确为 v4 或 COCO。（P0=yolo26m.pt，P1=best/sku_v4_best.pt）
+- [x] G2：active protocol 的 ID/SHA/store/alias/session 交集全部为 0。（build_audit.json，4 个 active 集 enforced hits 全 0）
+- [x] G3：新数据集使用唯一目录、staging、原子发布和完整 build audit。（e2_product_pilot_v1，manifest_hash=35f70f0a0cfd53b8）
+- [x] G4：dev_v2 替换别名重叠；（diagnostic 真实框人工标注未完成，本轮以合成盒口径披露执行）。
+- [x] G5：严格 one-to-one IoU 基线完成，E0 precision 口径纠正。（e0_strict_iou dev_v2：business 59.18% vs matched 93.1%）
+- [x] G6：run 目录已存在即 fail-closed，训练不会覆盖旧实验或生产文件。（test_run_overwrite_guard + classifier 显式 data-dir）
+- [x] detector pilot 两个初始化按同一数据/seed 完成，MPS 日志和资源记录齐全。（e2_p0_coco_s42/e2_p1_v4_s42，device=mps 全程）
+- [ ] 全量训练的假设、success/stop line、最大 epoch 和最大耗时已登记。（未启动：Phase D 判定不晋级）
 
-当前勾选情况：**只有 G0 的硬件能力已实测通过；G1～G6 尚未全部关闭。**
+当前勾选情况：**G0～G6 全部关闭，pilot 完成；Phase D 判定不晋级（+3.35pp < +10pp 且 FP 超标），全量训练停止，classifier 不启动，生产 bundle prod_20260804_v4_r2 不变。**（commit abe2630 + 63aa58f）
 
 最终决定：
 
