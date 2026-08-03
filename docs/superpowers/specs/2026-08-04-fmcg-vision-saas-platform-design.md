@@ -1,4 +1,4 @@
-# FMCG 智能识别与模块化 SaaS 平台总体设计
+# Graph+Loop 智能业务操作系统与 FMCG 识别首域总体设计
 
 > 文档日期：2026-08-04
 >
@@ -10,58 +10,82 @@
 
 ## 1. 执行摘要
 
-本项目不应继续演化为若干相互独立的识别页面，而应建设成一个以 FMCG 视觉识别为首个核心业务域、可逐步扩展问卷和 BI 的模块化商业平台。
+本项目的核心不是识别，也不是传统 SaaS。它要建设的是一个以 Graph+Loop 为运行内核的智能业务操作系统：系统能够围绕客户目标动态编排能力、持续观察结果、判断下一步、调用工具、请求人工介入，并在预算、权限和审计约束下完成业务闭环。
+
+FMCG 视觉识别是第一个落地领域和第一套行业能力包，用来验证这套智能内核能否在高数据量、强证据、模型不确定性、人工审核和计费约束下可靠运行。未来的问卷、数据库分析、BI、追踪和客户专属业务都应作为新的领域能力包接入同一内核，而不是继续扩展一个以识别为中心的系统。
 
 已经确认的总体方案是：
 
-1. 第一阶段 100% 在本机运行，降低早期成本；成熟后允许平滑演进为“云端 SaaS 控制面 + 客户现场或本地 AI 数据面”。
-2. 本机阶段采用“模块化单体核心服务 + 隔离 AI Worker”的架构。业务事务先保持一致性，训练、推理、下载、预处理等重任务通过队列隔离。
-3. PostgreSQL 是唯一业务事实库；文件系统采用内容寻址存储，并预留 S3 兼容适配器。SQLite 只允许作为历史迁移源、离线缓存或测试工具。
-4. Web、API、内部 Agent、小程序和 App 共用同一套版本化领域 API，不允许每个入口重新实现业务规则。
-5. Label Studio 保持上游独立部署，不修改其核心源码；平台通过统一网关、SSO、Webhook、ML Backend 和插件层提供任务、模型辅助、审核和证据链能力。
-6. 识别系统是多模型流水线，不把一个模型当成全部答案。检测、分割、检索、分类、OCR、视觉语言模型和规则引擎各自承担最合适的职责。
-7. 面向客户提供低、中、高、极高四档服务，区别体现在路由深度、模型组合、准确性目标、延迟和算力预算；内部每一次模型调用和复核都进入不可变用量账本。
-8. Graph+Loop Agent 是按 token/用量售卖的高级定制服务。它只能在授权范围内读取客户数据做分析、问答和追踪，不能直接写客户核心业务数据。
-9. 商品采用“稳定商品主档 + 包装版本 + 客户映射”的三层模型，解决 FMCG 新包装、沿用旧名、改名或视为新 SKU 的现实差异。
-10. 照片过滤必须保留完整证据链。系统可给出通过、警告、拒绝，但只有在商品证据不可恢复时才拒绝；原图、衍生图、指标、模型版本和人工决定都不得被覆盖。
+1. 第一阶段 100% 在本机运行，降低早期成本；成熟后可演进为“云端智能控制面 + 客户现场或本地能力执行面”。
+2. 系统第一层核心是 Graph Runtime、Loop Engine、能力注册表、策略与权限、状态/记忆、人工检查点、评估和审计，不是识别模块或 CRUD 页面。
+3. 本机阶段采用“Graph+Loop 内核 + 模块化领域能力 + 隔离 Worker”的架构。业务事务保持一致性，训练、推理、下载和分析等重任务通过队列隔离。
+4. PostgreSQL 是系统事实库；文件系统采用内容寻址存储，并预留 S3 兼容适配器。SQLite 只允许作为历史迁移源、离线缓存或测试工具。
+5. Web、API、Agent、小程序和 App 共用同一套能力、Graph、Run 和领域 API，不允许每个入口重新实现业务规则。
+6. 客户不只购买“某个功能页面”，而是购买能力额度、预构建工作流和可定制 Graph+Loop 服务。用量按节点、模型、token、人工和存储进入不可变账本。
+7. 基础客户可以使用平台预置、版本冻结的固定 Graph；高级客户购买可定制 Graph、持续 Loop、专属工具和更高预算。智能内核是系统架构核心，不等于所有高级能力免费开放。
+8. Label Studio、视觉模型、问卷、BI 和数据库分析都是 Capability Provider。它们通过统一能力契约接入，不反向控制平台。
+9. Agent 只能读取授权的客户数据和调用获批能力；可自动写系统自己的 Run、Checkpoint、用量、审计和衍生产物，不能直接写客户源数据或绕过领域服务。
+10. FMCG 识别首域仍采用多模型流水线，并保留商品版本、照片证据、人工审核和分档服务，但这些属于首个 Domain Pack，不是平台中心。
 
-本设计覆盖统一管理端、Label Studio、审核任务、辅助标注、照片质量、场景识别、统一输入输出、多模型识别、VLM 微调、SAM、计费、模块化 SaaS、Graph+Loop Agent、8TB 本地容量和每日十万张照片的增长目标。
+本设计覆盖 Graph+Loop 智能内核、能力市场与工具治理、智能工作台、FMCG 识别首域、Label Studio、审核、训练、数据、计费、8TB 本地容量和每日十万张照片的增长目标。
+
+### 1.1 与传统 SaaS 的第一性区别
+
+| 维度 | 传统 SaaS 思路 | 本系统 |
+|---|---|---|
+| 用户入口 | 找菜单、开页面、填表单 | 提交目标或直接调用能力 |
+| 业务流程 | 固定在页面和服务代码中 | 版本化 Graph 编排能力 |
+| 智能作用 | 页面旁增加聊天助手 | Loop 持续观察、判断、执行和求助 |
+| 模块关系 | 每个模块拥有一套流程 | 模块提供可复用 Capability |
+| 状态 | 页面状态、任务表、聊天上下文分散 | Run、Node、Checkpoint 和领域事实分离 |
+| 客户差异 | 复制页面、字段和分支代码 | Graph、Policy、工具和数据产品组合 |
+| 风险控制 | 给用户/Agent 一个大角色 | 每节点最小权限、预算和人工检查点 |
+| 计费 | 按账号、模块或固定套餐 | 账号/套餐 + Run/Node/token/算力/人工用量 |
+| 进化 | 发布新页面和功能 | 反馈 → 评估 → 新 Graph/能力版本 → 影子验证 |
+
+保留直接模块页面是为了专业操作、人工接管和审计，不代表系统退回以 CRUD 页面为中心。
 
 ## 2. 设计边界
 
 ### 2.1 本期目标
 
-- 建立一个统一 Web 管理壳，纳入首页、识别、标注、审核、训练、数据、模型、用量计费、系统管理。
-- 形成照片或 URL 输入到下载、校验、预处理、质量评估、识别、人工审核、发布、计费和审计的闭环。
-- 形成原始数据、标注、审核、数据集快照、训练运行、模型版本、发布路由之间可追溯的模型生命周期。
-- 支持传统 API、Web 和内部 Agent 三种识别入口。
+- 建立 Graph+Loop 最小内核：Graph 定义、版本、执行、循环、检查点、工具调用、预算、人工介入、终态和审计。
+- 建立统一能力契约，使识别、标注、审核、训练、问卷、BI、数据查询和未来客户能力都能成为可编排节点。
+- 建立目标驱动的智能工作台，同时保留确定性模块页面作为直接操作、审计和人工接管入口。
+- 以 FMCG 识别作为第一条端到端参考 Graph，完成照片或 URL 到质量、识别、审核、发布、计费和反馈学习的闭环。
+- 形成原始数据、标注、审核、数据集快照、训练运行、模型版本、Graph 版本和结果之间可追溯的生命周期。
+- 支持 API、Web 和 Agent 三种入口启动同一 Graph 或直接调用获批领域能力。
 - 从第一版开始具备租户、客户、项目、权限、保留策略、客户商品映射和用量账本的数据边界。
 - 在 8TB 本地磁盘条件下，为每日十万张照片的稳态吞吐设计背压、分层存储和容量预警。
-- 明确开源层与商业层边界，避免未来从单机工具重写为 SaaS。
+- 明确开源内核、商业能力和客户定制 Graph 的边界，避免未来从传统 SaaS 菜单重新改造成智能系统。
 
 ### 2.2 本期明确不做
 
 - 当前不进行公有云部署、自动扩缩容或跨地域容灾。
-- 当前不完整实现问卷、BI、小程序和 App，只冻结其模块接入契约、导航位置和统一 API 原则。
+- 当前不完整实现问卷、BI、小程序和 App，只冻结其 Capability Contract、数据产品契约、导航位置和统一 API 原则。
 - 当前不承诺对任意客户、任意照片都成立的统一准确率；准确性承诺只针对客户确认的冻结验收集。
 - 当前不自动删除任何业务数据。保留策略、到期状态和预警先实现，真实删除必须经过明确审批与可恢复流程。
-- 当前不允许 Agent 直接更新客户源数据、模型发布状态、价格或结算结果。
+- 当前不允许 Graph 节点或 Agent 直接更新客户源数据、模型发布状态、价格或结算结果；高风险变更只能生成待审批命令。
 - 本文不修改任何现有代码，也不替代后续逐阶段实施计划。
 
 ## 3. 成功标准
 
 ### 3.1 业务成功标准
 
-- 同一个客户和项目的照片，可从接入一直追溯到最终结果、人工决定、模型调用和账单明细。
-- 标注和识别结果可以被分配给独立审核者，通过有限链接安全完成。
-- 新包装出现时，平台既不覆盖历史商品，也不强迫所有客户使用相同命名策略。
-- 客户看到的是可解释的服务档位与准确性验收报告，不是无法验证的模型宣传。
-- 开源版能够独立运行基本识别闭环，商业能力可通过模块注册接入而不污染开源核心。
+- 客户能够用目标而不是页面路径启动工作，例如“分析本周门店缺货并追踪异常”，系统将其落为可解释、可暂停、可继续的 Graph Run。
+- 同一业务目标可根据客户权限、数据、预算和服务档位选择不同 Graph，而不复制整套应用。
+- 每次 Run 能解释经过哪些节点、读了哪些授权数据、为何循环、何时请求人工、花费多少以及为何结束。
+- FMCG 识别、标注和审核可以作为一条参考 Graph 完成闭环，同时也能被其他 Graph 作为能力复用。
+- 新增问卷或 BI 时只需注册领域能力和数据产品，不需要重新建设身份、计费、Agent、审计和任务底座。
+- 开源版能运行最小 Graph+Loop 内核和示例能力包；商业能力通过注册接入，不污染开放内核。
 
 ### 3.2 技术成功标准
 
-- 所有写业务数据的操作只能经过领域服务，禁止前端、Worker、插件和 Agent 绕过服务直接写表。
-- 任何异步任务可安全重试，使用幂等键避免重复照片、重复识别、重复账单和重复发布。
+- 所有写业务数据的操作只能经过领域服务，禁止 Graph 节点、前端、Worker、插件和 Agent 绕过服务直接写表。
+- 每个 GraphDefinition、GraphVersion、LoopRun、NodeExecution、Checkpoint 和 PolicyDecision 都可追溯。
+- 任何节点和异步任务可安全重试，使用幂等键避免重复动作、重复识别、重复账单和重复发布。
+- Graph 在进程重启后能够从持久检查点恢复，不依赖模型上下文窗口记住运行状态。
+- Loop 具有最大轮数、时间、token、费用、数据范围和人工检查点，不允许无界自治。
 - 每个模型结果保存输入版本、模型版本、路由策略版本、阈值版本和运行环境。
 - 主业务请求不等待训练或批量识别完成；重任务进入队列并可被暂停、取消、限速和恢复。
 - 单模块故障不会阻断整个系统；Label Studio、训练、VLM 或 SAM 不可用时，平台能降级并明确标记结果质量。
@@ -71,44 +95,44 @@
 
 ### 4.1 采用方案
 
-采用方案 B：本机模块化单体 + 隔离 AI Worker。
+采用修订后的方案 B：本机 Graph+Loop 内核 + 模块化能力单体 + 隔离 Worker。
 
-业务核心保持一个可部署单元，但代码和数据库访问按领域划分。AI 任务通过队列分发到独立进程，避免模型崩溃、内存峰值或训练争用拖垮管理端。
+Graph+Loop 是业务运行主干，能力模块是可注册节点，PostgreSQL、存储、身份和计费是可信执行基础。第一阶段仍保持一个可部署控制单元，降低本机运维成本；模型、训练、下载、报表和长循环通过独立 Worker 隔离。
 
 ### 4.2 未采用方案
 
 | 方案 | 当前不采用的原因 | 未来触发条件 |
 |---|---|---|
-| 单进程“大一统”应用 | 训练与推理容易耗尽内存；故障域太大；无法独立限速 | 不考虑作为正式目标 |
-| 从第一天拆微服务 | 本机运维复杂、事务和调试成本高、接口尚未稳定 | 单模块需独立团队、独立扩缩或有明确故障隔离收益 |
-| 纯云 SaaS | 当前成本高，客户数据和大文件传输不经济 | 本机闭环稳定、租户与控制面契约成熟 |
+| 传统模块化 SaaS + 外挂聊天 Agent | Agent 只能导航 CRUD，无法成为业务运行内核；流程、记忆、预算和反馈仍散落在模块中 | 不作为目标架构 |
+| 单进程“大一统”智能应用 | 长 Loop、训练与推理容易耗尽资源；故障域太大；无法独立限速 | 不考虑作为正式目标 |
+| 从第一天拆微服务 | 本机运维复杂、事务和调试成本高、能力契约尚未稳定 | 能力需独立团队、独立扩缩或有明确故障隔离收益 |
+| 纯云智能平台 | 当前成本高，客户数据和大文件传输不经济 | 本机内核与能力契约成熟后 |
 
 ### 4.3 总体逻辑图
 
 ~~~mermaid
 flowchart TB
-    U[管理端 / 客户端 / 审核链接] --> G[统一 Web 与 API Gateway]
-    A[内部 Agent] --> AG[Agent Gateway]
-    SDK[客户 SDK / 小程序 / App] --> G
-    G --> IAM[身份、租户、权限]
-    G --> CORE[模块化领域核心]
-    AG --> IAM
-    AG --> READ[只读分析服务]
-    CORE --> PG[(PostgreSQL 事实库)]
-    CORE --> Q[任务队列]
-    CORE --> CAS[(内容寻址文件存储)]
-    CORE --> LS[Label Studio 独立服务]
-    Q --> DL[下载与预处理 Worker]
-    Q --> INF[识别与路由 Worker]
-    Q --> TRAIN[训练 Worker]
-    Q --> EXPORT[导出与报表 Worker]
-    INF --> MODELS[检测 / SAM / 检索 / 分类 / OCR / VLM]
-    MODELS --> CAS
-    MODELS --> CORE
-    LS --> CORE
-    READ --> PG
-    READ --> DERIVED[(衍生报告与会话审计)]
-    CORE --> LEDGER[(不可变用量账本)]
+    U[智能工作台 / 管理端 / 客户端] --> G[统一 Experience/API Gateway]
+    SDK[API / 小程序 / App / 外部 Agent] --> G
+    G --> K[Graph+Loop Kernel]
+    K --> GR[Graph Registry / Version]
+    K --> LE[Loop Engine / Checkpoint / Resume]
+    K --> PR[Policy / Permission / Budget]
+    K --> CR[Capability & Tool Registry]
+    K --> HM[Human Task / Approval]
+    K --> EV[Evaluation / Memory / Audit]
+    CR --> VIS[FMCG Vision Domain Pack]
+    CR --> LAB[Annotation & Review Pack]
+    CR --> DATA[Authorized Data Product Pack]
+    CR --> FUT[Questionnaire / BI / Future Packs]
+    VIS --> Q[隔离任务队列与 AI Worker]
+    LAB --> LS[Label Studio 独立服务]
+    K --> PG[(PostgreSQL 系统事实库)]
+    K --> CAS[(内容寻址证据与产物)]
+    K --> LEDGER[(不可变用量账本)]
+    K --> CMD[受策略约束的领域命令]
+    CMD --> DOMAIN[领域服务]
+    DOMAIN --> PG
 ~~~
 
 ## 5. 技术基线
@@ -117,6 +141,7 @@ flowchart TB
 |---|---|---|
 | 后端与 AI | Python 3.12、FastAPI、Pydantic、SQLAlchemy、Alembic | 领域服务和 API 类型统一；现有逻辑通过适配器迁移 |
 | 前端 | TypeScript、React、PWA | 同一代码基线支持管理端和客户 Web；移动端先响应式 |
+| 智能内核 | 版本化 Graph DSL + 持久状态机 + Capability SDK | 不把运行状态放在 LLM 上下文；运行时实现可替换 |
 | 事实库 | PostgreSQL | 第一版即包含 tenant_id、customer_id 和审计字段 |
 | 异步执行 | 可替换队列接口；本机可用 Redis 队列实现 | 领域层不绑定具体队列；支持优先级、重试、取消、死信 |
 | 文件存储 | 本机 CAS + S3 Compatible StorageAdapter | 数据库保存对象引用、哈希、大小、媒体类型，不存大图二进制 |
@@ -127,12 +152,31 @@ flowchart TB
 
 所有外部组件必须通过版本锁定、许可证清单和安全扫描进入系统。正式开源前对模型权重许可证、数据集许可证、商标使用和第三方服务条款做专项法律复核。
 
-## 6. 模块边界
+## 6. 内核与能力边界
 
-模块化单体不是把所有代码放在同一目录，而是共享部署、明确边界。每个模块只通过公开服务接口交互。
+系统分为四层，依赖只能向下，领域能力不得反向接管内核：
+
+1. Experience：智能工作台、直接模块页面、API 和客户入口。
+2. Intelligence Kernel：Graph、Loop、策略、记忆、评估、检查点、人工介入和预算。
+3. Capability Layer：识别、标注、审核、训练、问卷、BI、数据产品和第三方工具。
+4. Trusted Foundation：身份、租户、PostgreSQL、存储、队列、审计和计费。
+
+模块化单体只是当前部署形态，不是产品中心。真正稳定的边界是 Graph Contract、Capability Contract、Domain Command 和 Data Product Contract。
+
+三条强制架构规则：
+
+1. 任何识别专属功能必须通过 Capability 或 Domain Pack 接入，禁止在 Graph Runtime 中写 FMCG 特例。
+2. 任何通用内核能力除用 FMCG 参考 Graph 验证外，还要用一个极小的非识别 Graph 验证，防止所谓通用内核实际被识别流程绑死。
+3. 不先空造一个庞大通用平台再接识别；最小内核与 FMCG 识别纵向切片共同迭代，每增加一个内核能力都必须解决当前参考 Graph 的真实问题。
 
 | 模块 | 核心职责 | 禁止行为 |
 |---|---|---|
+| Graph Registry | Graph 定义、版本、输入输出 schema、发布和兼容性 | 运行时修改已发布版本 |
+| Loop Runtime | 节点调度、循环条件、检查点、恢复、终止和补偿 | 依赖模型对话上下文保存真实状态 |
+| Capability Registry | 能力、工具、数据产品、成本、权限和健康声明 | 注册任意代码后无沙箱执行 |
+| Policy & Budget | 数据范围、工具白名单、模型档位、token/费用/时间预算 | 让节点自行扩大权限或预算 |
+| Memory & Evaluation | 短期状态、客户授权记忆、运行评估、反馈和回归 | 把未审核模型输出写成长期事实 |
+| Human Interaction | 人工任务、审批、询问、仲裁和接管 | 用“等待人工”隐藏无终态运行 |
 | Identity & Tenant | 用户、服务身份、角色、租户、客户、项目、授权范围 | 业务模块自建权限逻辑 |
 | Ingestion | 文件和 URL 接入、下载、去重、病毒与媒体校验、批次 | 直接触发未审计的模型调用 |
 | Asset & Evidence | 原图、衍生图、哈希、证据链、保留策略 | 覆盖原图或复用路径冒充新版本 |
@@ -147,18 +191,28 @@ flowchart TB
 | Model Registry | 模型、版本、权重、指标、兼容性、审批、部署状态 | 覆盖已有模型文件或指标 |
 | Routing | 服务档位、路由策略、阈值、降级、A/B 和影子运行 | 在代码里硬编码客户价格和模型组合 |
 | Usage & Billing | 原始用量事件、聚合、套餐、价格版本、账单对账 | 修改或删除已入账事件 |
-| Agent | Graph、Loop、工具授权、token 预算、审批命令、会话 | 任意 SQL、任意文件访问、直接业务写入 |
+| Agent Interface | 将自然语言目标编译为已授权 Graph 输入，解释进度和结果 | 自行创建未注册工具或直接业务写入 |
 | Admin & Audit | 配置、健康、审计、导出、容量和合规 | 使用日志替代审计事实 |
 | Questionnaire / BI | 当前只提供模块契约、导航和数据产品接口 | 本阶段扩张为完整业务实现 |
 
-## 7. 统一 Web 管理端
+## 7. 智能工作台与管理端
 
 ### 7.1 信息架构
 
-统一 Web 壳采用“顶部全局上下文 + 左侧模块导航 + 主工作区 + 右侧可选证据抽屉”：
+统一 Web 的默认入口不是传统功能菜单，而是智能工作台。页面仍采用“顶部全局上下文 + 左侧能力导航 + 主工作区 + 右侧运行/证据抽屉”，同时提供两种使用方式：
+
+- 目标模式：用户描述目标、选择数据范围和预算，系统匹配或建议 Graph，实时展示节点、循环、成本和人工检查点。
+- 直接模式：专业人员直接进入识别、标注、审核、训练、数据或模型页面，进行确定性操作和人工接管。
+
+这两种模式调用同一能力与领域服务；目标模式不是套在传统页面外面的聊天框。
 
 - 顶部：租户、客户、项目、环境、全局搜索、通知、用户菜单。
-- 首页：今日吞吐、失败和积压、审核待办、训练状态、磁盘容量、服务档位用量。
+- 智能工作台：首页目标输入、推荐 Graph、运行中任务、待人工决定和最近成果。
+- Graph 中心：模板、版本、可视化结构、输入输出、成本预算、发布和回归。
+- Run 中心：节点时间线、循环次数、检查点、证据、费用、暂停、恢复和终止。
+- 能力中心：领域能力、工具、数据产品、模型、健康、权限和价格单位。
+- 人工任务中心：审核、补充信息、审批、仲裁和任务链接。
+- 运营总览：吞吐、失败和积压、审核待办、训练状态、磁盘容量、服务档位用量。
 - 识别中心：创建作业、批次进度、结果浏览、证据链、重跑和导出。
 - 标注中心：平台任务列表、Label Studio 嵌入入口、预标注状态、插件配置。
 - 审核中心：我的任务、任务分配、分享链接、盲审、仲裁、质量统计。
@@ -225,6 +279,16 @@ RBAC 负责角色，ABAC 负责 tenant、customer、project、task、数据敏�
 
 | 对象 | 说明 | 关键不可变性 |
 |---|---|---|
+| GraphDefinition | 一种业务目标的图结构、输入输出和约束 | 已发布定义不可原地修改 |
+| GraphVersion | 可执行的冻结 Graph 版本 | 保存节点、边、策略和能力版本快照 |
+| CapabilityDefinition | 一个可被编排的领域能力、工具或数据产品 | 名称、schema、权限、成本和副作用明确 |
+| LoopRun | 客户目标的一次有界执行 | 关联 GraphVersion、预算、身份和终态 |
+| NodeExecution | 一个节点的一次执行尝试 | 重试追加 attempt，不覆盖旧结果 |
+| Checkpoint | 可恢复的持久运行状态 | 包含状态哈希和前序事件位置 |
+| PolicyDecision | 一次权限、预算、路由或审批判断 | 保存规则版本、输入证据和结果 |
+| HumanTask | Graph 暂停后交给人的审核、补充或审批 | 人工决定独立保存，不改写节点历史 |
+| PendingCommand | 建议对领域状态执行的受控命令 | 执行前重新校验权限和目标版本 |
+| DerivedArtifact | 报告、解释、追踪结果等系统衍生产物 | 保存输入引用、生成链和适用范围 |
 | Asset | 一份原始照片、下载内容或衍生内容 | content_hash 指向唯一内容；原始对象不可覆盖 |
 | AssetRelation | 原图与纠偏图、裁剪图、缩略图之间的关系 | 必须记录算法、参数和父对象 |
 | IngestionBatch | 一次文件或 URL 批量输入 | 保存请求快照、来源和幂等键 |
@@ -242,7 +306,13 @@ RBAC 负责角色，ABAC 负责 tenant、customer、project、task、数据敏�
 
 ### 9.2 状态机原则
 
-状态变化必须由命令触发并写入审计事件。例如 RecognitionJob：
+状态变化必须由命令触发并写入审计事件。LoopRun 主状态机：
+
+created → validating → ready → running ↔ waiting_external / waiting_human → completed
+
+异常和控制终态为 failed、cancelled、budget_exhausted、policy_blocked、expired。paused 是可恢复状态，不是终态。每次循环、重试和恢复都产生新的 NodeExecution 或 RunEvent，不能重写历史。
+
+FMCG 识别能力内部仍有独立 RecognitionJob 状态机：
 
 created → validating → queued → running → awaiting_review → completed
 
@@ -696,7 +766,7 @@ docs/training-history-and-decisions.md 是当前训练事实与已批准动作�
 
 当前 Apple M3 Max 的 arm64 Python、MPS 张量和级联推理已经通过基础验证，硬件不是本轮阻断项；但每个新的 detector、VLM 和量化版本仍需单独完成 MPS 算子、峰值内存和吞吐门禁。
 
-本平台化路线对当前训练的直接帮助是把这些门禁固化为 DatasetSnapshot、TrainingRun 和发布状态机，而不是立即改变已经确认的训练实验。
+本智能内核路线对当前训练的直接帮助是把这些门禁固化为 DatasetSnapshot、TrainingRun、Capability 和发布状态机，而不是立即改变已经确认的训练实验。
 
 ## 18. 用量、计费与服务商品化
 
@@ -706,14 +776,16 @@ docs/training-history-and-decisions.md 是当前训练事实与已批准动作�
 
 不能直接拿日志做账单，也不能以客户套餐名称反推底层模型调用。
 
+用量事实以 LoopRun 和 NodeExecution 为主关联，recognition_job、training_run、review_task 等只是领域级可选关联。这样未来问卷、BI 或客户专属 Graph 不需要另建一套计费系统。
+
 ### 18.2 原始用量事件
 
 每个 UsageEvent 至少包含：
 
-- tenant、customer、project、recognition_job；
-- service_tier 与 routing_policy_version；
+- tenant、customer、project、loop_run、node_execution；
+- graph_version、capability_id、service_tier 与 policy_version；
 - event_type；
-- 照片数、对象数、像素量；
+- 领域工作量，例如照片数、对象数、问卷数、记录数或报表数；
 - 模型 ID/版本、调用次数、输入/输出 token；
 - 推理毫秒、设备类型、内存峰值代理；
 - SAM、OCR、VLM、人工复核等资源单位；
@@ -726,11 +798,12 @@ docs/training-history-and-decisions.md 是当前训练事实与已批准动作�
 
 建议客户购买统一 Credit 或 Token 包，但账单仍展示可理解的业务单位：
 
+- Graph Run 启动、节点执行和 Loop 轮次；
+- Agent 输入/输出 token、记忆和工具调用；
 - 基础照片处理；
 - 商品对象识别；
 - 高级模型升级；
 - 人工复核；
-- Agent token 与工具调用；
 - 长期存储和导出；
 - 专属训练与模型托管。
 
@@ -741,28 +814,84 @@ docs/training-history-and-decisions.md 是当前训练事实与已批准动作�
 - 请求创建时预估并可预留额度，任务结束按实际用量结算。
 - 超预算行为按策略拒绝、降级或申请追加，不允许静默超支。
 - 失败是否收费由 event_type 和合同规则决定，并保留失败原因。
-- 账单聚合必须可回溯到每个 UsageEvent 和 RecognitionAttempt。
+- 账单聚合必须可回溯到每个 UsageEvent、NodeExecution 和领域 attempt。
 - 价格调整只创建新 PriceVersion，不重算已结算账单。
 - 人工复核争议进入独立仲裁，不允许运营人员直接改底层事件。
 
-## 19. Graph+Loop Agent
+## 19. Graph+Loop 智能内核
 
-### 19.1 产品定位
+### 19.1 架构定位
 
-Graph+Loop 是面向客户的高级定制服务，不是平台内部数据库管理员。客户购买 token/credit，Agent 在明确授权、预算和审计范围内完成数据分析、问题答疑、异常追踪和周期性洞察。
+Graph+Loop 是系统的业务运行内核，不是传统 SaaS 之外附加的 Agent 功能，也不是平台内部数据库管理员。任何跨能力、需要判断、反馈或人工介入的业务流程，都应表达为版本化 Graph，并由有边界的 Loop 推进。
 
 不同业务可组装不同 Graph，节点和 Loop 不是写死的统一流程。
 
-### 19.2 数据权限
+这里的定义必须明确：
 
-Agent 可以：
+- Graph 是可版本化的业务控制图，节点可以是确定性规则、领域服务、模型、数据查询、人工任务、事件等待或子图。
+- Loop 是“观察状态 → 判断差距 → 选择动作 → 执行能力 → 验证结果 → 更新状态或停止”的有界循环。
+- LLM/Planner 只是可选节点，不是 Graph Runtime 本身；确定性问题优先使用确定性节点。
+- Agent 是用户与内核交互的一种界面或执行参与者，不再等同于整个 Graph+Loop 架构。
+- 智能性来自可观察反馈、动态选择、记忆、评估和持续闭环，不来自无限调用大模型。
+
+系统对客户分三层提供能力：
+
+1. 基础层：平台内部使用固定 Graph 保证识别、标注和审核闭环，客户不需要理解 Graph。
+2. 标准智能层：客户选择预构建行业 Graph，配置数据范围、档位、频率和输出。
+3. 高级定制层：按 token/credit 售卖客户专属 Graph、长期 Loop、专属工具、客户数据产品和服务目标。
+
+因此，Graph+Loop 同时是统一技术内核和高级商业产品。二者共享运行时，但开放的模板、编辑能力、预算和工具范围不同。
+
+### 19.2 核心执行语义
+
+GraphDefinition 必须声明：
+
+- 输入与输出 schema；
+- 节点、边、条件和可循环区域；
+- 每个节点绑定的 CapabilityDefinition；
+- 数据范围、工具白名单和最小角色；
+- token、费用、时间、轮数和并发预算；
+- 人工检查点、审批级别和超时处置；
+- 成功、部分成功、拒绝、失败和预算耗尽的终态；
+- 补偿、恢复和幂等策略；
+- 评估器、证据要求和结果质量门槛。
+
+Loop 不是无限重复。每一轮必须有可观察的新状态、明确的继续条件和停止理由。若连续两轮没有新增事实、风险下降或任务推进，应触发停滞检测，转人工或终止。
+
+Graph 的“可变”必须同时满足智能性和可治理性：
+
+- 已发布 GraphVersion 在运行中不可自我修改，保证同一次 Run 可复现。
+- 客户差异优先通过配置、条件边、Policy 和已批准子图表达，不复制整套流程。
+- Planner 可以根据目标提出新的 Draft Graph，但 Draft 必须通过 schema、权限、成本、环路、终态和测试验证后才能发布。
+- 高级客户可在授权沙箱内执行临时 Graph；任何有副作用节点仍受 Policy 和审批约束。
+- 运行反馈进入 Evaluation，优化器只生成下一 GraphVersion 候选，不能静默改变正在执行或已经结算的历史版本。
+
+### 19.3 Capability Contract
+
+每个能力必须像受控产品而非任意函数一样注册：
+
+- capability_id、版本和提供者；
+- 输入/输出 JSON schema；
+- read_only、system_write、domain_command 等副作用等级；
+- 所需权限、数据分类和允许租户范围；
+- 预计/最大成本、超时、并发和资源类型；
+- 幂等、重试、补偿和健康检查；
+- 审计字段、证据输出和错误分类；
+- 数据保留和许可证约束。
+
+识别、Label Studio、审核、训练、问卷、BI、数据库查询、导出和通知都通过这一契约进入 Graph。模型不是直接暴露给任意 Agent，而是包装为受策略约束的能力。
+
+### 19.4 数据权限与写入边界
+
+Graph/Agent 可以：
 
 - 调用经过批准的只读领域查询；
 - 读取客户授权的数据产品、识别结果、问卷结果和 BI 指标；
 - 生成衍生报告、解释、追踪任务和待审批建议；
-- 写入自身会话、用量、审计、反馈和衍生产物。
+- 自动写入系统自身的 Run、NodeExecution、Checkpoint、会话、用量、审计、反馈和衍生产物；
+- 在 Policy 已预授权时，通过领域命令创建低风险系统任务，例如识别作业或人工审核任务。
 
-Agent 不可以：
+Graph/Agent 不可以：
 
 - 执行任意 SQL；
 - 读取任意文件路径；
@@ -771,7 +900,9 @@ Agent 不可以：
 - 绕过租户、项目和字段级权限；
 - 在未获批准时调用超预算模型或导出敏感数据。
 
-### 19.3 待审批命令
+“Graph 是核心”不等于“Graph 可以直接写所有数据库”。智能化来自受控编排、状态反馈和持续决策，不来自绕过业务规则。
+
+### 19.5 待审批命令
 
 需要改变业务状态时，Agent 只创建 PendingCommand，包含：
 
@@ -783,18 +914,24 @@ Agent 不可以：
 
 人类批准后，由相应领域服务重新校验权限和版本再执行。审批不是 Agent 直接拿到写权限。
 
-### 19.4 Graph 运行时
+### 19.6 记忆、评估与学习
 
-GraphDefinition 由节点、边、条件、工具白名单、预算、停止条件和人工检查点组成。LoopRun 每轮保存输入快照、工具调用、结果摘要、token、费用、异常和终止原因。
+运行时状态、客户长期记忆和业务事实必须分开：
 
-必须设置：
+- Run State：当前 Graph 的临时状态和检查点，可恢复且随 Run 结束归档。
+- Customer Memory：客户明确授权保存的偏好、术语和已确认规则，版本化、可查看、可撤销。
+- Business Fact：商品、问卷、识别结果、账单等领域事实，只能由对应领域服务管理。
+- Retrieval Index：事实的派生索引，可重建，不能反向成为事实源。
 
-- 最大轮数、最大墙钟时间和最大成本；
-- 工具级超时、重试和熔断；
-- 幂等键和重复动作检测；
-- 人工审批节点；
-- 数据引用和回答证据；
-- 完成、失败、预算耗尽、需人工处理等明确终态。
+每个 GraphVersion 必须配套评估集，至少衡量任务完成率、事实正确性、证据完整率、人工接管率、平均循环数、P95 时间、成本、越权阻断和停滞率。智能内核升级必须先影子运行，不能只用主观聊天体验判断。
+
+### 19.7 FMCG 首个参考 Graph
+
+第一条参考 Graph 为“照片识别并形成可审计结果”：
+
+接收照片/URL → 校验权限和预算 → 下载/入库 → 质量/场景判断 → 选择识别档位 → 多模型识别 → 冲突与 unknown 判断 → 必要时人工审核 → 发布结果 → 记录用量 → 收集反馈 → 判断是否进入数据集候选
+
+它验证内核的关键能力：条件路由、模型升级、循环重试、人工节点、证据、预算、恢复和反馈。后续问卷追踪或 BI 异常分析复用相同内核，但拥有完全不同的 Domain Pack。
 
 ## 20. 性能、容量与本机资源
 
@@ -871,8 +1008,11 @@ GraphDefinition 由节点、边、条件、工具白名单、预算、停止条�
 
 建议对外只暴露一个 HTTPS 入口：
 
-- /api/v1：正式业务 API；
-- /api/agent/v1：Agent 专用只读和待审批命令 API；
+- /api/graph/v1：Graph 定义、版本和发布；
+- /api/runs/v1：启动、查询、暂停、恢复和终止 LoopRun；
+- /api/capabilities/v1：能力目录、schema、健康和授权；
+- /api/v1：领域业务 API；
+- /api/agent/v1：自然语言目标、授权只读查询和待审批命令 API；
 - /events/v1：受控事件订阅；
 - /app：统一 Web；
 - /label-studio：反向代理后的标注入口；
@@ -883,15 +1023,15 @@ GraphDefinition 由节点、边、条件、工具白名单、预算、停止条�
 ### 21.2 API 原则
 
 - OpenAPI 是接口事实源，SDK 从规范生成。
-- 命令使用 Idempotency-Key；异步命令返回 job_id。
+- 命令使用 Idempotency-Key；Graph 启动返回 run_id，领域异步命令返回 job_id。
 - 列表使用游标分页，不使用不稳定的深 offset。
 - 错误包含稳定 error_code、面向人的 message、correlation_id 和可选 field_errors。
 - 所有版本变更遵循兼容窗口；破坏性变化进入新主版本。
-- Web、Agent 和未来 App 不复制业务规则。
+- Web、Agent 和未来 App 不复制 Graph、策略或领域业务规则。
 
 ### 21.3 事件
 
-领域事件用于模块解耦，例如 AssetIngested、QualityAssessed、AnnotationSubmitted、ReviewResolved、RecognitionCompleted、ModelActivated、UsageRecorded。
+系统事件分为 Run 事件和领域事件。Run 事件包括 RunStarted、NodeCompleted、CheckpointCreated、HumanRequested、BudgetExhausted、RunCompleted；领域事件包括 AssetIngested、QualityAssessed、AnnotationSubmitted、ReviewResolved、RecognitionCompleted、ModelActivated、UsageRecorded。
 
 事务采用 outbox：领域写入和 outbox 同一数据库事务提交，发布器异步投递。消费者使用 inbox 幂等去重，避免 Webhook 或队列至少一次语义造成重复处理。
 
@@ -911,7 +1051,7 @@ GraphDefinition 由节点、边、条件、工具白名单、预算、停止条�
 
 审计事件与普通日志分离，记录 who、when、tenant、scope、action、object、before/after 摘要、reason、correlation_id 和结果。对追加型对象，before/after 使用版本引用，不复制大对象。
 
-以下操作必须审计：登录失败、授权变更、分享链接、数据导出、质量人工推翻、审核仲裁、数据集冻结、训练启动、模型发布/回滚、价格版本、账单冲正、Agent 工具调用和 PendingCommand。
+以下操作必须审计：登录失败、授权变更、Graph 发布、Run 启停/恢复、Capability 注册、工具调用、PolicyDecision、Checkpoint、人工检查点、分享链接、数据导出、质量人工推翻、审核仲裁、数据集冻结、训练启动、模型发布/回滚、价格版本、账单冲正和 PendingCommand。
 
 ### 22.3 故障语义
 
@@ -924,33 +1064,40 @@ GraphDefinition 由节点、边、条件、工具白名单、预算、停止条�
 | Worker 崩溃 | 租约超时后重试新 attempt，旧 attempt 标记 lost/failed |
 | 模型 OOM | 记录硬件和输入，按策略减小批次、降级或转人工 |
 | 账本写入失败 | 作业不得进入最终可结算状态，走 outbox 重试 |
-| Agent 超预算 | 立即结束 Loop，返回已完成部分和预算终态 |
+| Graph 超预算 | 立即停止新节点，保存检查点，返回已完成部分和预算终态 |
+| Graph Runtime 重启 | 从最后持久检查点恢复；不重复执行已提交的有副作用节点 |
+| Capability 不可用 | 按 Graph 策略重试、降级、转人工或部分完成，不允许无限循环 |
 
 ## 23. 测试与验收策略
 
 ### 23.1 测试层级
 
-- 契约测试：OpenAPI、AnnotationProvider、StorageAdapter、ModelRunner、Queue 和 Agent Tool。
-- 单元测试：状态机、权限、阈值、价格版本、映射时间语义。
+- 契约测试：Graph、Capability、DataProduct、OpenAPI、AnnotationProvider、StorageAdapter、ModelRunner 和 Queue。
+- 单元测试：Graph 状态机、循环终止、权限、预算、补偿、阈值、价格版本和映射时间语义。
 - 集成测试：PostgreSQL、文件存储、队列、Label Studio、模型注册和 outbox/inbox。
-- 端到端：文件/URL → 质量 → 识别 → 审核 → 发布 → 用量 → 导出。
+- 端到端：目标/Graph → 文件或 URL → 质量 → 识别 → 审核 → 发布 → 用量 → 导出。
 - 模型回归：冻结金标准和困难集，按客户、场景、包装、质量分桶。
 - 性能测试：吞吐、延迟、内存、磁盘、队列恢复和混合负载。
 - 安全测试：越权、SSRF、签名链接、恶意媒体、导出和 Agent 工具。
 - 恢复测试：数据库备份恢复、对象校验、模型回滚和未完成任务续跑。
+- 智能内核回归：Graph 版本兼容、检查点恢复、停滞检测、预算耗尽、人工接管和工具越权。
 
 ### 23.2 关键验收用例
 
-1. 同一 URL 内容变化，两次输入生成不同 Asset 版本且来源关系完整。
-2. 严重反光但商品文字仍可读，系统给警告而非无条件拒绝。
-3. 大头照可完成 SKU 判断，但场景与价签结论为不可判断。
-4. 标注员漏标，审核员独立指出并形成新修订，历史不被覆盖。
-5. 两名盲审者冲突，第三人仲裁后结果可追溯。
-6. 新包装被聚类后，客户 A 沿用旧名、客户 B 使用新名，历史结果不变化。
-7. VLM 不可用时高档任务明确降级或转人工，账单不按成功 VLM 调用计费。
-8. 相同幂等键重复提交，不产生重复识别和重复用量。
-9. Agent 尝试任意 SQL 或越租户查询，被网关拒绝并写审计。
-10. 磁盘超过 90% 时停止低优先级训练，不自动删除任何原图。
+1. 用户从 Web 与 API 以相同目标启动同一 GraphVersion，节点、预算和结果语义一致。
+2. Graph Runtime 在有副作用节点完成后崩溃，恢复时不重复写入或重复计费。
+3. 连续两轮无新增事实，Loop 触发停滞检测并转人工，而不是继续消耗 token。
+4. Graph 请求未授权数据或工具，被 Policy Engine 拒绝且无法通过改提示词绕过。
+5. 同一 URL 内容变化，两次输入生成不同 Asset 版本且来源关系完整。
+6. 严重反光但商品文字仍可读，系统给警告而非无条件拒绝。
+7. 大头照可完成 SKU 判断，但场景与价签结论为不可判断。
+8. 标注员漏标，审核员独立指出并形成新修订，历史不被覆盖。
+9. 两名盲审者冲突，第三人仲裁后结果可追溯。
+10. 新包装被聚类后，客户 A 沿用旧名、客户 B 使用新名，历史结果不变化。
+11. VLM 不可用时高档任务明确降级或转人工，账单不按成功 VLM 调用计费。
+12. 相同幂等键重复提交，不产生重复节点、重复识别和重复用量。
+13. Agent 尝试任意 SQL 或越租户查询，被网关拒绝并写审计。
+14. 磁盘超过 90% 时停止低优先级训练，不自动删除任何原图。
 
 ## 24. 实施路线图
 
@@ -958,28 +1105,34 @@ GraphDefinition 由节点、边、条件、工具白名单、预算、停止条�
 
 交付：
 
-- 领域词汇表、状态机和统一 ID；
+- GraphDefinition、GraphVersion、LoopRun、NodeExecution、Checkpoint 状态机和统一 ID；
+- Capability、DataProduct、DomainCommand、HumanTask、PolicyDecision 契约；
+- 领域词汇表和 FMCG 首个参考 Graph；
 - OpenAPI 基线；
 - tenant/customer/project 权限模型；
 - Asset、Evidence、UsageEvent、DatasetSnapshot 契约；
-- 模块注册、开源边界和许可证清单；
+- 内核/能力/领域边界、开源边界和许可证清单；
 - 现有系统适配器清单。
 
-退出门禁：15 项需求都能映射到领域模块；无两个模块同时拥有同一事实。
+退出门禁：15 项需求都能映射到 Graph 内核或领域能力；无两个模块同时拥有同一事实；任何副作用节点的授权和幂等语义明确。
 
-### Stage 1：本机平台底座
+### Stage 1：本机最小智能内核
 
 交付：
 
-- FastAPI 模块化核心、React 统一壳；
+- Graph Registry、Capability Registry 和版本冻结；
+- Loop Runtime、Node Executor、持久 Checkpoint、暂停/恢复和终态；
+- Policy/Permission/Budget Engine 与人工检查点；
+- FastAPI 内核、React 智能工作台和 Run 时间线；
 - PostgreSQL、迁移、身份和审计；
 - 本机 CAS、队列、Worker 管理和健康页；
 - 统一配置、结构化日志、备份与恢复演练；
-- 现有页面受控接入。
+- 一个最小识别 Graph：单图输入 → 现有级联识别适配器 → 结果与用量记录；
+- 一个不依赖识别的极小示例 Graph，用于证明内核没有写入 FMCG 特例。
 
-退出门禁：本机重启后任务、身份、文件和审计一致；无 SQLite 双事实源。
+退出门禁：最小识别 Graph 与非识别示例 Graph 都能运行；跨进程重启可从检查点恢复；幂等节点不重复执行；预算、权限、停滞和人工检查点可验证；无 SQLite 双事实源。
 
-### Stage 2：接入、质量、证据、场景与价签
+### Stage 2：FMCG 首个参考 Graph
 
 交付：
 
@@ -987,34 +1140,38 @@ GraphDefinition 由节点、边、条件、工具白名单、预算、停止条�
 - SSRF 与媒体安全；
 - 质量三级结论和完整证据；
 - 场景多标签、价签有/无/不可判断；
-- 容量水位与保留策略预警。
+- 容量水位与保留策略预警；
+- 将现有级联识别包装为 RecognitionCapability；
+- “照片识别并形成可审计结果”Graph 的第一版；
+- Graph 节点、领域作业和 UsageEvent 的全链路关联。
 
-退出门禁：每个结论可回看原图、衍生物、指标和版本；错误重试不重复入账。
+退出门禁：同一参考 Graph 可由 Web、API 和 Agent 启动；每个结论可回看 Graph、节点、原图、衍生物、指标和版本；错误重试不重复执行或入账。
 
 ### Stage 3：标注 100% 闭环
 
 交付：
 
 - Label Studio 网关、Provider、同步 inbox/outbox；
+- Annotation、Review 和 HumanTask 注册为可编排能力；
 - 多模态外挂数据库；
 - 预标注和自动画框；
 - 任务分配、签名链接、验证码；
 - 单审、双盲、仲裁与错误分类；
 - 统一标注导入导出。
 
-退出门禁：从平台创建任务到冻结数据集全程可追溯，Label Studio 短暂中断不丢状态。
+退出门禁：从 Graph 创建任务到冻结数据集全程可追溯；人工任务可暂停和恢复原 Run；Label Studio 短暂中断不丢状态。
 
-### Stage 4：统一识别产品
+### Stage 4：生产级识别能力包
 
 交付：
 
-- Web、API、Agent 三入口；
+- 识别能力的统一 schema、版本和健康声明；
 - 检测、检索、分类、OCR、SAM 适配器；
 - 多模型融合、unknown 和人工升级；
 - 作业、attempt、证据和导出；
 - 低/中/高/极高 Policy 框架。
 
-退出门禁：每一档有真实性能基线、降级策略和可审计用量。
+退出门禁：每一档有真实性能基线、降级策略和可审计用量；识别能力可被不同 Graph 复用而不复制业务规则。
 
 ### Stage 5：数据集、训练与模型中心
 
@@ -1039,27 +1196,29 @@ GraphDefinition 由节点、边、条件、工具白名单、预算、停止条�
 
 退出门禁：客户冻结验收集上的提升具有统计和业务意义，成本处于目标 Pareto 前沿。
 
-### Stage 7：计费与高级 Agent
+### Stage 7：智能服务商品化与客户定制
 
 交付：
 
-- 不可变用量账本、价格版本、套餐和对账；
-- Agent GraphDefinition、LoopRun、预算、工具白名单；
-- 只读数据产品和 PendingCommand；
+- 完整用量账本、价格版本、套餐和对账；
+- 客户 Graph Studio、模板库、版本发布和回归评估；
+- 标准智能层和高级定制层的能力/预算/工具分级；
+- 客户授权记忆、只读数据产品和 PendingCommand；
 - 客户级成本、SLA 和争议审计。
 
-退出门禁：账单能逐项回溯，Agent 无法直接写核心数据或越权读取。
+退出门禁：账单能逐项回溯到 Run 和 Node；客户定制 Graph 不能扩大授权，Agent 无法直接写客户源数据或越权读取。
 
-### Stage 8：问卷、BI 与混合部署准备
+### Stage 8：第二领域包、BI 与混合部署
 
 交付：
 
 - QuestionnaireProvider 和 BI DataProduct 契约实现；
+- 至少一条“问卷执行 → 数据分析 → 异常追踪 → 人工确认”的非识别参考 Graph；
 - 云控制面/本地数据面设备注册、策略下发和脱敏遥测；
 - 小程序、App SDK；
 - 客户保留期执行流程和商业运维。
 
-退出门禁：本机单体无重写地拆分控制面和数据面；数据主权和离线行为清楚。
+退出门禁：非识别领域能复用同一 Graph+Loop 内核；本机单体无重写地拆分控制面和能力执行面；数据主权和离线行为清楚。
 
 各 Stage 必须单独编写实施计划、测试清单、回滚方案和验收报告。未通过退出门禁不得用“功能已展示”代替完成。
 
@@ -1072,6 +1231,9 @@ GraphDefinition 由节点、边、条件、工具白名单、预算、停止条�
 | Schema | 主要表族 |
 |---|---|
 | iam | tenants、customers、projects、users、service_identities、roles、grants |
+| graph | definitions、versions、runs、node_executions、checkpoints、run_events |
+| capability | definitions、versions、tool_bindings、data_products、health_states |
+| policy | decisions、budgets、human_tasks、pending_commands、customer_memories |
 | assets | assets、asset_relations、ingestion_batches、retention_policies |
 | quality | assessments、signals、evidence_regions、manual_overrides |
 | catalog | canonical_products、packaging_versions、customer_product_mappings、new_package_candidates |
@@ -1081,7 +1243,7 @@ GraphDefinition 由节点、边、条件、工具白名单、预算、停止条�
 | training | runs、run_attempts、metrics、artifacts、evaluations |
 | models | models、versions、deployments、routing_policies、model_cards |
 | billing | usage_events、plans、price_versions、subscriptions、invoice_lines、adjustments |
-| agent | graph_definitions、loop_runs、tool_calls、pending_commands、derived_reports |
+| intelligence | evaluations、tool_calls、derived_artifacts、feedback_events |
 | audit | audit_events、outbox、inbox、exports |
 
 应用层仍应通过领域服务访问，schema 不是绕过模块接口的理由。
@@ -1099,7 +1261,7 @@ GraphDefinition 由节点、边、条件、工具白名单、预算、停止条�
 ### 25.3 索引与分区
 
 - 高频查询索引必须以 tenant_id 开头，再接 project_id、status、created_at。
-- recognition.jobs、usage_events、audit_events 和 metrics 按月或规模阈值分区。
+- graph.run_events、graph.node_executions、recognition.jobs、usage_events、audit_events 和 metrics 按月或规模阈值分区。
 - JSONB 只用于真正可扩展的模型元数据和证据详情；核心过滤字段必须正规化。
 - 列表采用 created_at + id 的稳定游标。
 - 模糊商品搜索使用受控全文或 trigram 索引；向量召回使用独立 pgvector/向量服务适配器，不能把向量当商品事实。
@@ -1144,6 +1306,8 @@ GraphDefinition 由节点、边、条件、工具白名单、预算、停止条�
 
 拟开源层采用 Apache-2.0：
 
+- 最小 Graph+Loop Runtime、Graph Contract 和 Checkpoint 语义；
+- Capability SDK、示例 Graph 和本地单租户智能工作台；
 - 通用数据契约和 SDK；
 - Storage、Queue、AnnotationProvider、ModelRunner 等适配器接口；
 - 本地单租户社区版基础闭环；
@@ -1155,7 +1319,7 @@ GraphDefinition 由节点、边、条件、工具白名单、预算、停止条�
 - 多租户与客户管理；
 - 用量计费、价格和合同；
 - 高级路由、企业级审核与争议处理；
-- Graph+Loop 编排、行业模板和高级工具；
+- 企业级 Graph Studio、客户专属模板、策略包、评估运营和高级工具；
 - 商业问卷、BI、运营和跨客户治理；
 - 托管控制面和企业部署能力。
 
@@ -1165,8 +1329,9 @@ GraphDefinition 由节点、边、条件、工具白名单、预算、停止条�
 
 | 编号 | 决策 |
 |---|---|
-| D-01 | 第一阶段 100% 本机运行，成熟后演进为云控制面 + 本地 AI 数据面 |
-| D-02 | 采用模块化单体核心 + 隔离 AI Worker |
+| D-00 | 系统核心是 Graph+Loop 智能业务操作系统；识别只是首个领域能力包 |
+| D-01 | 第一阶段 100% 本机运行，成熟后演进为云智能控制面 + 本地能力执行面 |
+| D-02 | 采用 Graph+Loop 内核 + 模块化能力单体 + 隔离 Worker |
 | D-03 | PostgreSQL 是业务事实库；SQLite 不作为并行业务真相 |
 | D-04 | 从第一版建立 tenant/customer/project 边界 |
 | D-05 | 六类用户角色，并为 Agent/API 设置服务身份 |
@@ -1175,17 +1340,18 @@ GraphDefinition 由节点、边、条件、工具白名单、预算、停止条�
 | D-08 | 照片结论为通过/警告/拒绝，拒绝只用于证据不可恢复 |
 | D-09 | 证据链是未来考核和争议处理依据，原始证据不可覆盖 |
 | D-10 | 客户提供低/中/高/极高四档，内部使用不可变用量账本 |
-| D-11 | 第一发布包含识别、标注、审核、训练、数据、模型、计费和管理 |
-| D-12 | 问卷与 BI 当前仅冻结模块契约和导航 |
+| D-11 | 第一发布先具备最小 Graph+Loop 内核，再完整纳入识别、标注、审核、训练、数据、模型、计费和管理 |
+| D-12 | 问卷与 BI 当前冻结 Capability/DataProduct 契约，并作为第二领域包验证内核通用性 |
 | D-13 | Python 3.12 + FastAPI；TypeScript + React PWA；统一 API |
 | D-14 | VLM 生产最低建议 Apple Silicon 32GB 或 NVIDIA 16GB；CPU 不承诺吞吐 |
 | D-15 | 准确性承诺只针对客户确认的冻结验收集 |
-| D-16 | Agent 读取授权数据，不能直接写核心业务数据；写操作走待审批命令 |
+| D-16 | Graph/Agent 读取授权数据，可写系统运行状态和衍生物；不能直接写客户源数据，高风险写操作走待审批命令 |
 | D-17 | 常规单审；金标准、发布和计费争议双盲 + 第三人仲裁 |
 | D-18 | 本地 8TB、目标十万张/天；保留期半年、2 年、7 年 |
 | D-19 | 开发期实现保留生命周期但不自动删除 |
 | D-20 | 商品主档、包装版本、客户映射分离，支持客户不同命名策略 |
 | D-21 | 开源层拟用 Apache-2.0，商业能力闭源，发布前法律复核 |
+| D-22 | 基础客户使用固定 Graph，高级客户购买可定制 Graph、持续 Loop、专属工具和预算 |
 
 以上是基线。后续改变任何一项必须记录新的 Architecture Decision Record，并列出影响模块、迁移方案和兼容窗口。
 
@@ -1193,7 +1359,7 @@ GraphDefinition 由节点、边、条件、工具白名单、预算、停止条�
 
 | 原始要求 | 设计响应 | 主要实施阶段 |
 |---|---|---|
-| 1. 统一 Web 管理界面 | 第 7 章统一 Web 壳与九个模块 | Stage 1-5 |
+| 1. 统一 Web 管理界面 | 第 7 章智能工作台、Run/Graph/能力中心及直接模块入口 | Stage 1-5 |
 | 2. Label Studio 全功能 + 多模态外挂 + 扩展 | 第 13 章独立上游、Provider、外挂数据库 | Stage 3 |
 | 3. 标注/识别人工审核、链接分配、错漏标 | 第 8、13 章分享链接、盲审、仲裁、错误分类 | Stage 3 |
 | 4. 现有模型辅助、自动画框 | 第 13.4 节预标注流水线 | Stage 3-4 |
@@ -1203,11 +1369,11 @@ GraphDefinition 由节点、边、条件、工具白名单、预算、停止条�
 | 8. 照片和 URL 两种输入 | 第 10 章统一 Asset 接入和 URL 安全 | Stage 2 |
 | 9. 7B 内本地 VLM 微调 | 第 15、17 章模型角色、LoRA 与治理 | Stage 5-6 |
 | 10. SAM 与更优 FMCG 多模型方案 | 第 14-16 章路由、SAM、检索、包装版本 | Stage 4-6 |
-| 11. API、Web、内部 Agent 三种识别 | 第 7、19、21 章统一端口与权限 | Stage 4、7 |
-| 12. 每次识别任务计费 | 第 18 章不可变用量与价格版本 | Stage 4、7 |
-| 13. SaaS 底座、问卷、数据库、BI、管理/客户端 | 第 4-8、24 章模块化底座与占位契约 | Stage 1、8 |
-| 14. 完全模块化，降低升级成本 | 第 6、21 章领域边界、适配器和事件 | Stage 0 起持续 |
-| 15. 可变 Graph+Loop Agent | 第 19 章定制 Graph、Loop、预算和审批 | Stage 7 |
+| 11. API、Web、内部 Agent 三种识别 | 三种入口启动同一 GraphVersion 或能力，见第 7、19、21 章 | Stage 2、4 |
+| 12. 每次识别任务计费 | 第 18 章从 Run/Node 到领域 attempt 的不可变用量 | Stage 1 起、Stage 7 商品化 |
+| 13. 智能系统底座、问卷、数据库、BI、管理/客户端 | 第 4-8、19、24 章智能内核和领域能力包 | Stage 1、8 |
+| 14. 完全模块化，降低升级成本 | 第 6、19、21 章内核、能力、领域命令和事件边界 | Stage 0 起持续 |
+| 15. 可变 Graph+Loop Agent | 第 19 章系统核心；第 24 章 Stage 0-1 即建设，Stage 7 商业定制 | Stage 0-1、7 |
 
 覆盖不等于已经实现。每个条目只有在对应 Stage 的退出门禁、自动化测试和验收报告全部通过后，才能标记为完成。
 
@@ -1251,4 +1417,4 @@ GraphDefinition 由节点、边、条件、工具白名单、预算、停止条�
 
 本总体设计经产品负责人逐章确认后，下一份文档应是 Stage 0-1 的详细实施计划，而不是直接修改代码。该计划需要把现有目录和服务逐项映射到新模块，列出精确文件、迁移顺序、测试命令、验收样例和回滚点。
 
-在 Stage 0-1 计划获批前，训练 Agent 可继续执行已经单独批准的训练工作，但不得提前创建新 SaaS 事实库、改造全局身份或替换现有生产入口。
+在 Stage 0-1 计划获批前，训练 Agent 可继续执行已经单独批准的训练工作，但不得提前创建新的系统事实库、Graph Runtime、全局身份或替换现有生产入口。
