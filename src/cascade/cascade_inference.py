@@ -37,13 +37,34 @@ IMAGENET_MEAN = [0.485, 0.456, 0.406]
 IMAGENET_STD = [0.229, 0.224, 0.225]
 CONF_THRESHOLD = 0.6  # 接受阈值（可在 bundle thresholds 中校准）
 MARGIN_THRESHOLD = 0.05  # top1-top2 最小间隔，低于此值视为不确定（RA-004）
+UNKNOWN_CLASS = "__unknown__"  # unknown 契约：该类永远不得 accepted，一律 needs_review
+
+
+def gate_decision(clf_sku_id: str, conf_val: float, margin: float,
+                  conf_thr: float = CONF_THRESHOLD,
+                  margin_thr: float = MARGIN_THRESHOLD) -> tuple[str, str]:
+    """拒识门禁纯函数（RA-004 + unknown 契约），返回 (status, source)。
+
+    规则：top1 为 __unknown__ → 永远 needs_review（无论置信度）；
+    conf 达阈且 margin 达阈 → accepted；其余一律 needs_review。"""
+    if clf_sku_id == UNKNOWN_CLASS:
+        return "needs_review", "unknown_class"
+    if conf_val >= conf_thr and margin >= margin_thr:
+        return "accepted", "classifier"
+    if conf_val < conf_thr:
+        return "needs_review", "needs_review_lowconf"
+    return "needs_review", "needs_review_lowmargin"
 
 
 class CascadeRecognizer:
-    """级联识别器：YOLO 画框 + 分类器精识别。"""
+    """级联识别器：YOLO 画框 + 分类器精识别。
+
+    复核修订（RA-006）：registry 可由调用方传入（bundle 自带），不再强制读取
+    项目根全局 data/sku_registry.json；构造时校验 classifier classes / detector names
+    与 registry 完全一致，不一致即失败关闭。"""
 
     def __init__(self, yolo_weight=None, clf_weight=None, conf_thr=CONF_THRESHOLD,
-                 margin_thr=MARGIN_THRESHOLD, device=None):
+                 margin_thr=MARGIN_THRESHOLD, device=None, registry=None):
         from ultralytics import YOLO
         self.device = device or ("mps" if torch.backends.mps.is_available() else "cpu")
         self.conf_thr = conf_thr
@@ -58,15 +79,42 @@ class CascadeRecognizer:
         self.clf = build_model(self.backbone, self.n_classes).to(self.device)
         self.clf.load_state_dict(ckpt["model"])
         self.clf.eval()
-        # sku_id → SKU 名称
-        reg = json.loads(REGISTRY.read_text(encoding="utf-8"))
+        # registry：优先使用调用方传入（bundle 自包含），无则退回全局（兼容旧路径）
+        if registry is not None:
+            reg = registry
+        else:
+            reg = json.loads(REGISTRY.read_text(encoding="utf-8"))
         self.id_to_name = {v["sku_id"]: k for k, v in reg.items()}
         self.clsid_to_name = {v["class_id"]: k for k, v in reg.items()}
         self.clsid_to_id = {v["class_id"]: v["sku_id"] for k, v in reg.items()}
+        self._validate_class_alignment(reg)
         self.tf = transforms.Compose([
             transforms.Resize(int(224 * 1.14)), transforms.CenterCrop(224),
             transforms.ToTensor(), transforms.Normalize(IMAGENET_MEAN, IMAGENET_STD),
         ])
+
+    def _validate_class_alignment(self, reg: dict) -> None:
+        """RA-006：类别一致性校验 —— classifier classes / detector names 必须与 registry 对齐。
+
+        允许 classifier 在 208 类基础上额外携带 __unknown__（209 类方案）；
+        任何超出集合的类别或顺序错乱都拒绝上线（fail-closed）。"""
+        reg_sku_ids = {v["sku_id"] for v in reg.values()}
+        cls_set = set(self.classes)
+        extra = cls_set - reg_sku_ids - {UNKNOWN_CLASS}
+        if extra:
+            raise ValueError(f"分类器类别超出 registry: {sorted(extra)[:5]}（共 {len(extra)} 个）")
+        missing = reg_sku_ids - cls_set
+        if missing:
+            raise ValueError(f"分类器缺少 registry 类别: {sorted(missing)[:5]}（共 {len(missing)} 个）")
+        if len(set(self.classes)) != len(self.classes):
+            raise ValueError("分类器类别列表存在重复")
+        if hasattr(self.yolo, "names") and self.yolo.names:
+            yolo_names = set(self.yolo.names.values()) if isinstance(self.yolo.names, dict) \
+                else set(self.yolo.names)
+            yolo_extra = yolo_names - set(reg.values() if isinstance(reg, list) else
+                                          [k for k in reg.keys()])
+            if yolo_extra:
+                raise ValueError(f"检测器 names 超出 registry: {sorted(yolo_extra)[:5]}")
 
     def _crop_resize(self, img, box):
         W, H = img.size
@@ -113,13 +161,12 @@ class CascadeRecognizer:
                     clf_sku_id = self.classes[pred_idx.item()]
                     clf_name = self.id_to_name.get(clf_sku_id, clf_sku_id)
                 # RA-004：拒识门禁。detector 只提框，不拥有最终 SKU 决策权；
-                # 低置信/小 margin 一律输出 unknown + needs_review，绝不回退 detector 类别。
-                if conf_val >= self.conf_thr and margin >= self.margin_thr:
-                    status, source = "accepted", "classifier"
+                # unknown 契约：top1 为 __unknown__ 时无论置信度多高都不得 accepted。
+                status, source = gate_decision(clf_sku_id, conf_val, margin,
+                                               self.conf_thr, self.margin_thr)
+                if status == "accepted":
                     final_id, final_name = clf_sku_id, clf_name
                 else:
-                    status = "needs_review"
-                    source = "needs_review_lowconf" if conf_val < self.conf_thr else "needs_review_lowmargin"
                     final_id, final_name = "", "unknown"
                 results.append({
                     "box": [round(v, 1) for v in box],

@@ -3,10 +3,11 @@
 > 通用 SKU 图像识别系统 · 货架陈列巡检场景
 > 本手册固化项目至今的完整进展，供后续会话快速恢复上下文。更新时间：2026-08-04。
 > 2026-08-04 二次复核修订：整改代码大部分已落地，但不能再表述为 RA-001～RA-024 全部关闭。严格证据和逐项状态见 [`latest-handbook-reverification-2026-08-04.md`](./latest-handbook-reverification-2026-08-04.md)。
+> 2026-08-04 晚：按两份执行计划完成系统整改（s1-s7）、数据协议冻结（m1）与 E0 基线（m2），并建立 Git 源码-only 版本控制基线（`app-v0.1.0`）。每一项均有自动化测试或运行证据，见第 9 节。
 
 ## 一句话概括
 
-用「YOLO 画框（冻结 sku_v4）+ ResNet18 分类器精识别 + 拒识门禁」的级联架构识别货架 SKU。线上 recognize 当前能加载 **immutable model bundle** `prod_20260804_v4_r2`；其分类器实际为 208 类闭集模型，`__unknown__` 仍是下一轮目标而非当前产物。整改代码、数据制品和在线进程并不同步：数据隔离、有效 gold、训练追溯、bundle 自包含和核心回归测试尚未闭环。当前训练已停止，后续方案见 [`2026-08-04-model-training-next-phase.md`](./superpowers/plans/2026-08-04-model-training-next-phase.md)。
+用「YOLO 画框（冻结 sku_v4）+ ResNet18 分类器精识别 + 拒识门禁」的级联架构识别货架 SKU。线上 recognize 当前加载 **immutable model bundle** `prod_20260804_v4_r2`（加载前逐文件哈希校验，失败即拒绝服务）；其分类器为 208 类闭集模型，`__unknown__` 仍是下一轮目标而非当前产物，但拒识契约已修复：top1 为 `__unknown__` 时无论置信度多高一律 needs_review（代码 + 7 项测试保证）。四个新协议集（gold_v2/dev_v1/calibration_v1/diagnostic_v1）已从未见门店冻结并通过四键零泄漏审计；E0 基线已在 dev_v1 上完成。后续训练方案见 [`2026-08-04-model-training-next-phase.md`](./superpowers/plans/2026-08-04-model-training-next-phase.md)。
 
 ---
 
@@ -24,14 +25,15 @@
 
 **关键红线**：
 - 低置信结果 `sku_id` 为空、`name=unknown`、`needs_review=true`，进入人工审核（RA-004）
-- 检测器类别数与 registry 不一致 → fail-closed 拒绝服务，禁止回退通用模型
+- `__unknown__` 契约（本轮修复）：`gate_decision()` 纯函数中 top1 为 `__unknown__` 时永远返回 needs_review，防止未来 209 类模型把高置信 unknown 误 accepted；一对一匹配同样由该函数收口（`tests/unit/test_cascade_gate.py` 7 项测试）
+- 检测器类别数与 registry 不一致 → fail-closed 拒绝服务，禁止回退通用模型；bundle 来源时还做 `_validate_class_alignment`（classifier 类 ⊆ registry ∪ {__unknown__}、无缺失无重复）
 - 权重缺失/损坏 → `/v2/health` 返回 503，绝不假装健康
 
-**线上模型（bundle: prod_20260804_v4_r2）**：
+**线上模型（bundle: prod_20260804_v4_r2，已重启加载新代码并冒烟验证）**：
 - 检测器：sku_v4 YOLO26m（冻结）
 - 分类器：resnet18 @ ep10 / val_acc 83.67%（当前 best.pt）
-- 阈值：conf=0.6 来自 bundle；margin=0.05 当前来自代码默认值，尚未写入 bundle `thresholds.json`
-- ⚠️ 历史文件中的 92.95%（ep71）属于旧数据轮，已不反映线上权重；`/api/classifier` 已分离当前值和历史值，但 `/api/live` 仍返回旧历史最佳，RA-021 尚未关闭
+- 阈值：conf=0.6 来自 bundle；margin=0.05 当前来自代码默认值，尚未写入 bundle `thresholds.json`；`/v2/health` 以 `threshold_source` 如实标注每个阈值的来源（bundle/code_default）
+- 监控口径（本轮修复）：`/api/live` 现以当前 `best.pt`（83.67%）为准并标注 `best_source=current_best_pt`，92.95% 仅保留为 `history_best_acc`，不再混报（2026-08-04 晚重启后在线验证通过）
 
 ---
 
@@ -64,23 +66,32 @@ python -m src.models.bundle publish --bundle-id prod_20260804_v4_r2 # 校验→D
 python -m src.models.bundle rollback    # 回滚到 previous_bundle_id（无记录则拒绝）
 ```
 
-- `.models/bundles/CURRENT.json`：原子指针（tmp+os.replace），含 `previous` 字段
+- `.models/bundles/CURRENT.json`：原子指针（tmp+os.replace），含 `previous` 字段；重复 publish 保留回滚链
 - `.models/archive/` 中的归档 bundle 也可直接 publish
-- 识别服务启动时优先 `resolve_weights()`；当前该路径不会主动执行完整 `verify_bundle()`，全局 registry 也仍可成为 bundle 外部依赖
+- 识别服务启动时 `resolve_weights(verify=True)`：加载前逐文件哈希校验，失败抛 BundleError → fail-closed 拒绝服务，不再静默退回默认路径；bundle 自带 registry 时直接传入识别器，消除全局文件外部依赖（`tests/contract/test_bundle_governance.py` 6 项测试）
 - 当前生产：`prod_20260804_v4_r2`（最优模型 + 训练数据已归档为只读 bundle，用户决定 2）
 
 ---
 
 ## 4. 数据协议（RA-002 / RA-008 / RA-009）
 
-**Gold holdout（当前事实）**：
-- `.data_protocol/gold_holdout.json`：977 张 / 390 组，按 `(门店 scode, 采集日期)` 分组，seed=20260804, ratio=0.15
-- 它是在当前 detector/classifier 训练完成后从 batch2 抽取；977/977 都进入过 v4 detector，不能评价当前生产模型的未见泛化，应保留并标为 `legacy_regression_v1`
-- 下一轮必须先从未训练的新门店冻结 gold-v2，再构建任何训练数据；最终合并后的 train/val 要同时按 SHA、门店、门店别名和采集会话做零泄漏检查
+**协议集现状（2026-08-04 晚冻结，`.data_protocol/*.json` 只读 444，已存在拒绝覆盖）**：
 
-**覆盖驱动抽样（目标协议）**：稀有类达 min_per_class(20) → 新门店覆盖 → 随机填充；train/val 按门店 group split；产物含 `build_audit.json`。当前 `.datasets/sku_v6` 是修复前旧制品，train/val 仍有 149 个门店重叠，且没有 `build_audit.json`。
+| 集合 | 规模 | 门店 | 类覆盖 | 角色 |
+|---|---|---|---|---|
+| `gold_holdout.json` | 977 张 | 390 组 | — | `legacy_regression_v1`：全被当前模型见过，仅报告交集不阻断构建 |
+| `diagnostic_v1` | 500 张 | 234 | 200/208 | 只做诊断，不做训练 |
+| `gold_v2` | 1203 张 | 501 | 207/208 | 最终一次性发布评估，禁止训练和日常调参（稀有类贪心填充，目标每类 60 实例） |
+| `calibration_v1` | 403 张 | 199 | — | 温度缩放/阈值/risk-coverage 校准 |
+| `dev_v1` | 800 张 | 332 | 205/208 | 实验迭代和错误分析（E0 基线已在此集完成） |
 
-**`__unknown__` 负样本（目标协议）**：未注册 GT（other 等）+ 未匹配预测框可进入独立类。当前 crop 数据、checkpoint 和 bundle 都没有该类；现推理若遇到高置信 `__unknown__` 还会错误 accepted，因此 209 类训练前必须先完成拒识契约和回归测试。
+**四键隔离（冻结时断言通过，任一违反即不合格）**：① SHA256 内容去重（含与 batch2 跨批次）；② 精确门店码；③ 归一化门店名（与 batch2 训练门店零交集）；④ 采集会话——按门店整组分配自动满足。候选池：14429 张新门店照片 / 6420 新门店，seed=20260804，脚本 `src/data/protocol_sets.py`。
+
+**构建器全局 fail-closed（本轮修复）**：`build_sku_v6_dataset` 在抽样后和与旧数据合并后各做一次协议泄漏检查（`_protocol_no_leak`）：与冻结集 photo_id/SHA 交集即报错终止；legacy 角色仅报告交集不阻断；旧 batch2 合并时额外检查与 batch3 val 的门店重叠。
+
+**覆盖驱动抽样（目标协议）**：稀有类达 min_per_class(20) → 新门店覆盖 → 随机填充；train/val 按门店 group split；产物含 `build_audit.json`。当前 `.datasets/sku_v6` 仍是修复前旧制品（train/val 149 门店重叠），下一轮构建时必须先重建。
+
+**`__unknown__` 负样本（目标协议）**：未注册 GT（other 等）+ 未匹配预测框可进入独立类。当前 crop 数据、checkpoint 和 bundle 都没有该类；拒识契约已先于 209 类训练修复并有回归测试（见第 1 节红线）。
 
 **数据资产**：
 
@@ -102,9 +113,9 @@ python -m src.models.bundle rollback    # 回滚到 previous_bundle_id（无记�
 | LS importer | 一次建索引 O(N)；稳定文件名幂等判重；批量 16 张；created/skipped/failed 报告 |
 | webhook | `webhook_event` 表 PK 去重，INSERT OR IGNORE rowcount 判定与 review_event 同事务；事件键含 payload SHA；非 dev 环境 HMAC 强制 |
 | catalog 发布 | 版本目录 `versions/v_<ts>_<pid>/` 完整写+逐文件哈希自校验 → 原子切 `CURRENT.json` → 保留最近 3 版本；读取先验 manifest |
-| 评估器 | GT↔预测已改为一对一；当前匹配仍是 point-in-box，不是严格 IoU，且尚未在有效 gold-v2 上运行 |
+| 评估器 | GT↔预测一对一；当前匹配仍是 point-in-box（宽松口径），严格 IoU 评估为后续任务；E0 基线已在 dev_v1 上运行（见第 7.1 节） |
 | 批任务 | 四态 success/empty/failed(retryable)；失败率超阈值任务失败；每张写审计（RA-007）|
-| finetune/train | finetune 已增强防覆盖与类别校验；基础 classifier 仍写固定 `best.pt`，dataset hash 还不含 label，208→209 也没有扩展路径 |
+| finetune/train | 分类器防覆盖（本轮修复）：每 run 写 `.models/classifier/run_<tag>/best.pt`（目录已存在即报错），生产 best.pt 仅 `--promote` 显式提升且旧版先归档；dataset hash 现含 labels/ 与相对路径（`tests/unit/test_dataset_hash.py`）；208→209 扩展路径仍待建 |
 
 ---
 
@@ -115,9 +126,10 @@ python -m src.models.bundle rollback    # 回滚到 previous_bundle_id（无记�
 - **CORS**：白名单 `RECOGNIZE_CORS_ORIGINS`（逗号分隔），未配置不发任何 CORS 头
 - **管理接口**：`RECOGNIZE_ADMIN_TOKEN` Bearer（常量时间比较）；非 dev（`APP_ENV`）未配置 token 失败关闭
 - **路径脱敏**：`/v2/models` 只暴露权重 basename
-- **XSS**：多数动态值已转义；workbench 的 inline `onclick` 不能只依赖 HTML escape 保护 JavaScript 上下文，仍需消除内联事件或采用安全数据绑定
+- **XSS（本轮修复）**：workbench 已消除 inline `onclick`，改为 `data-pid` 属性 + 事件委托（动态数据不进 JS 上下文）；其余动态值保持转义
 - **凭据**：`.env` / `.label-studio/.env` 权限 600；`.gitignore` 保留 `!.env.example`；新 Token 示例见 `.env.example`
-- **监控真实性**：ML 后端 health 代码已增强；monitor 的 `/api/classifier` 能区分当前 83.67% 与历史 92.95%，但 `/api/live` 仍混用历史最佳
+- **监控真实性（本轮修复）**：monitor `/api/live` 现报当前 best.pt 口径；ckpt 缓存仅在 mtime+size 变化时重载（`tests/unit/test_runtime_safety.py`）
+- **背压**：并发占满后排队超时抛 OverloadedError → HTTP 429（有单测覆盖）
 
 ---
 
@@ -132,6 +144,22 @@ python -m src.models.bundle rollback    # 回滚到 previous_bundle_id（无记�
 | 分类器(当前 R2) | 预测框 crop 旧制品 | ResNet18 | **val_acc 83.67% @ ep10** | 当前线上 checkpoint；训练早于现有 gold，不能作为未见泛化证据 |
 
 **调优方法论**：基准推理 → 差异挖掘（漏检/误检/混淆矩阵）→ 痛点诊断 → 定向调参 → 强制早停（patience=10）。详见 `docs/tuning-methodology.md`。
+
+### 7.1 E0 基线（当前 bundle 在 dev_v1 未见门店，2026-08-04 晚）
+
+脚本 `src/eval/e0_baseline.py`（bundle/数据/阈值固定，一对一 point-in-box，逐样本错误账本），报告 `docs/experiments/E0-current-bundle-baseline.md`，明细 `.eval/e0/dev_v1_details.json`。
+
+| 指标 | 值 | 解读 |
+|---|---:|---|
+| 检测覆盖（GT 被 proposal 覆盖） | 25.5% | 冻结 sku_v4 在新门店是首要瓶颈（missed_detection=15135） |
+| accepted precision | 89.0% | 距 95% 发布线有差距 |
+| 端到端召回（accepted 且正确 / GT） | 20.3% | 受检测覆盖直接压制 |
+| 已匹配中进入 review 比例 | 10.5% | 门禁未过度保守 |
+| FP / 照片 | 3.17 | fp_accepted=2190，需压 |
+| 照片全对率（exact-set） | 0.0% | 大照片多目标，全对极难 |
+| count MAE | 16.9 | 计数口径随检测覆盖失真 |
+
+错误账本主因：missed_detection 15135 ≫ fp_accepted 2190 > classifier_confusion 439 > unknown_false_accept 70（GT 为未注册品但被 accepted，即拒识缺口）> known_false_reject 501。结论：下一轮优先解决检测覆盖与 FP，而非单纯提分类器精度。
 
 ---
 
@@ -169,9 +197,13 @@ python -m pytest tests/ -q
 
 ## 9. RA 复查整改状态
 
-2026-08-04 二次复核按“代码已写入 / 自动化已覆盖 / 制品已重建 / 线上已加载”四层判定；完成本次文档纠偏后为 5 项基本关闭或已有主要运行/文档证据、14 项部分修复、5 项未关闭。未关闭项为 RA-002、RA-003、RA-008、RA-010、RA-024；逐项证据见 [`latest-handbook-reverification-2026-08-04.md`](./latest-handbook-reverification-2026-08-04.md)。
+2026-08-04 二次复核按“代码已写入 / 自动化已覆盖 / 制品已重建 / 线上已加载”四层判定；复核时为 5 项基本关闭、14 项部分修复、5 项未关闭。逐项证据见 [`latest-handbook-reverification-2026-08-04.md`](./latest-handbook-reverification-2026-08-04.md)。
 
-当前回归证据仅能确认：`pytest tests -q` 22 通过、80 个 Python 文件 AST 通过、当前 bundle 16 个文件校验通过、recognize health 为 200。现有 22 项测试只覆盖命名、别名、不变性和 SKU 对齐，不覆盖 bundle/gold/unknown/hash/monitor/outbox/webhook/exporter/importer/背压等本轮核心整改，不能作为“24 项全部回归通过”的证据。
+2026-08-04 晚整改后新增证据（s1-s7 + m1/m2 落地项）：
+- `pytest tests -q` **46 通过**（原 22 + 新增 bundle 治理 6 / 协议隔离 5 / 级联门禁 7 / dataset hash 4 / 运行时安全 2 等），`compileall src` 通过
+- 8091/8092 已重启加载新代码并在线冒烟：`/v2/health` 200（bundle 哈希校验后加载）、端到端识别正常且无 unknown 被 accepted、`/api/live` 报 83.67%（best_source=current_best_pt）
+- 四协议集冻结 + 四键零交集断言通过；E0 基线完成（见 7.1）
+- 仍不能声明全部 24 项关闭：严格 IoU 评估、209 类训练与制品重建、exporter/importer 在线联调未做；Git 远端未配置
 
 ---
 
@@ -181,7 +213,8 @@ python -m pytest tests/ -q
 |---|---|
 | 识别服务（级联引擎）| `src/recognize/service.py` |
 | bundle 治理 | `src/models/bundle.py` |
-| gold holdout | `src/data/gold_holdout.py` |
+| gold holdout / 协议集冻结 | `src/data/gold_holdout.py` / `src/data/protocol_sets.py` |
+| E0 基线评估 | `src/eval/e0_baseline.py` + `docs/experiments/E0-current-bundle-baseline.md` |
 | 级联推理 | `src/cascade/cascade_inference.py` |
 | 分类器训练 / 微调 | `src/cascade/classifier.py` / `finetune.py` |
 | 数据集构建 | `src/training/build_sku_v6_dataset.py`、`src/cascade/build_{crop,yolo_crop}_dataset.py` |
@@ -197,7 +230,16 @@ python -m pytest tests/ -q
 
 ---
 
-## 11. 已知坑
+## 11. Git 版本控制（2026-08-04 晚建立）
+
+- 源码-only 仓库（121 文件）；训练数据/权重/DB/凭据/大照片目录全部 Git 外（`.gitignore` 白名单式管控，禁 `git add .`）
+- 初始提交 `3c0364e`，标签 `app-v0.1.0`；模型制品变更打 `model-*` 标签、数据集变更打 `data-*` 标签（见 Git 实施手册）
+- Conventional Commits；远端尚未配置（待用户提供私有仓库地址）
+- `requirements-lock.txt` 因含本地 file:// 路径暂被忽略，待重新生成可移植版本后解除
+
+---
+
+## 12. 已知坑
 
 - torchvision 预训练权重下载易 hash 校验失败 → 删除损坏缓存重试
 - YOLO.predict 不支持 bytes 输入 → 先转 numpy array

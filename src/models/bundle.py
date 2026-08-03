@@ -188,10 +188,15 @@ def create_bundle(bundle_id: str, detector: str | Path, classifier: str | Path,
 
 
 def publish(bundle_id: str) -> dict:
-    """上线 = 只切 CURRENT 指针。发布前强制 verify；DB 记录回滚链。"""
+    """上线 = 只切 CURRENT 指针。发布前强制 verify；DB 记录回滚链。
+
+    复核修订：重复 publish 当前 bundle 时保留既有 previous 链，不得清零。"""
     verify_bundle(bundle_id)
     cur = current_bundle()
-    previous = cur["bundle_id"] if cur and cur.get("bundle_id") != bundle_id else None
+    if cur and cur.get("bundle_id") == bundle_id:
+        previous = cur.get("previous")  # 重复发布：保留原回滚链
+    else:
+        previous = cur["bundle_id"] if cur else None
     d = bundle_dir(bundle_id)
     manifest = json.loads((d / MANIFEST_NAME).read_text(encoding="utf-8"))
     conn = wh.connect()
@@ -239,8 +244,12 @@ def rollback() -> dict:
     return publish(target)
 
 
-def resolve_weights() -> dict | None:
-    """在线服务解析当前生产 bundle 的资产路径；无 CURRENT 指针返回 None（调用方走默认路径）。"""
+def resolve_weights(verify: bool = True) -> dict | None:
+    """在线服务解析当前生产 bundle 的资产路径；无 CURRENT 指针返回 None（调用方走默认路径）。
+
+    复核修订（RA-006）：默认先执行 verify_bundle() 逐文件哈希校验，
+    校验失败抛 BundleError（fail-closed），不得静默退回默认路径加载未验证权重。
+    同时回报 thresholds 来源：margin 缺失时显式标记，不得假装来自 bundle。"""
     cur = current_bundle()
     if not cur:
         return None
@@ -248,10 +257,9 @@ def resolve_weights() -> dict | None:
     d = bundle_dir(bid)
     if d is None:
         return None
-    try:
-        m = json.loads((d / MANIFEST_NAME).read_text(encoding="utf-8"))
-    except Exception:
-        return None
+    if verify:
+        verify_bundle(bid)
+    m = json.loads((d / MANIFEST_NAME).read_text(encoding="utf-8"))
     combo = m.get("production_combo", {})
     det, clf = combo.get("detector"), combo.get("classifier")
     if not det or not clf:
@@ -277,6 +285,10 @@ def resolve_weights() -> dict | None:
                     break
             if norm:
                 out["threshold_values"] = norm
+                out["threshold_source"] = {
+                    "conf": "bundle" if "conf" in norm else "code_default",
+                    "margin": "bundle" if "margin" in norm else "code_default",
+                }
         except Exception:
             pass
     return out

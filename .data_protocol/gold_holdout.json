@@ -2357,5 +2357,8 @@
     "ffaf7e770c7739c43225fc0e20a9c969e21dae60ae98b97224810073ea6a95ef",
     "ffd672e49f1867c57825d5c3abe45e3f8fb73566f8ba08413c0a684444688cbf",
     "fffde33030d14094c6787400c5604e8e7d591d31783df4b55b565cdc15665b6c"
-  ]
+  ],
+  "role": "legacy_regression_v1",
+  "seen_by_current_model": true,
+  "role_note": "复核修订：本集 977 张全部进入过 v4 detector 训练（881 train/96 val），classifier 亦见过绝大部分，不能评价当前模型未见泛化；仅保留作回归稳定性参考，禁止称为 current gold。真正未见基准为 gold_v2。"
 }

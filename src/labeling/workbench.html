@@ -135,8 +135,10 @@ async function loadPhotos() {
 function renderPhotoList(data) {
   const el = document.getElementById('photoList');
   if (!data.items.length) { el.innerHTML = '<div class="empty">暂无照片</div>'; return; }
+  // RA-020 复核修订：动态 photo id 不再内联进 onclick（HTML escape 不能保护 JS 上下文），
+  // 改用 data-pid 属性 + 事件委托，id 永远不进入 JS 字面量。
   el.innerHTML = data.items.map(p => `
-    <div class="photo-item ${state.current === p.id ? 'active' : ''}" onclick="loadPhoto('${esc(p.id)}')">
+    <div class="photo-item ${state.current === p.id ? 'active' : ''}" data-pid="${esc(p.id)}">
       <div><strong>${esc(p.sname || p.id)}</strong> <span class="badge badge-${esc(p.status) || 'pending'}">${esc(statusText(p.status))}</span></div>
       <div class="meta">${esc(p.typename || '')} | ${esc(p.n_annotations)} 标注 | ${p.mode ? '模式'+esc(p.mode) : ''}</div>
     </div>`).join('');
@@ -176,8 +178,9 @@ async function loadPhoto(id) {
     renderRegions();
   };
   img.src = API + '/img/' + id;
-  document.querySelectorAll('.photo-item').forEach(el => el.classList.remove('active'));
-  event.currentTarget?.classList.add('active');
+  document.querySelectorAll('.photo-item').forEach(el => {
+    el.classList.toggle('active', el.dataset.pid === String(id));
+  });
 }
 
 function drawCanvas() {
@@ -290,6 +293,12 @@ document.querySelectorAll('.mode-btn').forEach(btn => {
 
 document.getElementById('statusFilter').addEventListener('change', () => { state.page = 1; loadPhotos(); });
 document.getElementById('searchInput').addEventListener('input', e => { /* TODO: 本地过滤 */ });
+
+// RA-020 复核修订：照片列表事件委托（替代动态 inline onclick）
+document.getElementById('photoList').addEventListener('click', e => {
+  const item = e.target.closest('.photo-item');
+  if (item && item.dataset.pid) loadPhoto(item.dataset.pid);
+});
 
 function toast(msg) {
   const el = document.getElementById('toast');

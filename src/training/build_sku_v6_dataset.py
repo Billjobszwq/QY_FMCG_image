@@ -35,6 +35,8 @@ GRAY_MANIFEST = PROJECT_ROOT / "batch3_gray" / "gray_manifest.json"
 REGISTRY = PROJECT_ROOT / "data" / "sku_registry.json"
 OLD_DS = PROJECT_ROOT / ".datasets" / "batch2_v4"
 OUT_DIR = PROJECT_ROOT / ".datasets" / "sku_v6"
+PROTOCOL_DIR = PROJECT_ROOT / ".data_protocol"
+B2_MANIFEST = PROJECT_ROOT / ".eval" / "batch2" / "manifest.json"
 
 # 漏检重灾 SKU（来自端到端测试最差召回）。注：这些 SKU 在百事货架极常见（91%照片含），
 # 故不做照片级复制过采样（避免数据膨胀），靠 imgsz=1024+强增强提升小目标召回。
@@ -71,6 +73,43 @@ def store_of(pid, clean) -> str:
     fn = (clean.get(pid) or {}).get("filename", "")
     parts = fn.split("_")
     return parts[1] if len(parts) > 1 else "NA"
+
+
+def _protocol_no_leak(photo_ids, shas, context: str) -> dict:
+    """复核修订（RA-008）：全局 fail-closed 泄漏检查。
+
+    最终合并后的 train/val 必须与所有冻结协议集（gold_v2/dev/calibration/
+    diagnostic 等）照片与 SHA 零交集；交集即抛异常终止构建。
+    role 以 legacy 开头的集（如旧 gold，当前模型已见过，不能作未见基准）
+    仅报告交集数量不阻断，避免历史数据永久锁死构建。"""
+    report = {}
+    if not PROTOCOL_DIR.exists():
+        return report
+    ids = set(map(str, photo_ids))
+    ssh = set(shas or ())
+    for f in sorted(PROTOCOL_DIR.glob("*.json")):
+        try:
+            rec = json.loads(f.read_text(encoding="utf-8"))
+        except Exception:
+            continue
+        if not isinstance(rec, dict) or not rec.get("frozen"):
+            continue
+        pids = set(map(str, rec.get("photo_ids", [])))
+        psha = set(rec.get("sha256", []))
+        id_hit = ids & pids
+        sha_hit = ssh & psha
+        role = str(rec.get("role", ""))
+        report[f.name] = {"role": role, "id_hits": len(id_hit), "sha_hits": len(sha_hit)}
+        if role.startswith("legacy"):
+            if id_hit or sha_hit:
+                print(f"  [protocol] {f.name} (legacy) 交集 {len(id_hit)} 照片 / "
+                      f"{len(sha_hit)} SHA —— 仅报告，不阻断（当前模型已见过）")
+            continue
+        if id_hit or sha_hit:
+            raise RuntimeError(
+                f"[protocol] {f.name} 泄漏：{len(id_hit)} 照片 / {len(sha_hit)} SHA "
+                f"({context})，冻结集永不进训练。示例: {sorted(id_hit)[:5]}")
+    return report
 
 
 def coverage_sample(pool, anns, registry, budget, min_per_class, rng, clean) -> list:
@@ -187,6 +226,11 @@ def build(batch3_budget: int = 4000, val_ratio: float = 0.1, seed: int = 42,
     assert not ({store_of(p, clean) for p in val_ids} & {store_of(p, clean) for p in train_ids}), \
         "门店 group split 失败：val 门店出现在 train"
 
+    # 复核修订（RA-008）：抽样结果先过全局协议泄漏检查（fail-closed），
+    # 再进入写盘；任何冻结集（gold_v2/dev/calibration/diagnostic）交集即终止。
+    sel_shas = [(clean.get(p) or {}).get("sha256") for p in all_sel]
+    _protocol_no_leak(all_sel, [s for s in sel_shas if s], "batch3 抽样")
+
     # 建目录
     for split in ("train", "val"):
         (OUT_DIR / "images" / split).mkdir(parents=True, exist_ok=True)
@@ -249,9 +293,25 @@ def build(batch3_budget: int = 4000, val_ratio: float = 0.1, seed: int = 42,
     old_img_dir = OLD_DS / "images" / "train"
     old_lbl_dir = OLD_DS / "labels" / "train"
     old_count = 0
+    # 复核修订：旧 batch2 train 的门店码不得与 batch3 val 门店重叠（防跨批次泄漏）
+    val_stores = {store_of(p, clean) for p in val_ids}
+    b2_meta = {}
+    if B2_MANIFEST.exists():
+        try:
+            b2_meta = json.loads(B2_MANIFEST.read_text(encoding="utf-8")).get("photos", {})
+        except Exception:
+            b2_meta = {}
     if old_img_dir.exists():
         for img in old_img_dir.iterdir():
             stem = img.stem
+            # 门店重叠 fail-closed：旧文件名即 batch2 photo_id，可映射 meta.sname
+            ent = b2_meta.get(stem) or b2_meta.get(int(stem) if stem.isdigit() else stem)
+            if ent is not None:
+                sname = (ent.get("meta") or {}).get("sname")
+                if sname and sname in val_stores:
+                    raise RuntimeError(
+                        f"[protocol] 旧 batch2 train 照片 {stem} 门店 '{sname}' 与 "
+                        f"batch3 val 门店重叠，拒绝合并（RA-008）")
             src_lbl = old_lbl_dir / f"{stem}.txt"
             dst_img = OUT_DIR / "images" / "train" / f"old_{stem}.jpg"
             dst_lbl = OUT_DIR / "labels" / "train" / f"old_{stem}.txt"
@@ -263,6 +323,9 @@ def build(batch3_budget: int = 4000, val_ratio: float = 0.1, seed: int = 42,
             if src_lbl.exists() and not dst_lbl.exists():
                 dst_lbl.write_text(src_lbl.read_text(encoding="utf-8"), encoding="utf-8")
             old_count += 1
+    # 复核修订：旧数据入 train 后同样过协议检查（legacy 集仅报告）
+    old_ids = [f.stem for f in old_img_dir.iterdir()] if old_img_dir.exists() else []
+    _protocol_no_leak(old_ids, None, "旧 batch2 合并")
 
     # data.yaml
     nc = len(registry)
