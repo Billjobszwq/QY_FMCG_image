@@ -44,10 +44,11 @@
 - [x] M3 完成前全量测试重新验证
 
 ### M4 Label Studio 闭环（M3 后）
-- [ ] Label Studio 原生 1.23.0 启动（修 start_label_studio.sh 路径问题）
-- [ ] assisted / blind 项目分离
-- [ ] webhook inbox 去重 + API 对账
-- [ ] 先 10 张 E2E，再 50 张；不直接生成 2300 张
+- [x] Label Studio 原生 1.23.0 启动（修 start_label_studio.sh 路径问题）
+- [x] assisted / blind 项目分离
+- [x] webhook inbox 去重 + API 对账
+- [x] 先 10 张 E2E，再 50 张；不直接生成 2300 张
+- [ ] 人工标注/双审/仲裁（需授权，暂停中）
 
 ### M5 数据集训练治理（需授权）
 - [ ] DatasetSnapshot 契约

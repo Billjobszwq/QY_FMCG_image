@@ -3,13 +3,29 @@
 from __future__ import annotations
 
 import argparse
+import os
+from pathlib import Path
 
 import uvicorn
 
 from .build import build_app_with_bundle, build_production_bundle
 
 
+def _load_dotenv() -> None:
+    """最小 .env 加载（不覆盖已存在环境变量；不引入新依赖）。"""
+    env_file = Path(__file__).resolve().parents[2] / ".env"
+    if not env_file.is_file():
+        return
+    for line in env_file.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        k, _, v = line.partition("=")
+        os.environ.setdefault(k.strip(), v.strip())
+
+
 def main() -> None:
+    _load_dotenv()
     p = argparse.ArgumentParser(description="Unified Platform (8400)")
     p.add_argument("--host", default="127.0.0.1")
     p.add_argument("--port", type=int, default=8400)

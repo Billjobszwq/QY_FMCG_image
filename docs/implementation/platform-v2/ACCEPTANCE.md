@@ -48,3 +48,18 @@
 | 节制 | 最大节点数/循环数/超时/预算触发生效 | ✅（max_nodes/max_loops→BudgetExceeded、timeout_s→run failed，均有测试） |
 | E2E | 浏览器走完整流程并截图 | ✅（Chrome headless /tmp/pv2_evidence/m3_runs.png：两条真实 completed Run + 节点时间线渲染） |
 | 最终报告 | 按手册 §14 输出，含三冻结值 | ⏳（第一阶段任务结束时输出；当前 production_switch=false、training_started=false、deleted_files=false） |
+
+## M4 验收矩阵
+
+| 项 | 验收标准 | 结果 |
+|---|---|---|
+| LS 启动 | 修 start_label_studio.sh 路径；项目内数据目录 + 8300 固定 | ✅（1.23.0 sqlite；/health 200；`.label-studio/` 项目内） |
+| 项目/任务/prediction/annotation 同步 | 平台创建/导入/同步；对账 API | ✅（batches API + reconcile；LS API 为事实源） |
+| assisted/blind 分离 | 盲标者不可见 prediction | ✅（trial10：assisted preds=9 / blind=0；trial50：9/0；reconcile blind_no_predictions=true；TDD 红线测试） |
+| webhook inbox 去重 + 对账 | 不依赖 webhook 单点成功 | ✅（(source,event_id) UNIQUE；重放 accepted=false；真实 LS 投递接收；trial50 webhook 未达仍 consistent） |
+| 全保留 | 自动框/人工初稿/二审/仲裁/最终框 | ⏳（prediction 已保留；人工环节待授权） |
+| 错标统计 | — | ⏳（依赖人工标注数据，待授权） |
+| 分享链接 scope/有效期 | — | ⏳（LS 原生 share 未启用外部账号，待授权场景） |
+| 不可变 truebox manifest 导出 | — | ⏳（annotation 产生后导出；待授权） |
+| 10→50 张 | 先 10 张 E2E 再扩 50 张；不直接 2300 | ✅（f155180f 10+10 / 334dd7fc 50+50；真实 8091 预标注） |
+| 用户可见 | 工作台创建试验项目 → LS 标注 → 回平台看状态/导出 | ✅（标注审核页：batches/创建/导入/对账/inbox；截图 /tmp/m4_annotation*.png） |

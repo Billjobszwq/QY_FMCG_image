@@ -75,7 +75,7 @@ def test_unknown_capability_raises() -> None:
 def test_legacy_adapters_registered() -> None:
     reg = bootstrap_default_registry()
     ids = {c["capability_id"] for c in reg.capabilities()}
-    assert ids == {"legacy.recognition.v2", "legacy.training.monitor"}
+    assert ids == {"legacy.recognition.v2", "legacy.training.monitor", "legacy.label_studio"}
 
 
 # ---------- Job/Attempt 状态机 ----------
@@ -130,8 +130,8 @@ def test_capabilities_endpoint() -> None:
     assert r.status_code == 200
     body = r.json()
     ids = {c["capability_id"] for c in body["capabilities"]}
-    assert ids == {"legacy.recognition.v2", "legacy.training.monitor"}
-    assert body["count"] == 2
+    assert ids == {"legacy.recognition.v2", "legacy.training.monitor", "legacy.label_studio"}
+    assert body["count"] == 3
 
 
 # ---------- 依赖方向守卫 ----------

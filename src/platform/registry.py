@@ -76,9 +76,15 @@ class CapabilityRegistry:
 
 
 def bootstrap_default_registry(
-    recognition_adapter: Any | None = None, monitor_adapter: Any | None = None
+    recognition_adapter: Any | None = None,
+    monitor_adapter: Any | None = None,
+    label_studio_adapter: Any | None = None,
 ) -> CapabilityRegistry:
-    """注册 legacy 8091/8092 适配器为平台 Capability（M2 要求）。"""
+    """注册 legacy 8091/8092/8300 适配器为平台 Capability（M2/M4 要求）。"""
+    from .adapters.legacy.label_studio import (
+        CAPABILITY_ID as LS_CAP,
+        LabelStudioAdapter,
+    )
     from .adapters.legacy.monitor import CAPABILITY_ID as MONITOR_CAP, MonitorAdapter
     from .adapters.legacy.recognition import (
         CAPABILITY_ID as RECOGNITION_CAP,
@@ -115,5 +121,20 @@ def bootstrap_default_registry(
             ],
         ),
         adapters={MONITOR_CAP: monitor_adapter or MonitorAdapter()},
+    )
+    reg.register(
+        ModuleManifest(
+            module_id="legacy.label_studio",
+            name="Legacy Label Studio Bridge (8300)",
+            version="1.23.0",
+            capabilities=[
+                CapabilitySpec(
+                    capability_id=LS_CAP,
+                    kind="labeling",
+                    description="Label Studio 项目/任务/标注代理（HTTP 8300 REST API）",
+                )
+            ],
+        ),
+        adapters={LS_CAP: label_studio_adapter or LabelStudioAdapter()},
     )
     return reg

@@ -27,6 +27,7 @@ def build_production_bundle(
     cas_root: Path | None = None,
     recognition_adapter: Any | None = None,
     monitor_adapter: Any | None = None,
+    label_studio_adapter: Any | None = None,
     services=DEFAULT_SERVICES,
     probe=probe_service,
     engine_kwargs: dict | None = None,
@@ -35,7 +36,9 @@ def build_production_bundle(
     cas_root = cas_root or (REPO_ROOT / ".platform" / "cas")
     store = PlatformStore(db_path)
     cas = ContentAddressedStore(cas_root, store)
-    capabilities = bootstrap_default_registry(recognition_adapter, monitor_adapter)
+    capabilities = bootstrap_default_registry(
+        recognition_adapter, monitor_adapter, label_studio_adapter
+    )
 
     graphs = GraphRegistry()
     graphs.register(fmcg_pack.DEFINITION)
@@ -56,6 +59,29 @@ def build_production_bundle(
     )
 
 
+def build_labeling_router(bundle: PlatformBundle):
+    """M4：组合根唯一允许同时持有 platform 与 labeling 域的位置。"""
+    from src.modules.labeling import LabelingService
+    from src.modules.labeling.service import predictions_from_recognition
+    from src.platform.api.labeling import create_labeling_router
+
+    ls_adapter = bundle.capabilities.get("legacy.label_studio")
+    recognition = bundle.capabilities.get("legacy.recognition.v2")
+    service = LabelingService(bundle.store, ls_adapter)
+    label_config = (REPO_ROOT / "configs/label-studio/label_config.xml").read_text(
+        encoding="utf-8"
+    )
+
+    def builder(photos):
+        return predictions_from_recognition(
+            recognition, photos, model_version="legacy.recognition.v2@cascade_v3"
+        )
+
+    return create_labeling_router(
+        service, label_config=label_config, prediction_builder=builder
+    )
+
+
 def build_app_with_bundle(
     bundle: PlatformBundle | None = None,
     *,
@@ -68,4 +94,5 @@ def build_app_with_bundle(
         probe=probe,
         web_dist=web_dist if web_dist is not None else (REPO_ROOT / "web" / "dist"),
         bundle=bundle,
+        labeling_router=build_labeling_router(bundle) if bundle is not None else None,
     )

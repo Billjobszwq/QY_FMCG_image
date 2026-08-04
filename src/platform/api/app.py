@@ -38,6 +38,7 @@ def create_app(
     monitor_adapter: MonitorAdapter | None = None,
     registry: CapabilityRegistry | None = None,
     bundle: PlatformBundle | None = None,
+    labeling_router=None,
 ) -> FastAPI:
     app = FastAPI(
         title="Unified Platform API",
@@ -63,6 +64,10 @@ def create_app(
     # ---- W9/W10 Graph Runs（组合根注入 bundle 时启用）----
     if bundle is not None:
         app.include_router(create_runs_router(bundle))
+
+    # ---- M4 Label Studio 闭环（组合根注入 router 时启用）----
+    if labeling_router is not None:
+        app.include_router(labeling_router)
 
     @app.get("/api/v1/health")
     def health():

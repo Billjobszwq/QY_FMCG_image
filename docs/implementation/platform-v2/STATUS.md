@@ -5,11 +5,11 @@
 
 | 项 | 值 |
 |---|---|
-| 当前状态 | M3 完成（b7513dc），进入 M4 Label Studio 闭环 |
-| 当前 HEAD | b7513dc（feat/usable-platform-foundation） |
+| 当前状态 | M4 机械闭环完成（10+50 张 E2E、分离/去重/对账验证），人工标注待授权 |
+| 当前 HEAD | b31d67e + M4 未提交变更（feat/usable-platform-foundation） |
 | 分支 | `feat/usable-platform-foundation` |
 | 基线 commit | `c9998af`（feat/sam-reannotation） |
-| 基线测试 | 170 passed；M3 验收后全量 **265 passed**（3.58s） |
+| 基线测试 | 170 passed；M4 后全量 **274 passed**（3.58s） |
 | 生产 bundle | `prod_20260804_v4_r2`（16 文件校验通过，不修改） |
 | production_switch | **false**（冻结） |
 | training_started | **false**（冻结） |
@@ -23,10 +23,10 @@
 | 8091 | recognize（/v2，cascade_v3，bundle prod_20260804_v4_r2） | ✅ UP |
 | 8092 | monitor（/api/live，看门狗守护） | ✅ UP |
 | 8455 | omlx（内部，需 API key） | ✅ 进程在（/ 返回 404） |
-| 8300 | Label Studio | ⛔ DOWN（M4 处理） |
+| 8300 | Label Studio 1.23.0（sqlite，项目内数据目录） | ✅ UP |
 | 8301 | LS ml-backend | ⛔ DOWN（M4 处理） |
 | 8304 | orchestrator | ⛔ DOWN |
-| 8400 | 统一平台 | ✅ UP（degraded：8300/8301 DOWN） |
+| 8400 | 统一平台 | ✅ UP（degraded：ml_backend/8301 不可用，非关键） |
 
 ## 里程碑状态
 
@@ -36,7 +36,7 @@
 | M1 统一 Web Shell | DONE（97020d6 → 54cac63 → 2d9a4ef，198 passed） |
 | M2 最小可信 Foundation | DONE（46d2f25 → 1dc4cc8，243 passed） |
 | M3 第一条真实 Graph | DONE（fb55084 → 7afa0bf → 7450d23 → b7513dc，265 passed） |
-| M4 Label Studio 闭环 | IN_PROGRESS |
+| M4 Label Studio 闭环 | IN_PROGRESS（机械闭环完成；人工标注待授权） |
 | M5 数据集训练治理 | PENDING（训练需显式授权） |
 | M6 PostgreSQL + 可靠 Worker | PENDING |
 | M7 后续 Domain Pack | PENDING |

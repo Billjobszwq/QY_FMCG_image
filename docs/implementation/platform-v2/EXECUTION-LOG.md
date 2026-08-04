@@ -80,3 +80,26 @@
 ## M3 验收结论
 
 - 九项验收全过（见 ACCEPTANCE.md M3 矩阵；最终 §14 报告于任务结束时输出）→ **M3 DONE**
+
+## M4 Label Studio 闭环（W12–W13）
+
+| # | 命令 | 退出码 | 耗时 | 结果摘要 |
+|---|---|---|---|---|
+| 1 | 修 `scripts/start_label_studio.sh`（cd 上跳一级 + `DJANGO_DB=sqlite`）后启动 | 0 | ~20s | LS 1.23.0 原生启动，8300 /health 200；数据目录项目内 `.label-studio/`；admin@qy.local；legacy token 有效 |
+| 2 | `legacy.label_studio` capability 注册 + health adapter | 0 | — | capabilities=3；/api/v1/health label_studio=healthy |
+| 3 | M4 TDD `tests/platform/test_m4_labeling.py` | 0 | 0.38s | 9 测试全绿：双项目+webhook / blind 0 prediction 红线 / webhook 去重 / 对账一致与丢失检测 / API E2E |
+| 4 | 全量回归（修 sqlite WAL 并发后） | 0 | 3.58s | **274 passed**；修复点：`sqlite3.connect(autocommit=True)` 消除隐式长读事务阻塞写者（"database is locked"） |
+| 5 | 实测 LS 1.23 import：单次 multipart 仅收一个文件 part | 0 | — | adapter `import_files` 改逐文件循环导入 |
+| 6 | 实测 LS 1.23 prediction 端点 | 0 | — | `POST /api/tasks/{id}/predictions/` 404 → 改 `POST /api/predictions/`（task 在 body） |
+| 7 | 实测 prediction result 校验 | 0 | — | 嵌套 list 触发 400 "Each item in prediction result…" → `import_photos` 展平修复 + Fake 守卫断言 |
+| 8 | 10 张 E2E：`POST /api/v1/labeling/batches` + import（9 张 .field 命中 + 1 张对照） | 0 | 22s | batch f155180f：assisted#10/blind#11 各 10 task；predictions_written=9（真实 8091 识别）；blind preds=0（红线）；reconcile consistent=true、blind_no_predictions=true |
+| 9 | webhook 去重实测（重复投递同 payload） | 0 | — | accepted=true → false；event_id 相同；inbox 保留 1 条真实 LS 事件（TASKS_CREATED proj 10，LS 主动投递确认） |
+| 10 | Web 标注审核页升级（batches/创建/导入/对账/inbox） | 0 | 0.8s | `tsc --noEmit` 0 + `vite build` 387ms；Chrome headless 截图 /tmp/m4_annotation*.png：双 batch 渲染、reconciled 状态、LS 项目链接 |
+| 11 | 50 张扩展：batch M4-trial50 import（9 field + 41 照片1107 对照） | 0 | 111s | batch 334dd7fc：assisted#12/blind#13 各 50 task；predictions_written=9；blind preds=0；reconcile consistent=true |
+| 12 | 观察：LS webhook 异步 best-effort | — | — | trial10 TASKS_CREATED 到达；trial50 窗口内未达 → 对账以 LS API 为事实源，不依赖 webhook 单点（设计目标验证） |
+| 13 | M4 全量回归 | 0 | 3.58s | **274 passed** |
+
+### M4 事实记录
+
+- 当前模型（cascade_v3 / prod_20260804_v4_r2）仅对三得利货架场景（.field 9 张）有检出；照片1106/1107/百事&可口 在 conf 0.25 与 0.1 均 0 检出 → 50 张 batch 中 41 张为"无预标注对照"，如实呈现模型覆盖；扩充训练数据属 M5。
+- 人工标注/双审/仲裁未执行：按红线暂停请求授权。

@@ -157,6 +157,84 @@ export async function approveRun(
   return r.json();
 }
 
+// ---------- labeling (M4) ----------
+
+export interface LabelingBatch {
+  batch_id: string;
+  name: string;
+  assisted_project_id: number | null;
+  blind_project_id: number | null;
+  task_count: number;
+  status: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ReconcileProject {
+  project_id: number | null;
+  tasks: number;
+  annotations_api: number;
+  predictions_api: number;
+  inbox_events: number;
+  inbox_annotation_events: number;
+  consistent: boolean;
+}
+
+export interface ReconcileReport {
+  batch_id: string;
+  projects: { assisted: ReconcileProject; blind: ReconcileProject };
+  consistent: boolean;
+  blind_no_predictions: boolean;
+}
+
+export async function fetchLabelingBatches(): Promise<{ count: number; batches: LabelingBatch[] }> {
+  const r = await fetch("/api/v1/labeling/batches");
+  if (!r.ok) throw new Error(`labeling batches HTTP ${r.status}`);
+  return r.json();
+}
+
+export async function createLabelingBatch(name: string): Promise<{ batch: LabelingBatch }> {
+  const r = await fetch("/api/v1/labeling/batches", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ name }),
+  });
+  if (!r.ok) {
+    const d = await r.json().catch(() => ({}));
+    throw new Error(d.detail ?? `create batch HTTP ${r.status}`);
+  }
+  return r.json();
+}
+
+export async function importLabelingFiles(
+  batchId: string,
+  files: File[]
+): Promise<Record<string, unknown>> {
+  const form = new FormData();
+  for (const f of files) form.append("files", f);
+  const r = await fetch(`/api/v1/labeling/batches/${batchId}/import`, {
+    method: "POST",
+    body: form,
+  });
+  if (!r.ok) {
+    const d = await r.json().catch(() => ({}));
+    throw new Error(d.detail ?? `import HTTP ${r.status}`);
+  }
+  return r.json();
+}
+
+export async function fetchReconcile(batchId: string): Promise<ReconcileReport> {
+  const r = await fetch(`/api/v1/labeling/batches/${batchId}/reconcile`);
+  if (!r.ok) throw new Error(`reconcile HTTP ${r.status}`);
+  return r.json();
+}
+
+export async function fetchLabelingInbox(): Promise<{ count: number }> {
+  const r = await fetch("/api/v1/labeling/inbox");
+  if (!r.ok) throw new Error(`inbox HTTP ${r.status}`);
+  return r.json();
+}
+
 export async function recognizeFile(file: File, conf = 0.25): Promise<RecognitionResult> {
   const form = new FormData();
   form.append("file", file);

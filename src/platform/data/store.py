@@ -135,8 +135,35 @@ CREATE TABLE IF NOT EXISTS asset (
 );
 """
 
+_M002 = """
+CREATE TABLE IF NOT EXISTS labeling_batch (
+    batch_id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    assisted_project_id INTEGER,
+    blind_project_id INTEGER,
+    task_count INTEGER NOT NULL DEFAULT 0,
+    status TEXT NOT NULL DEFAULT 'created'
+        CHECK (status IN ('created','imported','annotating','reconciled','closed')),
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS webhook_event (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    source TEXT NOT NULL,
+    event_id TEXT NOT NULL,
+    action TEXT NOT NULL,
+    project_id INTEGER,
+    task_id INTEGER,
+    payload_json TEXT NOT NULL,
+    received_at TEXT NOT NULL,
+    UNIQUE (source, event_id)
+);
+"""
+
 MIGRATIONS: tuple[tuple[str, str], ...] = (
     ("001_platform_init", _M001),
+    ("002_labeling_inbox", _M002),
 )
 
 
@@ -164,10 +191,13 @@ class PlatformStore:
         self.apply_migrations()
 
     def _make_conn(self) -> sqlite3.Connection:
-        c = sqlite3.connect(str(self._path), timeout=15)
+        # autocommit 模式：避免隐式长读事务在 WAL 下阻塞其他连接的写者；
+        # 写路径每条语句自提交（本库写操作均为单语句）。
+        c = sqlite3.connect(str(self._path), timeout=15, autocommit=True)
         c.row_factory = sqlite3.Row
         c.execute("PRAGMA foreign_keys=ON")
         c.execute("PRAGMA busy_timeout=15000")
+        c.execute("PRAGMA journal_mode=WAL")
         return c
 
     @property
@@ -554,6 +584,103 @@ class PlatformStore:
             "SELECT * FROM evidence_bundle WHERE run_id=? ORDER BY created_at", (run_id,)
         ).fetchall()
         return [dict(r) for r in rows]
+
+    # ---------- labeling batch / webhook inbox (M4) ----------
+
+    def create_labeling_batch(
+        self,
+        *,
+        batch_id: str,
+        name: str,
+        assisted_project_id: int | None,
+        blind_project_id: int | None,
+        task_count: int = 0,
+    ) -> dict[str, Any]:
+        now = _utcnow()
+        try:
+            self._conn.execute(
+                "INSERT INTO labeling_batch(batch_id, name, assisted_project_id,"
+                " blind_project_id, task_count, status, created_at, updated_at)"
+                " VALUES (?,?,?,?,?,?,?,?)",
+                (batch_id, name, assisted_project_id, blind_project_id,
+                 task_count, "created", now, now),
+            )
+        except sqlite3.IntegrityError as e:
+            raise StoreError(f"labeling batch 已存在: {batch_id}") from e
+        self._conn.commit()
+        return self.get_labeling_batch(batch_id)
+
+    def get_labeling_batch(self, batch_id: str) -> dict[str, Any]:
+        row = self._conn.execute(
+            "SELECT * FROM labeling_batch WHERE batch_id=?", (batch_id,)
+        ).fetchone()
+        if row is None:
+            raise StoreError(f"labeling batch 不存在: {batch_id}")
+        return dict(row)
+
+    def list_labeling_batches(self) -> list[dict[str, Any]]:
+        rows = self._conn.execute(
+            "SELECT * FROM labeling_batch ORDER BY created_at DESC"
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+    _BATCH_FIELDS = {"name", "assisted_project_id", "blind_project_id", "task_count", "status"}
+
+    def update_labeling_batch(self, batch_id: str, **fields: Any) -> dict[str, Any]:
+        unknown = set(fields) - self._BATCH_FIELDS
+        if unknown:
+            raise StoreError(f"未知 labeling batch 字段: {sorted(unknown)}")
+        if not fields:
+            return self.get_labeling_batch(batch_id)
+        sets = ", ".join(f"{k}=?" for k in fields)
+        cur = self._conn.execute(
+            f"UPDATE labeling_batch SET {sets}, updated_at=? WHERE batch_id=?",
+            (*fields.values(), _utcnow(), batch_id),
+        )
+        if cur.rowcount == 0:
+            raise StoreError(f"labeling batch 不存在: {batch_id}")
+        self._conn.commit()
+        return self.get_labeling_batch(batch_id)
+
+    def record_webhook_event(
+        self,
+        *,
+        source: str,
+        event_id: str,
+        action: str,
+        project_id: int | None = None,
+        task_id: int | None = None,
+        payload: dict[str, Any] | None = None,
+    ) -> bool:
+        """幂等收件箱：(source, event_id) 重复时返回 False，不重复写入。"""
+        try:
+            self._conn.execute(
+                "INSERT INTO webhook_event(source, event_id, action, project_id,"
+                " task_id, payload_json, received_at) VALUES (?,?,?,?,?,?,?)",
+                (source, event_id, action, project_id, task_id,
+                 json.dumps(payload or {}, ensure_ascii=False), _utcnow()),
+            )
+        except sqlite3.IntegrityError:
+            return False
+        self._conn.commit()
+        return True
+
+    def list_webhook_events(
+        self, *, source: str | None = None, project_id: int | None = None
+    ) -> list[dict[str, Any]]:
+        sql = "SELECT * FROM webhook_event"
+        cond: list[str] = []
+        args: list[Any] = []
+        if source is not None:
+            cond.append("source=?")
+            args.append(source)
+        if project_id is not None:
+            cond.append("project_id=?")
+            args.append(project_id)
+        if cond:
+            sql += " WHERE " + " AND ".join(cond)
+        sql += " ORDER BY id"
+        return [dict(r) for r in self._conn.execute(sql, args).fetchall()]
 
     # ---------- backup ----------
 
