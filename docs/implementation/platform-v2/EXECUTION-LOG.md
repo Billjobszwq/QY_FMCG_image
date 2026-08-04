@@ -210,3 +210,10 @@
 - UMT-001～008 全部落地（008 文档一致性由 U0 承担）；U1-001～009 全 DONE。
 - 三冻结值保持：production_switch=false、training_started=false、deleted_files=false。
 - 下一步：U2 统一管理 MVP（角色首页/统一任务中心/真实数据中心）。
+
+## U2 统一管理 MVP（进行中）
+
+| # | 事项 | 退出码 | 结果摘要 |
+|---|---|---|---|
+| 1 | U2-1：红测试 `tests/platform/test_u2_workitems.py` 5 项 RED → 实现 → 全绿 | 0 | 新增 `src/platform/api/workitems.py`：聚合真实来源（PLATFORM_REVIEW_QUEUE 默认 `.review_queue/review_queue_diag_v1.json` 250 pending 审核 + list_training_runs + jobs queued/running/failed + labeling 批次）；summary 含 pending_review/todos/active/blocked/next_steps；Overview.tsx 改角色首页（待办/审核/活动/阻断卡片 + 阻断横幅 + 下一步 + 任务列表，15s 轮询）；真实库 GET /api/v1/workitems 返回 256 条（250 审核+4 训练+2 标注）；浏览器 E2E：254 待办/250 审核/阻断横幅正确，截图 `.eval/workbench_home_*.png`；全量 **356 passed + 1 skipped**；提交 **516042b** |
+| 2 | U2-3：红测试 `tests/platform/test_u2_recognition_tasks.py` 6 项 RED → 实现 → 全绿 | 0 | migration 008 recognition_task 表 + store create/get/list_recognition_task；新增 `src/platform/api/recognition_tasks.py`：run_recognition_batch 四入口共享服务层（单文件/批量 upload、URL、API/Agent 同端点，身份来自服务端 session）；MAX 32 文件/25MB；RecognitionAdapterError 收集 errors；Recognition.tsx 四分区（单文件即时/批量/URL/任务历史）；浏览器 E2E：真实照片（照片1106/1.jpg+2.jpg）批量识别 200（entry=batch_file/completed/admin/耗时 294ms/bundle prod_20260804_v4_r2，检出 0 属近景 fail-closed 正常），截图 `.eval/recognition_unified_batch_verify.png`；全量 **362 passed + 1 skipped**；提交 **fc4ddfe** |

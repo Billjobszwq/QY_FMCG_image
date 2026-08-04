@@ -6,11 +6,11 @@
 
 | 项 | 值 |
 |---|---|
-| 当前状态 | U0 治理 + U1 训练真实性 P0 全部完成（UMT-001～008 + 前端登录/训练页分区，HEAD 87f16d5）；训练仍 NO-GO（待 G 门禁机器证据与真实 Snapshot）；下一步 U2 统一管理 MVP |
+| 当前状态 | U0+U1 全部完成；U2 进行中：U2-1 角色首页/统一任务中心 DONE（516042b）、U2-3 识别统一 DONE（fc4ddfe）；下一步 U2-5 幂等键+分页、U2-4 业务语言；训练仍 NO-GO |
 | 当前 HEAD | 分支基点 `9db9946`；实时值以 `git rev-parse HEAD` 为准 |
 | 分支 | `feat/unified-workbench-training-readiness`（基于 `9db9946`，审计文档改动随本分支提交） |
 | 任务清单 | `docs/implementation/platform-v2/IMPLEMENTATION-LIST.md`（U0–U5/T0–T2 逐项：ID/依赖/Owner/状态/测试/证据/Commit） |
-| 基线测试 | **351 passed，1 skipped**（主机 miniconda python3，U1-009 后全量回归） |
+| 基线测试 | **362 passed，1 skipped**（主机 miniconda python3，U2-3 后全量回归） |
 | 生产 bundle | `prod_20260804_v4_r2`（16 文件校验通过，不修改） |
 | production_switch | **false**（冻结） |
 | training_started | **false**（冻结） |
@@ -41,7 +41,7 @@
 | M4 Label Studio 闭环 | PARTIAL（机械对账 f42f882；人工标注/双审/仲裁/final box 未完成） |
 | M5 数据集训练治理 | **REOPENED / NO-GO**（UMT-001～008 代码修复全部落地并测试；尚缺真实 Snapshot、人工 truebox 与 G 门禁机器证据） |
 | M6 PostgreSQL + 可靠 Worker | DONE（49172d5 + PG 演练；生产切换待独立授权） |
-| U2 统一管理 MVP | **NEXT**（当前只有 7 页开发者 Shell + 登录/训练分区，无统一待办/资产/真实训练作业） |
+| U2 统一管理 MVP | **进行中**：U2-1（workitems 聚合真实来源 256 条 + 角色首页）与 U2-3（识别四入口统一任务）DONE；待 U2-2/U2-4/U2-5 |
 | U3/U4 全照片与 SAM 审核 | PENDING（250 审核项全部 pending；qa_v3 仅 120 张） |
 | U5 Graph+Loop v2 | PENDING（当前 Kernel 是 fixed sequential for-loop） |
 | T0/T1/T2 训练 | BLOCKED（P0 修复后仅授权 1ep smoke + 3ep pilot） |

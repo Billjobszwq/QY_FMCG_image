@@ -32,9 +32,9 @@
 
 | ID | 目标 | 依赖 | Owner | 状态 | 测试 | 证据 | Commit | 剩余风险 |
 |---|---|---|---|---|---|---|---|---|
-| U2-1 | 统一 WorkItem/Task API + 角色首页（我的待办/活动任务/阻断/下一步/负责人/异常） | U1 | agent | TODO | API 测试 + 截图 | 浏览器 E2E | — | — |
+| U2-1 | 统一 WorkItem/Task API + 角色首页（我的待办/活动任务/阻断/下一步/负责人/异常） | U1 | agent | DONE | `tests/platform/test_u2_workitems.py`（5 红→绿）+ tsc/build | workitems.py 聚合真实来源（.review_queue 250 pending/训练 run/Job/标注批次）；Overview 改角色首页；真实库 254 待办/阻断横幅；截图 .eval/workbench_home_*.png；全量 356 passed | 516042b | 任务列表分页待 U2-5 |
 | U2-2 | 数据中心接真实 Asset/CAS/质量/血缘/审核/冻结；移除"CAS 未启用"假状态 | U3-台账可用 | agent | TODO | 截图 | 真实 CAS blob 数 | — | — |
-| U2-3 | 识别统一：单文件/批量/URL/API/Agent 共用 RecognitionTask 服务层 | U2-1 | agent | TODO | API E2E | 四入口同任务历史 | — | — |
+| U2-3 | 识别统一：单文件/批量/URL/API/Agent 共用 RecognitionTask 服务层 | U2-1 | agent | DONE | `tests/platform/test_u2_recognition_tasks.py`（6 红→绿）+ tsc | migration 008 recognition_task；run_recognition_batch 四入口共享服务层（upload/url/API/Agent，身份来自服务端 session）；Recognition.tsx 四分区；真实照片批量识别 E2E 截图 .eval/recognition_unified_batch_verify.png；全量 362 passed | fc4ddfe | — |
 | U2-4 | 标注/审核/训练/识别/Graph Run 统一任务状态词汇；业务语言默认、技术字段折叠 | U2-1 | agent | TODO | 截图 | 普通用户 E2E | — | — |
 | U2-5 | 写操作幂等键 + 分页筛选（UMT-109） | U2-1 | agent | TODO | 幂等测试 | 重复请求返回同任务 | — | — |
 
