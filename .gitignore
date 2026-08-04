@@ -79,3 +79,7 @@ yolov8n.pt
 .DS_Store
 .idea/
 .vscode/
+
+# web shell
+web/node_modules/
+web/dist/
