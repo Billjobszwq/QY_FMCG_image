@@ -87,8 +87,11 @@ def build_training_router(bundle: PlatformBundle):
     """M5：组合根唯一允许同时持有 platform 与 training_gov 域的位置。"""
     from src.modules.training_gov import TrainingGovernanceService
     from src.platform.api.training import create_training_router
+    from src.platform.auth import AuthService
 
-    return create_training_router(TrainingGovernanceService(bundle.store))
+    return create_training_router(
+        TrainingGovernanceService(bundle.store),
+        auth=AuthService(bundle.store))
 
 
 def build_jobs_router(bundle: PlatformBundle):
@@ -96,6 +99,7 @@ def build_jobs_router(bundle: PlatformBundle):
     from datetime import datetime, timezone
 
     from src.platform.api.jobs import create_jobs_router
+    from src.platform.auth import AuthService
     from src.platform.worker import RecoverableJobWorker
 
     def _echo(ctx):
@@ -111,13 +115,14 @@ def build_jobs_router(bundle: PlatformBundle):
         max_concurrent=int(os.environ.get("PLATFORM_WORKER_MAX_CONCURRENT", "2")),
         lease_seconds=int(os.environ.get("PLATFORM_WORKER_LEASE_SECONDS", "300")),
     )
-    return worker, create_jobs_router(worker)
+    return worker, create_jobs_router(worker, auth=AuthService(bundle.store))
 
 
 def build_share_router(bundle: PlatformBundle):
     from src.platform.api.jobs import create_share_router
+    from src.platform.auth import AuthService
 
-    return create_share_router(bundle.store)
+    return create_share_router(bundle.store, auth=AuthService(bundle.store))
 
 
 def build_app_with_bundle(

@@ -233,12 +233,24 @@ ALTER TABLE dataset_snapshot ADD COLUMN trainable INTEGER NOT NULL DEFAULT 1;
 ALTER TABLE dataset_snapshot ADD COLUMN status_note TEXT NOT NULL DEFAULT '';
 """
 
+_M006 = """
+CREATE TABLE IF NOT EXISTS auth_sessions (
+    session_id TEXT PRIMARY KEY,
+    actor TEXT NOT NULL,
+    role TEXT NOT NULL,
+    csrf_token TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    expires_at TEXT NOT NULL
+);
+"""
+
 MIGRATIONS: tuple[tuple[str, str], ...] = (
     ("001_platform_init", _M001),
     ("002_labeling_inbox", _M002),
     ("003_training_gov", _M003),
     ("004_recoverable_worker", _M004),
     ("005_snapshot_trainable", _M005),
+    ("006_auth_sessions", _M006),
 )
 
 
@@ -990,6 +1002,31 @@ class PlatformStore:
                updated_by=excluded.updated_by""",
             (flag, value, _utcnow(), actor),
         )
+
+    # ---------- auth session（UMT-006） ----------
+
+    def create_auth_session(
+        self, *, session_id: str, actor: str, role: str,
+        csrf_token: str, created_at: str, expires_at: str,
+    ) -> None:
+        self._conn.execute(
+            """INSERT INTO auth_sessions
+               (session_id, actor, role, csrf_token, created_at, expires_at)
+               VALUES (?,?,?,?,?,?)""",
+            (session_id, actor, role, csrf_token, created_at, expires_at),
+        )
+        self._conn.commit()
+
+    def get_auth_session(self, session_id: str) -> dict[str, Any] | None:
+        row = self._conn.execute(
+            "SELECT * FROM auth_sessions WHERE session_id=?",
+            (session_id,)).fetchone()
+        return dict(row) if row else None
+
+    def delete_auth_session(self, session_id: str) -> None:
+        self._conn.execute(
+            "DELETE FROM auth_sessions WHERE session_id=?", (session_id,))
+        self._conn.commit()
 
     # ---------- backup ----------
 

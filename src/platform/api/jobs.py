@@ -11,8 +11,10 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter, Header, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
+
+from src.platform.auth import AuthService, require_principal
 
 
 class JobSubmitBody(BaseModel):
@@ -21,7 +23,8 @@ class JobSubmitBody(BaseModel):
     max_attempts: int = 3
 
 
-def create_jobs_router(worker: Any) -> APIRouter:
+def create_jobs_router(worker: Any,
+                       auth: AuthService | None = None) -> APIRouter:
     router = APIRouter()
 
     @router.get("/api/v1/jobs")
@@ -30,10 +33,8 @@ def create_jobs_router(worker: Any) -> APIRouter:
         return {"stats": worker.stats(), "count": len(jobs), "jobs": jobs}
 
     @router.post("/api/v1/jobs")
-    def submit_job(
-        body: JobSubmitBody,
-        x_actor: str | None = Header(default=None),
-    ):
+    def submit_job(body: JobSubmitBody, request: Request):
+        p = require_principal(auth, request)
         if body.kind not in worker._handlers:
             raise HTTPException(status_code=400, detail=f"未注册 kind: {body.kind}")
         if not 1 <= body.max_attempts <= 10:
@@ -42,7 +43,7 @@ def create_jobs_router(worker: Any) -> APIRouter:
             body.kind, body.payload, max_attempts=body.max_attempts
         )
         worker._store.append_audit(
-            actor=x_actor or "api", action="job.submit",
+            actor=p["actor"], action="job.submit",
             subject_type="job", subject_id=job_id,
             detail={"kind": body.kind},
         )
@@ -62,15 +63,13 @@ def create_jobs_router(worker: Any) -> APIRouter:
         return {"job": job, "attempts": worker._store.list_attempts(job_id)}
 
     @router.post("/api/v1/jobs/{job_id}/cancel")
-    def cancel_job(
-        job_id: str,
-        x_actor: str | None = Header(default=None),
-    ):
+    def cancel_job(job_id: str, request: Request):
+        p = require_principal(auth, request)
         try:
             worker._store.get_job(job_id)
         except Exception:
             raise HTTPException(status_code=404, detail="job 不存在")
-        ok = worker.cancel(job_id, actor=x_actor or "api")
+        ok = worker.cancel(job_id, actor=p["actor"])
         if not ok:
             raise HTTPException(
                 status_code=409, detail="仅 queued 状态可取消（running 靠 lease 回收）"
@@ -86,24 +85,23 @@ class ShareBody(BaseModel):
     ttl_seconds: int = 3600
 
 
-def create_share_router(store: Any) -> APIRouter:
+def create_share_router(store: Any,
+                        auth: AuthService | None = None) -> APIRouter:
     router = APIRouter()
 
     @router.post("/api/v1/shares")
-    def create_share(
-        body: ShareBody,
-        x_actor: str | None = Header(default=None),
-    ):
+    def create_share(body: ShareBody, request: Request):
+        p = require_principal(auth, request)
         if not body.scope or not 60 <= body.ttl_seconds <= 7 * 24 * 3600:
             raise HTTPException(
                 status_code=400, detail="scope 必填；ttl 限 60s–7d"
             )
         tok = store.create_share_token(
             scope=body.scope, subject_id=body.subject_id,
-            ttl_seconds=body.ttl_seconds, created_by=x_actor or "api",
+            ttl_seconds=body.ttl_seconds, created_by=p["actor"],
         )
         store.append_audit(
-            actor=x_actor or "api", action="share.create",
+            actor=p["actor"], action="share.create",
             subject_type="share_token", subject_id=tok["token"][:8],
             detail={"scope": body.scope, "ttl_seconds": body.ttl_seconds},
         )
@@ -121,15 +119,13 @@ def create_share_router(store: Any) -> APIRouter:
                 "expires_at": row["expires_at"]}
 
     @router.post("/api/v1/shares/{token}/revoke")
-    def revoke_share(
-        token: str,
-        x_actor: str | None = Header(default=None),
-    ):
+    def revoke_share(token: str, request: Request):
+        p = require_principal(auth, request)
         ok = store.revoke_share_token(token)
         if not ok:
             raise HTTPException(status_code=404, detail="token 不存在")
         store.append_audit(
-            actor=x_actor or "api", action="share.revoke",
+            actor=p["actor"], action="share.revoke",
             subject_type="share_token", subject_id=token[:8],
         )
         return {"revoked": True}

@@ -1,23 +1,20 @@
 """M5：训练治理 API（snapshot/gates/dry-run/授权/发布分离）。
 
 平台只承载 HTTP 边界；治理逻辑在 src/modules/training_gov（经组合根注入）。
-角色经 X-Actor/X-Role 头传递（本机单租户最小 IAM，fail-closed）。
 UMT-003：Snapshot 只能由服务端 builder 生成，不再接受客户端自由
 manifest JSON；注册入口返回 410，改用 /snapshots/build。
+UMT-006：写端点只信任服务端登录 session + CSRF token；X-Actor/X-Role
+头不再作为身份依据（禁止客户端自证）。
 """
 
 from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter, Header, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 
-
-def _actor_role(
-    x_actor: str | None, x_role: str | None
-) -> tuple[str, str]:
-    return (x_actor or "web-operator", x_role or "operator")
+from src.platform.auth import AuthService, require_principal
 
 
 class SnapshotBody(BaseModel):
@@ -51,7 +48,7 @@ class BuildSnapshotBody(BaseModel):
 class DryRunBody(BaseModel):
     snapshot_id: str
     epochs: int = 3
-    imgsz: int = 1280
+    imgsz: int = 960
     device: str = "mps"
     budget_minutes: int = 60
     stop_lines: list[str] | None = None
@@ -61,7 +58,8 @@ class AuthorizeBody(BaseModel):
     value: bool
 
 
-def create_training_router(service: Any) -> APIRouter:
+def create_training_router(service: Any,
+                           auth: AuthService | None = None) -> APIRouter:
     router = APIRouter()
 
     @router.get("/api/v1/training/gates")
@@ -83,12 +81,8 @@ def create_training_router(service: Any) -> APIRouter:
                     "POST /api/v1/training/snapshots/build"))
 
     @router.post("/api/v1/training/snapshots/build")
-    def build_snapshot(
-        body: BuildSnapshotBody,
-        x_actor: str | None = Header(default=None),
-        x_role: str | None = Header(default=None),
-    ):
-        actor, _role = _actor_role(x_actor, x_role)
+    def build_snapshot(body: BuildSnapshotBody, request: Request):
+        p = require_principal(auth, request)
         import os
         from pathlib import Path
         datasets_root = Path(os.environ.get(
@@ -97,7 +91,7 @@ def create_training_router(service: Any) -> APIRouter:
             out = service.build_and_register_snapshot(
                 body.name, body.version, body.mode,
                 [e.model_dump() for e in body.entries],
-                actor=actor, datasets_root=datasets_root,
+                actor=p["actor"], datasets_root=datasets_root,
                 protocol_dir=(Path(body.protocol_dir)
                               if body.protocol_dir else None))
         except Exception as e:
@@ -110,15 +104,11 @@ def create_training_router(service: Any) -> APIRouter:
         return {"count": len(runs), "runs": runs}
 
     @router.post("/api/v1/training/runs/dry-run")
-    def dry_run(
-        body: DryRunBody,
-        x_actor: str | None = Header(default=None),
-        x_role: str | None = Header(default=None),
-    ):
-        actor, _role = _actor_role(x_actor, x_role)
+    def dry_run(body: DryRunBody, request: Request):
+        p = require_principal(auth, request)
         try:
             run = service.dry_run(
-                body.snapshot_id, actor=actor, epochs=body.epochs,
+                body.snapshot_id, actor=p["actor"], epochs=body.epochs,
                 imgsz=body.imgsz, device=body.device,
                 budget_minutes=body.budget_minutes, stop_lines=body.stop_lines,
             )
@@ -129,27 +119,21 @@ def create_training_router(service: Any) -> APIRouter:
         return {"run": run}
 
     @router.post("/api/v1/training/authorize")
-    def authorize(
-        body: AuthorizeBody,
-        x_actor: str | None = Header(default=None),
-        x_role: str | None = Header(default=None),
-    ):
-        actor, role = _actor_role(x_actor, x_role)
+    def authorize(body: AuthorizeBody, request: Request):
+        p = require_principal(auth, request)
         try:
-            service.set_training_authorized(body.value, actor=actor, role=role)
+            service.set_training_authorized(
+                body.value, actor=p["actor"], role=p["role"])
         except Exception as e:
             raise HTTPException(status_code=403, detail=str(e))
-        return {"training_authorized": body.value, "actor": actor}
+        return {"training_authorized": body.value, "actor": p["actor"]}
 
     @router.post("/api/v1/training/runs/{run_id}/start")
-    def start(
-        run_id: str,
-        x_actor: str | None = Header(default=None),
-        x_role: str | None = Header(default=None),
-    ):
-        actor, role = _actor_role(x_actor, x_role)
+    def start(run_id: str, request: Request):
+        p = require_principal(auth, request)
         try:
-            run = service.start_training(run_id, actor=actor, role=role)
+            run = service.start_training(
+                run_id, actor=p["actor"], role=p["role"])
         except KeyError:
             raise HTTPException(status_code=404, detail="run 不存在")
         except Exception as e:
@@ -157,14 +141,11 @@ def create_training_router(service: Any) -> APIRouter:
         return {"run": run}
 
     @router.post("/api/v1/training/runs/{run_id}/publish/request")
-    def publish_request(
-        run_id: str,
-        x_actor: str | None = Header(default=None),
-        x_role: str | None = Header(default=None),
-    ):
-        actor, role = _actor_role(x_actor, x_role)
+    def publish_request(run_id: str, request: Request):
+        p = require_principal(auth, request)
         try:
-            run = service.request_publish(run_id, actor=actor, role=role)
+            run = service.request_publish(
+                run_id, actor=p["actor"], role=p["role"])
         except KeyError:
             raise HTTPException(status_code=404, detail="run 不存在")
         except Exception as e:
@@ -172,14 +153,11 @@ def create_training_router(service: Any) -> APIRouter:
         return {"run": run}
 
     @router.post("/api/v1/training/runs/{run_id}/publish/approve")
-    def publish_approve(
-        run_id: str,
-        x_actor: str | None = Header(default=None),
-        x_role: str | None = Header(default=None),
-    ):
-        actor, role = _actor_role(x_actor, x_role)
+    def publish_approve(run_id: str, request: Request):
+        p = require_principal(auth, request)
         try:
-            run = service.approve_publish(run_id, actor=actor, role=role)
+            run = service.approve_publish(
+                run_id, actor=p["actor"], role=p["role"])
         except KeyError:
             raise HTTPException(status_code=404, detail="run 不存在")
         except Exception as e:

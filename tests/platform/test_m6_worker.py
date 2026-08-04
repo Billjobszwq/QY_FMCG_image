@@ -320,9 +320,11 @@ class FakeLS:
         return {"ok": True}
 
 
-def test_jobs_api_e2e(tmp_path: Path) -> None:
+def test_jobs_api_e2e(tmp_path: Path, monkeypatch) -> None:
     from fastapi.testclient import TestClient
 
+    # UMT-006：写端点需登录 session + CSRF
+    monkeypatch.setenv("PLATFORM_ADMIN_PASSWORD", "pw-admin-e2e")
     bundle = build_production_bundle(
         db_path=tmp_path / "p.sqlite", cas_root=tmp_path / "cas",
         recognition_adapter=FakeRecognition(), monitor_adapter=FakeMonitor(),
@@ -331,13 +333,19 @@ def test_jobs_api_e2e(tmp_path: Path) -> None:
     app = create_app(services=(), probe=_fake_probe, bundle=bundle,
                      jobs_router=router, web_dist=tmp_path / "none")
     client = TestClient(app)
+    r = client.post("/api/v1/auth/login",
+                    json={"username": "admin", "password": "pw-admin-e2e"})
+    assert r.status_code == 200, r.text
+    h = {"X-CSRF-Token": r.json()["csrf_token"]}
 
     # 提交 echo job（仅允许已注册 kind）
-    r = client.post("/api/v1/jobs", json={"kind": "platform.echo", "payload": {"x": 1}})
+    r = client.post("/api/v1/jobs", json={"kind": "platform.echo", "payload": {"x": 1}},
+                    headers=h)
     assert r.status_code == 200, r.text
     jid = r.json()["job"]["job_id"]
     # 未知 kind 拒绝
-    assert client.post("/api/v1/jobs", json={"kind": "evil.kind"}).status_code == 400
+    assert client.post("/api/v1/jobs", json={"kind": "evil.kind"},
+                       headers=h).status_code == 400
 
     # poll 驱动执行
     r2 = client.post("/api/v1/jobs/poll")
@@ -351,12 +359,12 @@ def test_jobs_api_e2e(tmp_path: Path) -> None:
     assert lst["stats"]["succeeded"] >= 1
 
     # 取消：新 job queued 状态可取消
-    r4 = client.post("/api/v1/jobs", json={"kind": "platform.echo"})
+    r4 = client.post("/api/v1/jobs", json={"kind": "platform.echo"}, headers=h)
     jid2 = r4.json()["job"]["job_id"]
-    assert client.post(f"/api/v1/jobs/{jid2}/cancel").status_code == 200
+    assert client.post(f"/api/v1/jobs/{jid2}/cancel", headers=h).status_code == 200
     assert client.get(f"/api/v1/jobs/{jid2}").json()["job"]["status"] == "cancelled"
     # 终态取消 → 409
-    assert client.post(f"/api/v1/jobs/{jid2}/cancel").status_code == 409
+    assert client.post(f"/api/v1/jobs/{jid2}/cancel", headers=h).status_code == 409
 
     # 审计留痕（cancel 记录）
     rows = bundle.store._conn.execute(

@@ -63,8 +63,9 @@ def create_app(
             CORSMiddleware,
             allow_origins=origins,
             allow_methods=["GET", "POST", "OPTIONS"],
-            allow_headers=["Content-Type", "X-Actor", "X-Role", "X-Request-Id"],
-            allow_credentials=False,
+            allow_headers=["Content-Type", "X-Actor", "X-Role", "X-Request-Id",
+                           "X-CSRF-Token"],
+            allow_credentials=True,
         )
     install_request_context_middleware(app)
     rec_adapter = recognition_adapter or RecognitionV2Adapter()
@@ -84,6 +85,9 @@ def create_app(
     # ---- W9/W10 Graph Runs（组合根注入 bundle 时启用）----
     if bundle is not None:
         app.include_router(create_runs_router(bundle))
+        # UMT-006：本机登录 session/CSRF（身份不再由客户端 header 自证）
+        from src.platform.auth import AuthService, create_auth_router
+        app.include_router(create_auth_router(AuthService(bundle.store)))
 
     # ---- M4 Label Studio 闭环（组合根注入 router 时启用）----
     if labeling_router is not None:

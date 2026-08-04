@@ -230,9 +230,11 @@ class FakeLS:
         return {"ok": True}
 
 
-def test_training_api_e2e(tmp_path: Path) -> None:
+def test_training_api_e2e(tmp_path: Path, monkeypatch) -> None:
     from fastapi.testclient import TestClient
 
+    # UMT-006：服务端 users（admin + operator），写端点需登录 session+CSRF
+    monkeypatch.setenv("PLATFORM_USERS", "admin:pw-admin:admin,opi:pw-op:operator")
     bundle = build_production_bundle(
         db_path=tmp_path / "p.sqlite", cas_root=tmp_path / "cas",
         recognition_adapter=FakeRecognition(), monitor_adapter=FakeMonitor(),
@@ -241,6 +243,14 @@ def test_training_api_e2e(tmp_path: Path) -> None:
     app = create_app(services=(), probe=_fake_probe, bundle=bundle,
                      training_router=router, web_dist=tmp_path / "none")
     client = TestClient(app)
+
+    def _login(user: str, pw: str) -> dict:
+        r = client.post("/api/v1/auth/login",
+                        json={"username": user, "password": pw})
+        assert r.status_code == 200, r.text
+        return {"X-CSRF-Token": r.json()["csrf_token"]}
+
+    h_admin = _login("admin", "pw-admin")
 
     # gates 初始阻断
     g = client.get("/api/v1/training/gates").json()
@@ -273,28 +283,29 @@ def test_training_api_e2e(tmp_path: Path) -> None:
     os.environ["PLATFORM_DATASETS_ROOT"] = str(tmp_path / ".datasets")
     rb = client.post("/api/v1/training/snapshots/build", json={
         "name": "e2", "version": "v1", "mode": "product",
-        "entries": entries})
+        "entries": entries}, headers=h_admin)
     assert rb.status_code == 200, rb.text
     sid = rb.json()["snapshot"]["snapshot_id"]
 
     # dry-run
-    r3 = client.post("/api/v1/training/runs/dry-run", json={"snapshot_id": sid})
+    r3 = client.post("/api/v1/training/runs/dry-run",
+                     json={"snapshot_id": sid}, headers=h_admin)
     assert r3.status_code == 200, r3.text
     rid = r3.json()["run"]["run_id"]
 
-    # 无授权启动 → 403
-    r4 = client.post(f"/api/v1/training/runs/{rid}/start",
-                     headers={"X-Role": "admin"})
+    # 无授权启动（admin session）→ 403
+    r4 = client.post(f"/api/v1/training/runs/{rid}/start", headers=h_admin)
     assert r4.status_code == 403
 
-    # operator 授权 → 403；admin 授权 → 200
+    # operator session 授权 → 403；admin session 授权 → 200
+    h_op = _login("opi", "pw-op")
     assert client.post("/api/v1/training/authorize", json={"value": True},
-                       headers={"X-Role": "operator"}).status_code == 403
+                       headers=h_op).status_code == 403
+    h_admin2 = _login("admin", "pw-admin")
     assert client.post("/api/v1/training/authorize", json={"value": True},
-                       headers={"X-Role": "admin"}).status_code == 200
+                       headers=h_admin2).status_code == 200
 
     # admin 启动 → authorized（平台不执行训练）
-    r5 = client.post(f"/api/v1/training/runs/{rid}/start",
-                     headers={"X-Role": "admin", "X-Actor": "adm"})
+    r5 = client.post(f"/api/v1/training/runs/{rid}/start", headers=h_admin2)
     assert r5.status_code == 200, r5.text
     assert r5.json()["run"]["kind"] == "authorized"
