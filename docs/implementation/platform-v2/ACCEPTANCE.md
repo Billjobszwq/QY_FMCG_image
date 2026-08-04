@@ -30,10 +30,10 @@
 
 | 项 | 验收标准 | 结果 |
 |---|---|---|
-| Registry | 模块经 Manifest 注册；依赖方向测试证明 platform 不 import modules | ⬜ |
-| 契约 | Asset/Evidence/Audit/Usage/Job 契约有 fixture+版本+破坏性变更测试 | ⬜ |
-| Adapters | legacy.recognition.v2 / legacy.training.monitor 注册成功并报告健康 | ⬜ |
-| 存储 | PlatformStore migration 可执行，备份可校验 | ⬜ |
+| Registry | 模块经 Manifest 注册；依赖方向测试证明 platform 不 import modules | ✅（test_m2_registry.py：重复注册/缺 adapter 拒绝；AST 守卫全绿） |
+| 契约 | Asset/Evidence/Audit/Usage/Job 契约有 fixture+版本+破坏性变更测试 | ✅（CONTRACT_VERSION=1.0.0；extra=forbid 拒绝未知字段） |
+| Adapters | legacy.recognition.v2 / legacy.training.monitor 注册成功并报告健康 | ✅（/api/v1/capabilities 返回 2 项；m2_status.png 渲染；8091/8092 healthy） |
+| 存储 | PlatformStore migration 可执行，备份可校验 | ✅（20 个 store 测试：防篡改+integrity_check+重启恢复） |
 
 ## M3 验收矩阵
 

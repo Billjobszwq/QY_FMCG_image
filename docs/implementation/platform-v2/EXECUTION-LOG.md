@@ -41,3 +41,19 @@
 ## M1 验收结论
 
 - 八项验收全过（见 ACCEPTANCE.md M1 矩阵）→ **M1 DONE**
+
+## M2 / W5–W6
+
+| # | 命令 | 退出码 | 耗时 | 结果摘要 |
+|---|---|---|---|---|
+| 1 | `pytest tests/platform/test_platform_store.py`（W5 TDD） | 0 | 0.18s | 20 测试全绿（migration 幂等+防篡改、Run/Node/Checkpoint/Job/Attempt/Audit/Usage/Evidence/Asset、备份 integrity_check、重启恢复） |
+| 2 | W5 提交 | 0 | — | **46d2f25**；.gitignore 补 `.platform/`；全量 218 passed |
+| 3 | `pytest tests/platform/test_m2_contracts.py tests/platform/test_m2_registry.py`（W6 TDD） | 0 | 0.28s | 25 测试全绿（契约 extra=forbid、IAM 双审批分离、Registry 重复/缺 adapter 拒绝、Job 状态机、RequestContext、依赖方向守卫） |
+| 4 | 8400 重启 + `curl /api/v1/capabilities` | 0 | ~3s | 返回 2 个 legacy capability；`X-Request-Id` 响应头存在；health 200 degraded |
+| 5 | `npx tsc -b && npx vite build` | 0 | 2.27s | 系统状态页新增 Capability 表；Chrome headless 截图 /tmp/pv2_evidence/m2_status.png（真实渲染） |
+| 6 | 全量回归 `pytest -q` | 0 | 3.17s | **243 passed** |
+| 7 | W6 提交 | 0 | — | **1dc4cc8**（10 files） |
+
+## M2 验收结论
+
+- Registry/契约/Adapters/存储 四项全过（见 ACCEPTANCE.md M2 矩阵）→ **M2 DONE**

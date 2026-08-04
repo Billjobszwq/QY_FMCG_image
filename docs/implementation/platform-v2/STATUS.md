@@ -5,11 +5,11 @@
 
 | 项 | 值 |
 |---|---|
-| 当前状态 | M1 完成（2d9a4ef），进入 M2/W5 |
-| 当前 HEAD | 2d9a4ef（feat/usable-platform-foundation） |
+| 当前状态 | M2 完成（1dc4cc8），进入 M3/W7 |
+| 当前 HEAD | 1dc4cc8（feat/usable-platform-foundation） |
 | 分支 | `feat/usable-platform-foundation` |
 | 基线 commit | `c9998af`（feat/sam-reannotation） |
-| 基线测试 | 170 passed；M1 验收后全量 **198 passed**（2.97s） |
+| 基线测试 | 170 passed；M2 验收后全量 **243 passed**（3.17s） |
 | 生产 bundle | `prod_20260804_v4_r2`（16 文件校验通过，不修改） |
 | production_switch | **false**（冻结） |
 | training_started | **false**（冻结） |
@@ -34,8 +34,8 @@
 |---|---|
 | M0 基线与保护 | DONE（f91c0e6） |
 | M1 统一 Web Shell | DONE（97020d6 → 54cac63 → 2d9a4ef，198 passed） |
-| M2 最小可信 Foundation | IN_PROGRESS（W5 PlatformStore） |
-| M3 第一条真实 Graph | PENDING |
+| M2 最小可信 Foundation | DONE（46d2f25 → 1dc4cc8，243 passed） |
+| M3 第一条真实 Graph | IN_PROGRESS（W7 Graph Kernel） |
 | M4 Label Studio 闭环 | PENDING |
 | M5 数据集训练治理 | PENDING（训练需显式授权） |
 | M6 PostgreSQL + 可靠 Worker | PENDING |

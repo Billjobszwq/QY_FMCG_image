@@ -23,14 +23,14 @@
 - [x] 浏览器 E2E 验证 + 8091/8092 不受影响证明
 
 ### M2 最小可信 Foundation
-- [ ] IAM 最小模型（用户/角色/权限，本机单租户起步）
-- [ ] Module Manifest + Capability Registry（模块注册，不直接 import）
-- [ ] Asset / Evidence / Audit / Usage 契约冻结（Pydantic + fixture + 测试）
-- [ ] Job/Attempt 状态机（可识别 orphaned，可恢复语义）
-- [ ] RequestContext：request_id / run_id / idempotency_key / UTC 时间
-- [ ] legacy adapters（8091/8092）注册为 Capability
-- [ ] migration + PlatformStore 备份校验
-- [ ] src/platform 不 import src/modules 的依赖方向测试
+- [x] IAM 最小模型（用户/角色/权限，本机单租户起步）
+- [x] Module Manifest + Capability Registry（模块注册，不直接 import）
+- [x] Asset / Evidence / Audit / Usage 契约冻结（Pydantic + fixture + 测试）
+- [x] Job/Attempt 状态机（可识别 orphaned，可恢复语义）
+- [x] RequestContext：request_id / run_id / idempotency_key / UTC 时间
+- [x] legacy adapters（8091/8092）注册为 Capability
+- [x] migration + PlatformStore 备份校验
+- [x] src/platform 不 import src/modules 的依赖方向测试
 
 ### M3 第一条真实 Graph
 - [ ] GraphDefinition/GraphVersion 不可原地修改（版本化测试）
@@ -70,8 +70,8 @@
 - [x] **W2 Health adapters**：8091/8092/8300/8301/8455 探测适配器；超时/失败类型/降级标记；`/api/v1/health` 汇总
 - [x] **W3 Web Shell**：Vite+React+TS；7 页骨架（系统总览/Graph Runs/图片识别/标注审核/数据资产/训练模型/系统状态）；8400 静态托管
 - [x] **W4 Recognition bridge**：`legacy.recognition.v2` adapter → 8091；上传→识别→结果展示
-- [ ] **W5 PlatformStore**：SQLite 开发适配器（M1–M3 专用，M6 一次性迁移 PG）；Run/Node/Checkpoint/Job/Audit/Usage/Evidence 表
-- [ ] **W6 Capability Registry**：ModuleManifest、注册函数、依赖方向守卫测试
+- [x] **W5 PlatformStore**：SQLite 开发适配器（M1–M3 专用，M6 一次性迁移 PG）；Run/Node/Checkpoint/Job/Audit/Usage/Evidence 表
+- [x] **W6 Capability Registry**：ModuleManifest、注册函数、依赖方向守卫测试
 - [ ] **W7 Graph Kernel**：GraphDefinition/Version、Run 状态机、Checkpoint、预算/超时/循环节制、幂等重试
 - [ ] **W8 Asset/CAS**：内容寻址存储；数据库只存 ResourceRef/哈希/lineage；原图不动
 - [ ] **W9 FMCG Graph**：fmcg_photo_inspection_v1 节点链 + 人工门（waiting_human）+ EvidenceBundle
