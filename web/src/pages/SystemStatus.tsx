@@ -1,11 +1,15 @@
 import { useEffect, useState } from "react";
-import { fetchVersion, HealthBody } from "../api";
+import { CapabilityInfo, fetchCapabilities, fetchVersion, HealthBody } from "../api";
 
 export default function SystemStatus({ health }: { health: HealthBody | null }) {
   const [version, setVersion] = useState<{ platform: string; version: string } | null>(null);
+  const [caps, setCaps] = useState<CapabilityInfo[] | null>(null);
 
   useEffect(() => {
     fetchVersion().then(setVersion).catch(() => setVersion(null));
+    fetchCapabilities()
+      .then((b) => setCaps(b.capabilities))
+      .catch(() => setCaps(null));
   }, []);
 
   return (
@@ -43,6 +47,33 @@ export default function SystemStatus({ health }: { health: HealthBody | null }) 
           </tr>
         </tbody>
       </table>
+      <h3>已注册 Capability（Module Manifest）</h3>
+      {caps === null ? (
+        <p className="muted">加载失败或 API 不可用</p>
+      ) : (
+        <table>
+          <thead>
+            <tr>
+              <th>capability_id</th>
+              <th>模块</th>
+              <th>版本</th>
+              <th>类型</th>
+              <th>说明</th>
+            </tr>
+          </thead>
+          <tbody>
+            {caps.map((c) => (
+              <tr key={c.capability_id}>
+                <td>{c.capability_id}</td>
+                <td>{c.module_name}</td>
+                <td>{c.module_version}</td>
+                <td>{c.kind}</td>
+                <td className="muted">{c.description}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
       <h3>依赖服务明细</h3>
       <table>
         <thead>

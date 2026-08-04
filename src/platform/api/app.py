@@ -16,6 +16,8 @@ from ..adapters.legacy.recognition import (
     RecognitionAdapterError,
     RecognitionV2Adapter,
 )
+from ..registry import CapabilityRegistry, bootstrap_default_registry
+from .context import install_request_context_middleware
 from .health import DEFAULT_SERVICES, aggregate_platform, probe_service
 
 PLATFORM_VERSION = "0.1.0"
@@ -32,6 +34,7 @@ def create_app(
     web_dist: Path | None = None,
     recognition_adapter: RecognitionV2Adapter | None = None,
     monitor_adapter: MonitorAdapter | None = None,
+    registry: CapabilityRegistry | None = None,
 ) -> FastAPI:
     app = FastAPI(
         title="Unified Platform API",
@@ -39,12 +42,20 @@ def create_app(
         docs_url="/api/v1/docs",
         openapi_url="/api/v1/openapi.json",
     )
+    install_request_context_middleware(app)
     rec_adapter = recognition_adapter or RecognitionV2Adapter()
     mon_adapter = monitor_adapter or MonitorAdapter()
+    cap_registry = registry or bootstrap_default_registry(rec_adapter, mon_adapter)
 
     @app.get("/api/v1/version")
     def version():
         return {"platform": "platform-v2", "version": PLATFORM_VERSION}
+
+    # ---- W6/M2 Capability Registry（模块经 Manifest 注册，不直接 import）----
+    @app.get("/api/v1/capabilities")
+    def capabilities():
+        caps = cap_registry.capabilities()
+        return {"count": len(caps), "capabilities": caps}
 
     @app.get("/api/v1/health")
     def health():

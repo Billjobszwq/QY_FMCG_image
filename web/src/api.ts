@@ -48,6 +48,24 @@ export async function fetchVersion(): Promise<{ platform: string; version: strin
   return r.json();
 }
 
+export interface CapabilityInfo {
+  capability_id: string;
+  module_id: string;
+  module_name: string;
+  module_version: string;
+  kind: string;
+  description: string;
+}
+
+export async function fetchCapabilities(): Promise<{
+  count: number;
+  capabilities: CapabilityInfo[];
+}> {
+  const r = await fetch("/api/v1/capabilities");
+  if (!r.ok) throw new Error(`capabilities HTTP ${r.status}`);
+  return r.json();
+}
+
 export async function fetchMonitorLive(): Promise<Record<string, unknown>> {
   const r = await fetch("/api/v1/monitor/live");
   if (!r.ok) throw new Error(`monitor HTTP ${r.status}`);
