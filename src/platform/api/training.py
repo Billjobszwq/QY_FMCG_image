@@ -59,7 +59,8 @@ class AuthorizeBody(BaseModel):
 
 
 def create_training_router(service: Any,
-                           auth: AuthService | None = None) -> APIRouter:
+                           auth: AuthService | None = None,
+                           worker: Any = None) -> APIRouter:
     router = APIRouter()
 
     @router.get("/api/v1/training/gates")
@@ -139,6 +140,34 @@ def create_training_router(service: Any,
         except Exception as e:
             raise HTTPException(status_code=403, detail=str(e))
         return {"run": run}
+
+    # ----- UMT-007：批准计划 与 提交训练 Job 拆分 -----
+
+    @router.post("/api/v1/training/runs/{run_id}/approve-plan")
+    def approve_plan(run_id: str, request: Request):
+        p = require_principal(auth, request)
+        try:
+            run = service.approve_plan(
+                run_id, actor=p["actor"], role=p["role"], worker=worker)
+        except KeyError:
+            raise HTTPException(status_code=404, detail="run 不存在")
+        except Exception as e:
+            raise HTTPException(status_code=403, detail=str(e))
+        return {"run": run}
+
+    @router.post("/api/v1/training/runs/{run_id}/enqueue")
+    def enqueue(run_id: str, request: Request):
+        p = require_principal(auth, request)
+        if worker is None:
+            raise HTTPException(status_code=503, detail="训练 Worker 未启用")
+        try:
+            out = service.enqueue_training_job(
+                run_id, actor=p["actor"], role=p["role"], worker=worker)
+        except KeyError:
+            raise HTTPException(status_code=404, detail="run 不存在")
+        except Exception as e:
+            raise HTTPException(status_code=403, detail=str(e))
+        return {"run": out}
 
     @router.post("/api/v1/training/runs/{run_id}/publish/request")
     def publish_request(run_id: str, request: Request):

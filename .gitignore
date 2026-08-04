@@ -25,6 +25,7 @@ batch3_gray/
 bad_samples/
 best/
 runs/
+.runs/
 .data_protocol/*.bak.json
 
 # 运行数据库、日志与 PID

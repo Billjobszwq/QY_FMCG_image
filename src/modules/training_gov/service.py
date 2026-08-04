@@ -345,13 +345,7 @@ class TrainingGovernanceService:
         run = self.store.get_training_run(run_id)
         if run is None:
             raise KeyError(run_id)
-        plan = json.loads(run.get("plan_json") or "{}")
-        if not plan.get("mps_g0"):
-            failed = [c["name"] for c in
-                      plan.get("mps_g0_report", {}).get("checks", [])
-                      if not c.get("ok")]
-            raise TrainingGovError(
-                f"MPS G0 未通过，训练保持禁用；失败项: {failed or '无报告'}")
+        self._require_g0(run)
         if self.store.get_flag("training_authorized") != "true":
             raise AuthorizationRequired(
                 "training_authorized=false：训练启动需显式人工授权")
@@ -359,6 +353,66 @@ class TrainingGovernanceService:
             raise AuthorizationRequired(f"角色 {role} 无 training.approve 权限")
         return self.store.update_training_run(
             run_id, kind="authorized", status="authorized", approved_by=actor)
+
+    # ----- UMT-007：approve_plan / enqueue_training_job 拆分 -----
+
+    def _require_g0(self, run: dict[str, Any]) -> None:
+        plan = json.loads(run.get("plan_json") or "{}")
+        if not plan.get("mps_g0"):
+            failed = [c["name"] for c in
+                      plan.get("mps_g0_report", {}).get("checks", [])
+                      if not c.get("ok")]
+            raise TrainingGovError(
+                f"MPS G0 未通过，训练保持禁用；失败项: {failed or '无报告'}")
+
+    def approve_plan(self, run_id: str, *, actor: str, role: str,
+                     worker: Any = None) -> dict[str, Any]:
+        """批准训练计划：只落状态，绝不提交 job/消耗算力（UMT-007）。"""
+        run = self.store.get_training_run(run_id)
+        if run is None:
+            raise KeyError(run_id)
+        self._require_g0(run)
+        if self.store.get_flag("training_authorized") != "true":
+            raise AuthorizationRequired(
+                "training_authorized=false：批准训练计划需显式人工授权")
+        if not iam_can(role, "training.approve"):
+            raise AuthorizationRequired(f"角色 {role} 无 training.approve 权限")
+        out = self.store.update_training_run(
+            run_id, kind="authorized", status="approved", approved_by=actor)
+        self.store.append_audit(
+            actor=actor, action="training.approve_plan",
+            subject_type="training_run", subject_id=run_id,
+            detail={"note": "批准不消耗算力；启动需另行 enqueue"})
+        return out
+
+    def enqueue_training_job(self, run_id: str, *, actor: str, role: str,
+                             worker: Any) -> dict[str, Any]:
+        """提交训练 Job：仅已批准计划可入队；由可恢复 Worker 执行。"""
+        run = self.store.get_training_run(run_id)
+        if run is None:
+            raise KeyError(run_id)
+        if run.get("status") != "approved":
+            raise TrainingGovError(
+                f"仅已批准的训练计划可入队（当前 status={run.get('status')}）")
+        self._require_g0(run)
+        if self.store.get_flag("training_authorized") != "true":
+            raise AuthorizationRequired(
+                "training_authorized=false：提交训练 Job 需显式人工授权")
+        if not iam_can(role, "training.approve"):
+            raise AuthorizationRequired(f"角色 {role} 无 training.approve 权限")
+        command = json.loads(run["command_json"])
+        job_id = worker.submit("training.run", {
+            "run_id": run_id, "command": command,
+            "budget_json": json.loads(run["budget_json"]),
+            "stop_lines": json.loads(run["stop_lines_json"]),
+        }, max_attempts=1)
+        out = self.store.update_training_run(
+            run_id, kind="started", status="queued", job_id=job_id)
+        self.store.append_audit(
+            actor=actor, action="training.enqueue_job",
+            subject_type="training_run", subject_id=run_id,
+            detail={"job_id": job_id, "command": command})
+        return {**out, "job_id": job_id}
 
     # ----- 发布（独立审批，禁 auto_switch） -----
 

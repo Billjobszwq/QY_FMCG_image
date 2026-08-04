@@ -83,7 +83,7 @@ def build_labeling_router(bundle: PlatformBundle):
     )
 
 
-def build_training_router(bundle: PlatformBundle):
+def build_training_router(bundle: PlatformBundle, worker=None):
     """M5：组合根唯一允许同时持有 platform 与 training_gov 域的位置。"""
     from src.modules.training_gov import TrainingGovernanceService
     from src.platform.api.training import create_training_router
@@ -91,7 +91,7 @@ def build_training_router(bundle: PlatformBundle):
 
     return create_training_router(
         TrainingGovernanceService(bundle.store),
-        auth=AuthService(bundle.store))
+        auth=AuthService(bundle.store), worker=worker)
 
 
 def build_jobs_router(bundle: PlatformBundle):
@@ -109,9 +109,32 @@ def build_jobs_router(bundle: PlatformBundle):
             "processed_at": datetime.now(timezone.utc).isoformat(),
         }
 
+    def _training_run(ctx):
+        """UMT-007：训练 Job 执行器——真实子进程，留 PID 与日志。"""
+        import subprocess
+
+        payload = ctx["payload"]
+        command = payload["command"]
+        run_id = payload.get("run_id", "unknown")
+        log_dir = Path(os.environ.get("PLATFORM_RUNS_ROOT", ".runs")) / run_id
+        log_dir.mkdir(parents=True, exist_ok=True)
+        log_path = log_dir / f"attempt_{ctx['attempt_no']}.log"
+        with open(log_path, "w", encoding="utf-8") as f:
+            f.write(f"# training.run run_id={run_id} command={command}\n")
+            f.flush()
+            proc = subprocess.Popen(
+                command, stdout=f, stderr=subprocess.STDOUT,
+                cwd=str(REPO_ROOT))
+            pid = proc.pid
+            rc = proc.wait()
+        if rc != 0:
+            raise RuntimeError(
+                f"训练命令退出码 {rc}；日志: {log_path}")
+        return {"pid": pid, "returncode": rc, "log": str(log_path)}
+
     worker = RecoverableJobWorker(
         bundle.store,
-        {"platform.echo": _echo},
+        {"platform.echo": _echo, "training.run": _training_run},
         max_concurrent=int(os.environ.get("PLATFORM_WORKER_MAX_CONCURRENT", "2")),
         lease_seconds=int(os.environ.get("PLATFORM_WORKER_LEASE_SECONDS", "300")),
     )
@@ -136,14 +159,14 @@ def build_app_with_bundle(
         _worker, jobs_router = build_jobs_router(bundle)
         share_router = build_share_router(bundle)
     else:
-        jobs_router, share_router = None, None
+        _worker, jobs_router, share_router = None, None, None
     return create_app(
         services=services,
         probe=probe,
         web_dist=web_dist if web_dist is not None else (REPO_ROOT / "web" / "dist"),
         bundle=bundle,
         labeling_router=build_labeling_router(bundle) if bundle is not None else None,
-        training_router=build_training_router(bundle) if bundle is not None else None,
+        training_router=build_training_router(bundle, _worker) if bundle is not None else None,
         jobs_router=jobs_router,
         share_router=share_router,
     )

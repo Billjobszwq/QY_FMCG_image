@@ -244,6 +244,10 @@ CREATE TABLE IF NOT EXISTS auth_sessions (
 );
 """
 
+_M007 = """
+ALTER TABLE training_run ADD COLUMN job_id TEXT NOT NULL DEFAULT '';
+"""
+
 MIGRATIONS: tuple[tuple[str, str], ...] = (
     ("001_platform_init", _M001),
     ("002_labeling_inbox", _M002),
@@ -251,6 +255,7 @@ MIGRATIONS: tuple[tuple[str, str], ...] = (
     ("004_recoverable_worker", _M004),
     ("005_snapshot_trainable", _M005),
     ("006_auth_sessions", _M006),
+    ("007_training_run_job_id", _M007),
 )
 
 
@@ -969,7 +974,7 @@ class PlatformStore:
 
     _TRAINING_RUN_FIELDS = (
         "kind", "status", "publish_status", "approved_by", "requested_by",
-        "publish_requested_by", "publish_approved_by", "plan_json",
+        "publish_requested_by", "publish_approved_by", "plan_json", "job_id",
     )
 
     def update_training_run(self, run_id: str, **fields: Any) -> dict[str, Any]:
@@ -984,6 +989,7 @@ class PlatformStore:
             f"UPDATE training_run SET {sets} WHERE run_id=?",
             (*fields.values(), run_id),
         )
+        self._conn.commit()
         got = self.get_training_run(run_id)
         if got is None:
             raise KeyError(run_id)
