@@ -57,3 +57,26 @@
 ## M2 验收结论
 
 - Registry/契约/Adapters/存储 四项全过（见 ACCEPTANCE.md M2 矩阵）→ **M2 DONE**
+
+## M3 / W7–W11
+
+| # | 命令 | 退出码 | 耗时 | 结果摘要 |
+|---|---|---|---|---|
+| 1 | `pytest tests/platform/test_graph_kernel.py`（W7 TDD） | 0 | 0.12s | 11 测试全绿；修复点：重试计数测试自身缺陷（ok handlers 未计数）已修正 |
+| 2 | W7 提交 | 0 | — | **fb55084** |
+| 3 | `pytest tests/platform/test_cas.py`（W8 TDD） | 0 | 0.11s | 7 测试全绿（去重/原子写/读校验/原图不动） |
+| 4 | W8 提交 | 0 | — | **7afa0bf** |
+| 5 | `pytest tests/platform/test_w9_graphs.py`（W9 TDD） | 0 | 0.34s | 4 测试全绿；修复点：SQLite 跨线程 → 每线程独立连接（WAL） |
+| 6 | W9 提交 | 0 | — | **7450d23**（14 files：modules/fmcg、modules/system_health、composition 根、runs API、bundle） |
+| 7 | 8400 切换组合根 `python3 -m src.composition.serve --port 8400` | 0 | ~4s | /api/v1/runs 上线；health 200 degraded |
+| 8 | 真实 E2E：upload 36619578.jpg → runs → approve | 0 | ~2s | run ab0946f5：waiting_human → approve → completed；真实识别（罐装雪碧330ml 0.9996、2L七喜 0.6439）；evidence=1；节点链全 completed |
+| 9 | system_health_v1 经 API | 0 | <1s | completed；summarize={total:5, unhealthy:[label_studio, ml_backend], overall:degraded}（真实探测） |
+| 10 | `npx tsc -b && npx vite build`（W10） | 0 | 359ms | Graph Runs 页：列表/详情/节点时间线/Evidence/人工门按钮 |
+| 11 | Chrome headless 截图 | 0 | ~8s | /tmp/pv2_evidence/m3_runs.png：两条真实 completed Run 渲染 |
+| 12 | 重启 8400 后 `GET /api/v1/runs` | 0 | — | count=2，Run/Node/Checkpoint 持久化恢复确认 |
+| 13 | W10 提交 | 0 | — | **b7513dc** |
+| 14 | M3 验收回归 `pytest -q` 全量 | 0 | 3.58s | **265 passed** |
+
+## M3 验收结论
+
+- 九项验收全过（见 ACCEPTANCE.md M3 矩阵；最终 §14 报告于任务结束时输出）→ **M3 DONE**

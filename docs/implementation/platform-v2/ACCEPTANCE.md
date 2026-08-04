@@ -39,12 +39,12 @@
 
 | 项 | 验收标准 | 结果 |
 |---|---|---|
-| 真实流程 | 上传真实照片 → CAS → 质量 → 8091 识别 → 人工门 → EvidenceBundle → Usage/Audit → RecognitionResult | ⬜ |
-| 持久化 | Run/NodeExecution/Checkpoint 重启后可恢复查询 | ⬜ |
-| waiting_human | 人工门真实暂停，批准后继续 | ⬜ |
-| 幂等 | 重试不重复识别/不重复 Usage | ⬜ |
-| 非识别 Graph | system_health_v1 完整运行，Kernel 无 FMCG 特例 | ⬜ |
-| 版本化 | GraphDefinition 修改必须新版本，原地改被拒绝 | ⬜ |
-| 节制 | 最大节点数/循环数/超时/预算触发生效 | ⬜ |
-| E2E | 浏览器走完整流程并截图 | ⬜ |
-| 最终报告 | 按手册 §14 输出，含三冻结值 | ⬜ |
+| 真实流程 | 上传真实照片 → CAS → 质量 → 8091 识别 → 人工门 → EvidenceBundle → Usage/Audit → RecognitionResult | ✅（run ab0946f5：36619578.jpg → sha edf07854 → 真实识别罐装雪碧330ml 0.9996/2L七喜 0.6439；evidence=1；gate.approved+run.completed 审计落库） |
+| 持久化 | Run/NodeExecution/Checkpoint 重启后可恢复查询 | ✅（重启 8400 后 GET /api/v1/runs count=2） |
+| waiting_human | 人工门真实暂停，批准后继续 | ✅（ab0946f5 waiting_human → approve → completed；拒绝为终态有测试覆盖） |
+| 幂等 | 重试不重复识别/不重复 Usage | ✅（rec.calls==1 恢复后不重识别；同 idempotency_key 不产生新 run；usage 恰 1 条） |
+| 非识别 Graph | system_health_v1 完整运行，Kernel 无 FMCG 特例 | ✅（真实探测 completed：total=5、unhealthy=[label_studio, ml_backend]、overall=degraded） |
+| 版本化 | GraphDefinition 修改必须新版本，原地改被拒绝 | ✅（同名同版本内容哈希不同 → GraphVersionError，test_graph_kernel.py） |
+| 节制 | 最大节点数/循环数/超时/预算触发生效 | ✅（max_nodes/max_loops→BudgetExceeded、timeout_s→run failed，均有测试） |
+| E2E | 浏览器走完整流程并截图 | ✅（Chrome headless /tmp/pv2_evidence/m3_runs.png：两条真实 completed Run + 节点时间线渲染） |
+| 最终报告 | 按手册 §14 输出，含三冻结值 | ⏳（第一阶段任务结束时输出；当前 production_switch=false、training_started=false、deleted_files=false） |

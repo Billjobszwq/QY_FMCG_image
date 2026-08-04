@@ -33,15 +33,15 @@
 - [x] src/platform 不 import src/modules 的依赖方向测试
 
 ### M3 第一条真实 Graph
-- [ ] GraphDefinition/GraphVersion 不可原地修改（版本化测试）
-- [ ] GraphRun / NodeExecution / Checkpoint 持久化
-- [ ] 状态机：running / waiting_human / failed / completed（+预算/超时/最大节点/循环上限）
-- [ ] 重试不重复副作用（idempotency）
-- [ ] `fmcg_photo_inspection_v1`：上传→CAS→质量→8091识别→人工门→EvidenceBundle→Usage/Audit→RecognitionResult
-- [ ] `system_health_v1`：非识别 Graph，证明 Kernel 无 FMCG 硬编码
-- [ ] Run UI：列表/详情/节点时间线/证据查看
-- [ ] 浏览器 E2E 完整走一条真实照片流程
-- [ ] M3 完成前全量测试重新验证
+- [x] GraphDefinition/GraphVersion 不可原地修改（版本化测试）
+- [x] GraphRun / NodeExecution / Checkpoint 持久化
+- [x] 状态机：running / waiting_human / failed / completed（+预算/超时/最大节点/循环上限）
+- [x] 重试不重复副作用（idempotency）
+- [x] `fmcg_photo_inspection_v1`：上传→CAS→质量→8091识别→人工门→EvidenceBundle→Usage/Audit→RecognitionResult
+- [x] `system_health_v1`：非识别 Graph，证明 Kernel 无 FMCG 硬编码
+- [x] Run UI：列表/详情/节点时间线/证据查看
+- [x] 浏览器 E2E 完整走一条真实照片流程
+- [x] M3 完成前全量测试重新验证
 
 ### M4 Label Studio 闭环（M3 后）
 - [ ] Label Studio 原生 1.23.0 启动（修 start_label_studio.sh 路径问题）
@@ -72,11 +72,11 @@
 - [x] **W4 Recognition bridge**：`legacy.recognition.v2` adapter → 8091；上传→识别→结果展示
 - [x] **W5 PlatformStore**：SQLite 开发适配器（M1–M3 专用，M6 一次性迁移 PG）；Run/Node/Checkpoint/Job/Audit/Usage/Evidence 表
 - [x] **W6 Capability Registry**：ModuleManifest、注册函数、依赖方向守卫测试
-- [ ] **W7 Graph Kernel**：GraphDefinition/Version、Run 状态机、Checkpoint、预算/超时/循环节制、幂等重试
-- [ ] **W8 Asset/CAS**：内容寻址存储；数据库只存 ResourceRef/哈希/lineage；原图不动
-- [ ] **W9 FMCG Graph**：fmcg_photo_inspection_v1 节点链 + 人工门（waiting_human）+ EvidenceBundle
-- [ ] **W10 Run UI**：Graph Runs 列表/详情/节点时间线/证据浏览器
-- [ ] **W11 M3 Acceptance**：全量测试 + 浏览器 E2E + system_health_v1 非识别验证 + 报告
+- [x] **W7 Graph Kernel**：GraphDefinition/Version、Run 状态机、Checkpoint、预算/超时/循环节制、幂等重试
+- [x] **W8 Asset/CAS**：内容寻址存储；数据库只存 ResourceRef/哈希/lineage；原图不动
+- [x] **W9 FMCG Graph**：fmcg_photo_inspection_v1 节点链 + 人工门（waiting_human）+ EvidenceBundle
+- [x] **W10 Run UI**：Graph Runs 列表/详情/节点时间线/证据浏览器
+- [x] **W11 M3 Acceptance**：全量测试 + 浏览器 E2E + system_health_v1 非识别验证 + 报告
 
 ## 技术基线约定
 
