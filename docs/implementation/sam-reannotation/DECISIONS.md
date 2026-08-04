@@ -60,3 +60,18 @@
 - 日期：2026-08-01
 - 决策：classifier 训练继续暂停；生产 bundle `prod_20260804_v4_r2` 不变；不切 8091；不恢复 v6；不自动发布。新模型一律 research/candidate 状态。
 - 依据：手册§一.3；用户要求第 24/25 条。
+
+## D-012 评估器统一 matching
+- 日期：2026-08-04
+- 决策：真实框评估只用 one-to-one greedy（IoU 降序）；禁止把 confidence-greedy（E2）与 IoU-pair（E0 cascade）混成同一指标；E0/P0/P1 重评必须用同一 `truebox_eval_v1`、同一 GT、同一配置。
+- 依据：手册§十；用户要求第 19 条。
+
+## D-013 审核队列与盲抽 seed
+- 日期：2026-08-04
+- 决策：双审队列取 diagnostic_v1.json 顺序前 200 张；盲抽 50 张用协议 seed=20260804（`random.Random(seed).sample` 于排序后 ID 池，可确定性重建）；队列文件已存在则拒绝覆盖；照片池不足 50 张时 fail-closed 而非静默缩减。
+- 依据：手册§七；用户要求第 12/13 条。
+
+## D-014 e3 数据集 fail-closed 守卫
+- 日期：2026-08-04
+- 决策：`build_truebox_dataset` 任一守卫失败即抛异常且不发布（staging 保留可追溯）；审核完成率必须 100%，任何未审核 prediction、manual_review 无裁决、reject 照片、diagnostic 五键泄漏、train/val 门店或 session 交集非零都拒绝构建；目标目录存在即拒绝（绝不覆盖）。
+- 依据：手册§十一 Gate D0；用户要求第 20/21 条。
