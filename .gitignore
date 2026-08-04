@@ -83,3 +83,6 @@ yolov8n.pt
 # web shell
 web/node_modules/
 web/dist/
+
+# Platform V2 开发存储（W5，不入库）
+.platform/
