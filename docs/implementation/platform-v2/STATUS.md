@@ -5,15 +5,16 @@
 
 | 项 | 值 |
 |---|---|
-| 当前状态 | M0 基线记录中（IN_PROGRESS） |
+| 当前状态 | M1 完成（2d9a4ef），进入 M2/W5 |
+| 当前 HEAD | 2d9a4ef（feat/usable-platform-foundation） |
 | 分支 | `feat/usable-platform-foundation` |
 | 基线 commit | `c9998af`（feat/sam-reannotation） |
-| 基线测试 | 170 passed（2.91s，2026-08-01 复核） |
+| 基线测试 | 170 passed；M1 验收后全量 **198 passed**（2.97s） |
 | 生产 bundle | `prod_20260804_v4_r2`（16 文件校验通过，不修改） |
 | production_switch | **false**（冻结） |
 | training_started | **false**（冻结） |
 | deleted_files | **false**（冻结） |
-| 统一入口目标 | http://127.0.0.1:8400（尚未启动） |
+| 统一入口目标 | http://127.0.0.1:8400（✅ 运行中，degraded） |
 
 ## 服务实时快照（基线时刻）
 
@@ -25,15 +26,15 @@
 | 8300 | Label Studio | ⛔ DOWN（M4 处理） |
 | 8301 | LS ml-backend | ⛔ DOWN（M4 处理） |
 | 8304 | orchestrator | ⛔ DOWN |
-| 8400 | 统一平台 | ⛔ 未实现（本任务交付） |
+| 8400 | 统一平台 | ✅ UP（degraded：8300/8301 DOWN） |
 
 ## 里程碑状态
 
 | 里程碑 | 状态 |
 |---|---|
-| M0 基线与保护 | IN_PROGRESS |
-| M1 统一 Web Shell | PENDING |
-| M2 最小可信 Foundation | PENDING |
+| M0 基线与保护 | DONE（f91c0e6） |
+| M1 统一 Web Shell | DONE（97020d6 → 54cac63 → 2d9a4ef，198 passed） |
+| M2 最小可信 Foundation | IN_PROGRESS（W5 PlatformStore） |
 | M3 第一条真实 Graph | PENDING |
 | M4 Label Studio 闭环 | PENDING |
 | M5 数据集训练治理 | PENDING（训练需显式授权） |

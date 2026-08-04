@@ -17,12 +17,14 @@
 
 | 项 | 验收标准 | 结果 |
 |---|---|---|
-| URL | http://127.0.0.1:8400 可打开 Web Shell | ⬜ |
-| Health | `/api/v1/health` 返回各服务状态，8300 DOWN 时标 degraded | ⬜ |
-| 页面 | 七页骨架全部可导航 | ⬜ |
-| E2E | 浏览器截图证据 | ⬜ |
-| 回归 | 170+ 新测试全绿 | ⬜ |
-| 回滚 | 删除 8400 进程即回滚，不影响旧服务 | ⬜ |
+| URL | http://127.0.0.1:8400 可打开 Web Shell | ✅（HTTP 200，Chrome headless 截图 /tmp/pv2_evidence/m1_overview.png） |
+| Health | `/api/v1/health` 返回各服务状态，8300 DOWN 时标 degraded | ✅（degraded；8091/8092/8455 healthy，8300/8301 unavailable） |
+| 页面 | 七页骨架全部可导航 | ✅（6 张截图：overview/runs/recognition/annotation/training/status） |
+| E2E | 浏览器截图证据 | ✅（/tmp/pv2_evidence/m1_*.png；识别 bridge 真实样本 count=2） |
+| 真实流程 | 非 mock：真实上传图片经 8400 bridge 调 8091 返回真实识别结果 | ✅（36619578.jpg → count=2，run_id 真实） |
+| 状态真实 | healthy/degraded/unavailable 不谎报 | ✅（8300/8301 未启动 → unavailable；平台级 degraded） |
+| 回归 | 170+ 新测试全绿 | ✅（**198 passed in 2.97s**，exit 0） |
+| 回滚 | 删除 8400 进程即回滚，不影响旧服务 | ✅（8400 独立进程；8091 bundle 未动、8092 正常） |
 
 ## M2 验收矩阵
 

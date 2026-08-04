@@ -10,17 +10,17 @@
 - [x] 建立 platform-v2 六份文档（STATUS/PLAN/EXECUTION-LOG/ISSUES/DECISIONS/ACCEPTANCE）
 - [x] 只读盘点：git 状态、服务端口、170 测试、warehouse 计数、bundle verify、磁盘占用、未跟踪制品
 - [x] 冻结 `production_switch=false`、`training_started=false`、`deleted_files=false`
-- [ ] M0 小提交（暂存文件清单先列出）
+- [x] M0 小提交 → f91c0e6
 
 ### M1 统一 Web Shell（http://127.0.0.1:8400）
-- [ ] 8400 FastAPI 启动，`/api/v1/health` 汇总 8091/8092/8300/8301/8455 状态
-- [ ] React+Vite Web Shell（web/），由 8400 提供
-- [ ] 系统总览页（服务状态、degraded 明确显示）
-- [ ] 图片识别页（上传入口，M1 阶段可先对接 8091）
-- [ ] 训练模型只读页（8092 数据）
-- [ ] 标注 degraded 页（8300 DOWN 时明确标记）
-- [ ] 8300/8301/8304 不可用时 8400 正常运行并显示 degraded
-- [ ] 浏览器 E2E 验证 + 8091/8092 不受影响证明
+- [x] 8400 FastAPI 启动，`/api/v1/health` 汇总 8091/8092/8300/8301/8455 状态
+- [x] React+Vite Web Shell（web/），由 8400 提供
+- [x] 系统总览页（服务状态、degraded 明确显示）
+- [x] 图片识别页（上传入口，M1 阶段可先对接 8091）
+- [x] 训练模型只读页（8092 数据）
+- [x] 标注 degraded 页（8300 DOWN 时明确标记）
+- [x] 8300/8301/8304 不可用时 8400 正常运行并显示 degraded
+- [x] 浏览器 E2E 验证 + 8091/8092 不受影响证明
 
 ### M2 最小可信 Foundation
 - [ ] IAM 最小模型（用户/角色/权限，本机单租户起步）
@@ -66,10 +66,10 @@
 ## 工作包 W0–W11
 
 - [x] **W0 Baseline**：只读盘点 + 基线记录（见 EXECUTION-LOG #1–#6）
-- [ ] **W1 Scaffold**：`src/platform/` + `web/` 目录、依赖（锁定版本+许可证）、8400 启动命令、health 端点骨架
-- [ ] **W2 Health adapters**：8091/8092/8300/8301/8455 探测适配器；超时/失败类型/降级标记；`/api/v1/health` 汇总
-- [ ] **W3 Web Shell**：Vite+React+TS；7 页骨架（系统总览/Graph Runs/图片识别/标注审核/数据资产/训练模型/系统状态）；8400 静态托管
-- [ ] **W4 Recognition bridge**：`legacy.recognition.v2` adapter → 8091；上传→识别→结果展示
+- [x] **W1 Scaffold**：`src/platform/` + `web/` 目录、依赖（锁定版本+许可证）、8400 启动命令、health 端点骨架
+- [x] **W2 Health adapters**：8091/8092/8300/8301/8455 探测适配器；超时/失败类型/降级标记；`/api/v1/health` 汇总
+- [x] **W3 Web Shell**：Vite+React+TS；7 页骨架（系统总览/Graph Runs/图片识别/标注审核/数据资产/训练模型/系统状态）；8400 静态托管
+- [x] **W4 Recognition bridge**：`legacy.recognition.v2` adapter → 8091；上传→识别→结果展示
 - [ ] **W5 PlatformStore**：SQLite 开发适配器（M1–M3 专用，M6 一次性迁移 PG）；Run/Node/Checkpoint/Job/Audit/Usage/Evidence 表
 - [ ] **W6 Capability Registry**：ModuleManifest、注册函数、依赖方向守卫测试
 - [ ] **W7 Graph Kernel**：GraphDefinition/Version、Run 状态机、Checkpoint、预算/超时/循环节制、幂等重试
