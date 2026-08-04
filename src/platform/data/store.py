@@ -12,6 +12,7 @@ from __future__ import annotations
 import hashlib
 import json
 import sqlite3
+import threading
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -157,12 +158,26 @@ class PlatformStore:
     def __init__(self, db_path: Path | str) -> None:
         self._path = Path(db_path)
         self._path.parent.mkdir(parents=True, exist_ok=True)
-        self._conn = sqlite3.connect(str(self._path), timeout=15)
-        self._conn.row_factory = sqlite3.Row
-        self._conn.execute("PRAGMA foreign_keys=ON")
+        self._local = threading.local()
+        # 首连接设置 WAL（持久化于库文件）
         self._conn.execute("PRAGMA journal_mode=WAL")
-        self._conn.execute("PRAGMA busy_timeout=15000")
         self.apply_migrations()
+
+    def _make_conn(self) -> sqlite3.Connection:
+        c = sqlite3.connect(str(self._path), timeout=15)
+        c.row_factory = sqlite3.Row
+        c.execute("PRAGMA foreign_keys=ON")
+        c.execute("PRAGMA busy_timeout=15000")
+        return c
+
+    @property
+    def _conn(self) -> sqlite3.Connection:
+        """每线程独立连接（WAL 并发），避免跨线程共享 sqlite 对象。"""
+        c = getattr(self._local, "conn", None)
+        if c is None:
+            c = self._make_conn()
+            self._local.conn = c
+        return c
 
     # ---------- migrations ----------
 
@@ -555,4 +570,7 @@ class PlatformStore:
         return {"ok": bool(ok), "path": str(dest), "created_at": _utcnow()}
 
     def close(self) -> None:
-        self._conn.close()
+        c = getattr(self._local, "conn", None)
+        if c is not None:
+            c.close()
+            self._local.conn = None

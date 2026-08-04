@@ -17,8 +17,10 @@ from ..adapters.legacy.recognition import (
     RecognitionV2Adapter,
 )
 from ..registry import CapabilityRegistry, bootstrap_default_registry
+from .bundle import PlatformBundle
 from .context import install_request_context_middleware
 from .health import DEFAULT_SERVICES, aggregate_platform, probe_service
+from .runs import create_runs_router
 
 PLATFORM_VERSION = "0.1.0"
 MAX_UPLOAD_BYTES = 10 * 1024 * 1024  # 10 MiB；超限 413，与 8091 限制对齐
@@ -35,6 +37,7 @@ def create_app(
     recognition_adapter: RecognitionV2Adapter | None = None,
     monitor_adapter: MonitorAdapter | None = None,
     registry: CapabilityRegistry | None = None,
+    bundle: PlatformBundle | None = None,
 ) -> FastAPI:
     app = FastAPI(
         title="Unified Platform API",
@@ -56,6 +59,10 @@ def create_app(
     def capabilities():
         caps = cap_registry.capabilities()
         return {"count": len(caps), "capabilities": caps}
+
+    # ---- W9/W10 Graph Runs（组合根注入 bundle 时启用）----
+    if bundle is not None:
+        app.include_router(create_runs_router(bundle))
 
     @app.get("/api/v1/health")
     def health():

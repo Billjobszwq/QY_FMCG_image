@@ -25,6 +25,10 @@ class BudgetExceeded(Exception):
     """max_nodes / max_loops 超限。"""
 
 
+class NodeFailed(Exception):
+    """节点业务失败（fail-closed），run 转 failed。"""
+
+
 class HumanGateRequested(Exception):
     def __init__(self, reason: str) -> None:
         super().__init__(reason)
@@ -106,6 +110,7 @@ class GraphEngine:
         self._store.set_run_status(run_id, "running")
         t0 = time.monotonic()
         executed = 0
+        outputs: dict[str, Any] = {}
 
         for seq, spec in enumerate(defn.nodes, start=1):
             attempts = [
@@ -168,9 +173,10 @@ class GraphEngine:
                 run_id, node_name=spec.node_name, seq=seq, attempt=attempt_no,
                 status="completed", output_payload=output,
             )
+            outputs[spec.node_name] = output
             executed += 1
 
-        self._store.set_run_status(run_id, "completed")
+        self._store.set_run_status(run_id, "completed", output_payload=outputs)
         return self._store.get_run(run_id)
 
     # ---------- 人工门 ----------
