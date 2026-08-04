@@ -228,11 +228,17 @@ CREATE TABLE IF NOT EXISTS share_token (
 );
 """
 
+_M005 = """
+ALTER TABLE dataset_snapshot ADD COLUMN trainable INTEGER NOT NULL DEFAULT 1;
+ALTER TABLE dataset_snapshot ADD COLUMN status_note TEXT NOT NULL DEFAULT '';
+"""
+
 MIGRATIONS: tuple[tuple[str, str], ...] = (
     ("001_platform_init", _M001),
     ("002_labeling_inbox", _M002),
     ("003_training_gov", _M003),
     ("004_recoverable_worker", _M004),
+    ("005_snapshot_trainable", _M005),
 )
 
 
@@ -914,6 +920,18 @@ class PlatformStore:
     def list_dataset_snapshots(self) -> list[dict[str, Any]]:
         return [dict(r) for r in self._conn.execute(
             "SELECT * FROM dataset_snapshot ORDER BY created_at DESC").fetchall()]
+
+    def mark_dataset_snapshot_trainable(
+        self, snapshot_id: str, *, trainable: int, note: str
+    ) -> dict[str, Any] | None:
+        """审计式标记（U0-2/UMT-004）：不删除行，仅改可训练标志与备注。"""
+        self._conn.execute(
+            "UPDATE dataset_snapshot SET trainable=?, status_note=?"
+            " WHERE snapshot_id=?",
+            (1 if trainable else 0, note, snapshot_id),
+        )
+        self._conn.commit()
+        return self.get_dataset_snapshot(snapshot_id)
 
     def create_training_run(self, run: dict[str, Any]) -> dict[str, Any]:
         self._conn.execute(

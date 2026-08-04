@@ -189,3 +189,13 @@
 ### U0 提交（文档小 commit，不含业务代码）
 
 - 暂存范围：9 个审计文档 M + IMPLEMENTATION-LIST 新增；`git diff --cached --name-only` 核对后再提交；不 `git add .`。
+- 已提交 **32e8db0**（11 files，+718/-45）。
+
+## U1 训练真实性 P0（UMT-001～008 TDD，进行中）
+
+| # | 命令/动作 | 退出码 | 结果摘要 |
+|---|---|---|---|
+| 1 | U1-001/002：红测试 `tests/platform/test_umt001_true_fp.py` 5 项 RED → 实现 → 全绿 | 0 | recall@FP 改全数据集统一阈值扫描；错误账本互斥分类 + FP 守恒断言；内建参考实现互验；旧锁定 TopK 测试按审计口径改写；提交 **0908127**（316 passed） |
+| 2 | U1-003：红测试 `tests/platform/test_umt002_command.py` 5 项 RED → 实现 → 全绿 | 0 | train_v1 抽离 build_arg_parser（allow_abbrev=False）+ --parse-check；dry-run 命令只用真实参数并入库前 parser 预检；提交 **433f995**（321 passed） |
+| 3 | U0-2/U1-004：红测试 `tests/platform/test_u0_snapshot_marking.py` 3 项 RED → 实现 → 全绿 | 0 | migration 005（trainable/status_note）；mark_snapshot_demo 幂等 + audit；gates/dry_run 排除不可训练 Snapshot；全量 **324 passed + 1 skipped** |
+| 4 | 真实开发库标记演示 Snapshot | 0 | 072aeebebdb9（e2_product_pilot@v1）trainable=0 + 备注；audit snapshot.mark_demo；gates registered_snapshots=0、can_train=false；行与 manifest 保留未删除 |

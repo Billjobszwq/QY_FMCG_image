@@ -179,12 +179,31 @@ class TrainingGovernanceService:
     def list_snapshots(self) -> list[dict[str, Any]]:
         return self.store.list_dataset_snapshots()
 
+    def mark_snapshot_demo(self, snapshot_id: str, *, actor: str) -> dict[str, Any]:
+        """将 Snapshot 标记为演示/不可训练（U0-2/UMT-004）。
+
+        审计式纠偏：不物理删除行与 manifest，仅置 trainable=0 并留备注。
+        幂等。
+        """
+        snap = self.store.get_dataset_snapshot(snapshot_id)
+        if snap is None:
+            raise KeyError(snapshot_id)
+        note = (f"demo/invalid_for_training：演示数据不得用于训练"
+                f"（标记人 {actor}，{_utcnow()}）")
+        out = self.store.mark_dataset_snapshot_trainable(
+            snapshot_id, trainable=False, note=note)
+        self.store.append_audit(
+            actor=actor, action="snapshot.mark_demo",
+            subject_type="dataset_snapshot", subject_id=snapshot_id,
+            detail={"name": snap["name"], "version": snap["version"]})
+        return out
+
     # ----- gates -----
 
     def gates(self) -> dict[str, Any]:
         authorized = self.store.get_flag("training_authorized") == "true"
         snaps = [s for s in self.store.list_dataset_snapshots()
-                 if s["status"] == "registered"]
+                 if s["status"] == "registered" and s.get("trainable", 1)]
         reasons: list[str] = []
         if not authorized:
             reasons.append("training_authorized=false（需显式人工授权）")
@@ -227,6 +246,10 @@ class TrainingGovernanceService:
         snap = self.store.get_dataset_snapshot(snapshot_id)
         if snap is None or snap["status"] != "registered":
             raise TrainingGovError(f"snapshot 不可用: {snapshot_id}")
+        if not snap.get("trainable", 1):
+            raise TrainingGovError(
+                f"snapshot 已标记不可训练（演示/无效）: {snapshot_id}"
+                f"；{snap.get('status_note', '')}")
         stop = stop_lines or [
             "val_recall@FP3 连续 2 epoch 无提升即停",
             "total FP/photo > 1.0 即停",
