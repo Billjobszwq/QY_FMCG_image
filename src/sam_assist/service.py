@@ -119,12 +119,12 @@ def _run_worker(request: dict) -> dict:
             return {"ok": False, "error": f"图片解码失败: {blob}"}
         img_rgb = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2RGB)
 
-        torch.mps.reset_peak_memory_stats()
+        inst_out = []
+        alloc_before = int(torch.mps.current_allocated_memory() or 0)
         t0 = time.time()
         predictor.set_image(img_rgb)          # image embedding：每图一次
         enc_sec = time.time() - t0
 
-        inst_out = []
         for inst in img_req["instances"]:
             pts = np.array([inst["positive"]] + list(inst.get("negatives", [])),
                            dtype=np.float32)
@@ -160,6 +160,8 @@ def _run_worker(request: dict) -> dict:
             "image_sha": img_req["image_sha"],
             "encoder_sec": round(enc_sec, 4),
             "mps_peak_mem_bytes": int(torch.mps.driver_allocated_memory() or 0),
+            "mps_alloc_after_bytes": int(torch.mps.current_allocated_memory() or 0),
+            "mps_alloc_delta_bytes": int(torch.mps.current_allocated_memory() or 0) - alloc_before,
             "instances": inst_out,
         })
 
