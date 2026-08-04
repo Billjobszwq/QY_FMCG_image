@@ -78,6 +78,85 @@ export async function fetchMonitorOverview(): Promise<Record<string, unknown>> {
   return r.json();
 }
 
+export interface RunRow {
+  run_id: string;
+  graph_name: string;
+  graph_version: string;
+  status: string;
+  error: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface NodeRow {
+  node_name: string;
+  seq: number;
+  attempt: number;
+  status: string;
+  started_at: string;
+  ended_at: string | null;
+  error: string | null;
+  output_json: string | null;
+}
+
+export interface RunView {
+  run: RunRow & { input_json?: unknown; output_json?: unknown };
+  nodes: NodeRow[];
+  evidence: { evidence_id: string; kind: string; manifest_json: string }[];
+}
+
+export async function fetchRuns(): Promise<{ count: number; runs: RunRow[] }> {
+  const r = await fetch("/api/v1/runs");
+  if (!r.ok) throw new Error(`runs HTTP ${r.status}`);
+  return r.json();
+}
+
+export async function fetchRun(runId: string): Promise<RunView> {
+  const r = await fetch(`/api/v1/runs/${runId}`);
+  if (!r.ok) throw new Error(`run HTTP ${r.status}`);
+  return r.json();
+}
+
+export async function uploadAsset(file: File): Promise<{ sha256: string; size_bytes: number }> {
+  const form = new FormData();
+  form.append("file", file);
+  const r = await fetch("/api/v1/assets/upload", { method: "POST", body: form });
+  if (!r.ok) throw new Error(`upload HTTP ${r.status}`);
+  return r.json();
+}
+
+export async function startRun(body: {
+  graph_name: string;
+  graph_version?: string;
+  input: Record<string, unknown>;
+  idempotency_key?: string;
+}): Promise<RunView> {
+  const r = await fetch("/api/v1/runs", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!r.ok) {
+    const d = await r.json().catch(() => ({}));
+    throw new Error(d.detail ?? `runs HTTP ${r.status}`);
+  }
+  return r.json();
+}
+
+export async function approveRun(
+  runId: string,
+  approved: boolean,
+  actor = "web-operator"
+): Promise<RunView> {
+  const r = await fetch(`/api/v1/runs/${runId}/approve`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ approved, actor }),
+  });
+  if (!r.ok) throw new Error(`approve HTTP ${r.status}`);
+  return r.json();
+}
+
 export async function recognizeFile(file: File, conf = 0.25): Promise<RecognitionResult> {
   const form = new FormData();
   form.append("file", file);
