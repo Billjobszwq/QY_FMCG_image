@@ -387,6 +387,55 @@ export async function logout(): Promise<void> {
   _csrfToken = null;
 }
 
+// ---------- recognition tasks (U2-3) ----------
+
+export interface RecognitionTaskRow {
+  task_id: string;
+  entry: string;
+  status: string;
+  file_count: number;
+  sku_count: number;
+  created_by: string;
+  created_at: string;
+  error: string;
+}
+
+export interface RecognitionTaskView {
+  task: RecognitionTaskRow;
+  results: Array<Record<string, unknown> & { name?: string }>;
+  errors: string[];
+  elapsed_ms: number;
+}
+
+async function postFormWithCsrf(url: string, form: FormData): Promise<Response> {
+  const headers: Record<string, string> = {};
+  if (_csrfToken) headers["X-CSRF-Token"] = _csrfToken;
+  return fetch(url, { method: "POST", headers, body: form });
+}
+
+export async function uploadRecognitionFiles(files: File[]): Promise<RecognitionTaskView> {
+  const form = new FormData();
+  for (const f of files) form.append("files", f);
+  const r = await postFormWithCsrf("/api/v1/recognition/tasks/upload", form);
+  if (!r.ok) throw await parseError(r, "recognition upload");
+  return r.json();
+}
+
+export async function recognizeByUrl(url: string): Promise<RecognitionTaskView> {
+  const r = await postJson("/api/v1/recognition/tasks/url", { url });
+  if (!r.ok) throw await parseError(r, "recognition url");
+  return r.json();
+}
+
+export async function fetchRecognitionTasks(): Promise<{
+  count: number;
+  tasks: RecognitionTaskRow[];
+}> {
+  const r = await fetch("/api/v1/recognition/tasks");
+  if (!r.ok) throw new Error(`recognition tasks HTTP ${r.status}`);
+  return r.json();
+}
+
 export async function recognizeFile(file: File, conf = 0.25): Promise<RecognitionResult> {
   const form = new FormData();
   form.append("file", file);

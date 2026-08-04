@@ -248,6 +248,20 @@ _M007 = """
 ALTER TABLE training_run ADD COLUMN job_id TEXT NOT NULL DEFAULT '';
 """
 
+_M008 = """
+CREATE TABLE IF NOT EXISTS recognition_task (
+    task_id TEXT PRIMARY KEY,
+    entry TEXT NOT NULL,
+    status TEXT NOT NULL,
+    file_count INTEGER NOT NULL DEFAULT 0,
+    sku_count INTEGER NOT NULL DEFAULT 0,
+    created_by TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    result_json TEXT NOT NULL DEFAULT '',
+    error TEXT NOT NULL DEFAULT ''
+);
+"""
+
 MIGRATIONS: tuple[tuple[str, str], ...] = (
     ("001_platform_init", _M001),
     ("002_labeling_inbox", _M002),
@@ -256,6 +270,7 @@ MIGRATIONS: tuple[tuple[str, str], ...] = (
     ("005_snapshot_trainable", _M005),
     ("006_auth_sessions", _M006),
     ("007_training_run_job_id", _M007),
+    ("008_recognition_task", _M008),
 )
 
 
@@ -1033,6 +1048,37 @@ class PlatformStore:
         self._conn.execute(
             "DELETE FROM auth_sessions WHERE session_id=?", (session_id,))
         self._conn.commit()
+
+    # ---------- recognition task（U2-3） ----------
+
+    def create_recognition_task(
+        self, *, task_id: str, entry: str, status: str,
+        file_count: int, sku_count: int, created_by: str,
+        result_json: str = "", error: str = "",
+    ) -> dict[str, Any]:
+        self._conn.execute(
+            """INSERT INTO recognition_task
+               (task_id, entry, status, file_count, sku_count,
+                created_by, created_at, result_json, error)
+               VALUES (?,?,?,?,?,?,?,?,?)""",
+            (task_id, entry, status, file_count, sku_count,
+             created_by, _utcnow(), result_json, error),
+        )
+        self._conn.commit()
+        return self.get_recognition_task(task_id)
+
+    def get_recognition_task(self, task_id: str) -> dict[str, Any] | None:
+        row = self._conn.execute(
+            "SELECT * FROM recognition_task WHERE task_id=?",
+            (task_id,)).fetchone()
+        return dict(row) if row else None
+
+    def list_recognition_tasks(self, *, limit: int = 100
+                               ) -> list[dict[str, Any]]:
+        rows = self._conn.execute(
+            "SELECT * FROM recognition_task ORDER BY created_at DESC,"
+            " rowid DESC LIMIT ?", (min(limit, 500),)).fetchall()
+        return [dict(r) for r in rows]
 
     # ---------- backup ----------
 
