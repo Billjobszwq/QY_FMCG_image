@@ -1,8 +1,11 @@
-import { useCallback, useEffect, useState } from "react";
+import { ReactNode, useCallback, useEffect, useState } from "react";
 import {
   TrainingGates,
   TrainingRunRow,
+  approveTrainingPlan,
   dryRunTraining,
+  enqueueTraining,
+  fetchJobs,
   fetchMonitorLive,
   fetchMonitorOverview,
   fetchTrainingGates,
@@ -10,29 +13,43 @@ import {
   fetchTrainingSnapshots,
 } from "../api";
 
+type Snap = Record<string, unknown>;
+type Job = Record<string, unknown>;
+
+function cmdOf(r: TrainingRunRow): string {
+  try {
+    return JSON.stringify(JSON.parse(r.command_json), null, 1);
+  } catch {
+    return r.command_json;
+  }
+}
+
 export default function Training() {
   const [live, setLive] = useState<Record<string, unknown> | null>(null);
   const [overview, setOverview] = useState<Record<string, unknown> | null>(null);
   const [gates, setGates] = useState<TrainingGates | null>(null);
   const [runs, setRuns] = useState<TrainingRunRow[] | null>(null);
-  const [snaps, setSnaps] = useState<Array<Record<string, unknown>> | null>(null);
+  const [snaps, setSnaps] = useState<Snap[] | null>(null);
+  const [jobs, setJobs] = useState<Job[] | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
+  const [busy, setBusy] = useState<string | null>(null);
 
   const reload = useCallback(async () => {
     try {
-      const [l, o, g, r, s] = await Promise.all([
+      const [l, o, g, r, s, j] = await Promise.all([
         fetchMonitorLive().catch(() => null),
         fetchMonitorOverview().catch(() => null),
         fetchTrainingGates(),
         fetchTrainingRuns(),
         fetchTrainingSnapshots(),
+        fetchJobs().catch(() => null),
       ]);
       setLive(l);
       setOverview(o);
       setGates(g);
       setRuns(r.runs);
       setSnaps(s.snapshots);
+      setJobs(j ? j.jobs : null);
       setError(null);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -43,28 +60,131 @@ export default function Training() {
     reload();
   }, [reload]);
 
-  const onDryRun = async (snapshotId: string) => {
-    setBusy(true);
+  // 活动 job 期间每 5s 轮询一次
+  useEffect(() => {
+    const active = (runs ?? []).some(
+      (r) => r.status === "queued" || r.status === "running"
+    );
+    if (!active) return;
+    const t = setInterval(reload, 5000);
+    return () => clearInterval(t);
+  }, [runs, reload]);
+
+  const act = async (key: string, fn: () => Promise<unknown>) => {
+    setBusy(key);
+    setError(null);
     try {
-      await dryRunTraining(snapshotId);
+      await fn();
       await reload();
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
-      setBusy(false);
+      setBusy(null);
     }
   };
 
-  const legacyRuns = (overview?.yolo_runs as Array<Record<string, unknown>> | undefined) ?? [];
+  const all = runs ?? [];
+  const demoSnaps = (snaps ?? []).filter((s) => Number(s.trainable ?? 1) === 0);
+  const okSnaps = (snaps ?? []).filter((s) => Number(s.trainable ?? 1) !== 0);
+  const planRuns = all.filter((r) => r.kind === "dry_run");
+  const approvedRuns = all.filter((r) => r.status === "approved");
+  const activeRuns = all.filter(
+    (r) => r.status === "queued" || r.status === "running"
+  );
+  const historyRuns = all.filter(
+    (r) =>
+      r.kind === "completed_candidate" ||
+      ["completed", "failed", "cancelled"].includes(r.status)
+  );
+  const publishRuns = all.filter((r) => r.publish_status && r.publish_status !== "none");
+  const activeJobs = (jobs ?? []).filter(
+    (j) => j.kind === "training.run" && ["queued", "running"].includes(String(j.status))
+  );
+
+  const snapTable = (list: Snap[], demo: boolean) =>
+    list.length === 0 ? (
+      <p className="muted">无。</p>
+    ) : (
+      <table>
+        <thead>
+          <tr>
+            <th>name@version</th>
+            <th>mode</th>
+            <th>manifest_hash</th>
+            <th>来源审核</th>
+            <th>状态</th>
+            <th>操作</th>
+          </tr>
+        </thead>
+        <tbody>
+          {list.map((s) => (
+            <tr key={String(s.snapshot_id)}>
+              <td>
+                {String(s.name)}@{String(s.version)}
+              </td>
+              <td>{String(s.mode)}</td>
+              <td className="muted">{String(s.manifest_hash).slice(0, 12)}…</td>
+              <td className="muted">
+                {String(s.source_actor)}：{String(s.source_conclusion)}
+              </td>
+              <td>
+                {demo ? (
+                  <span className="pill pill-unavailable">不可训练（演示）</span>
+                ) : (
+                  <span
+                    className={`pill pill-${s.status === "registered" ? "healthy" : "unavailable"}`}
+                  >
+                    {String(s.status)}
+                  </span>
+                )}
+              </td>
+              <td>
+                {demo ? (
+                  <span className="muted">仅展示，禁止训练</span>
+                ) : (
+                  <button
+                    disabled={busy !== null || s.status !== "registered"}
+                    onClick={() =>
+                      act(`dry:${s.snapshot_id}`, () => dryRunTraining(String(s.snapshot_id)))
+                    }
+                  >
+                    {busy === `dry:${s.snapshot_id}` ? "生成中…" : "dry-run"}
+                  </button>
+                )}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    );
+
+  const runCard = (r: TrainingRunRow, actions: ReactNode) => (
+    <div key={r.run_id} style={{ marginBottom: 12 }}>
+      <p>
+        <span className="muted">{r.run_id.slice(0, 8)}…</span>{" "}
+        <span className={`pill pill-${r.status === "approved" ? "healthy" : "degraded"}`}>
+          {r.kind} / {r.status}
+        </span>{" "}
+        <span className="pill pill-degraded">publish: {r.publish_status}</span>{" "}
+        {r.approved_by && <span className="muted">批准人：{r.approved_by}</span>}
+        {r.job_id && <span className="muted"> job: {r.job_id.slice(0, 8)}…</span>}
+      </p>
+      <pre style={{ whiteSpace: "pre-wrap", fontSize: 12 }}>{cmdOf(r)}</pre>
+      <p className="muted" style={{ fontSize: 12 }}>
+        停止线：{r.stop_lines_json}
+      </p>
+      {actions}
+    </div>
+  );
 
   return (
     <section>
-      <h2>训练模型（M5 治理）</h2>
+      <h2>训练模型（M5 治理 · UMT 修正版）</h2>
       {error && <div className="banner banner-unavailable">错误：{error}</div>}
       {gates && (
         <div className={`banner ${gates.can_train ? "banner-healthy" : "banner-degraded"}`}>
           {gates.training_authorized
-            ? "training_authorized=true：训练已获显式授权（平台仍不自动执行，需 admin 启动）。"
+            ? "training_authorized=true：训练已获显式授权（批准计划与提交 Job 为两步独立操作）。"
             : "当前无训练授权：training_started=false。平台不消耗算力。"}
           {!gates.can_train && gates.reasons.length > 0 && (
             <ul style={{ margin: "6px 0 0" }}>
@@ -76,74 +196,98 @@ export default function Training() {
         </div>
       )}
 
-      <h3>DatasetSnapshot（split guard 通过才可注册）</h3>
+      <h3>① 演示快照（不可训练）</h3>
+      {snaps === null ? <p className="muted">加载中…</p> : snapTable(demoSnaps, true)}
+
+      <h3>② 可训练快照（服务端 builder 生成，split guard 通过）</h3>
       {snaps === null ? (
         <p className="muted">加载中…</p>
-      ) : snaps.length === 0 ? (
-        <p className="muted">暂无快照。经 API 注册（train/val 门店/session/sha 零交集守卫）。</p>
+      ) : okSnaps.length === 0 ? (
+        <p className="muted">暂无可训练快照。须经服务端 builder 注册（train/val 门店/session/sha 零交集守卫）。</p>
       ) : (
-        <table>
-          <thead>
-            <tr>
-              <th>name@version</th>
-              <th>mode</th>
-              <th>manifest_hash</th>
-              <th>来源审核</th>
-              <th>状态</th>
-              <th>操作</th>
-            </tr>
-          </thead>
-          <tbody>
-            {snaps.map((s) => (
-              <tr key={String(s.snapshot_id)}>
-                <td>
-                  {String(s.name)}@{String(s.version)}
-                </td>
-                <td>{String(s.mode)}</td>
-                <td className="muted">{String(s.manifest_hash).slice(0, 12)}…</td>
-                <td className="muted">
-                  {String(s.source_actor)}：{String(s.source_conclusion)}
-                </td>
-                <td>
-                  <span className={`pill pill-${s.status === "registered" ? "healthy" : "unavailable"}`}>
-                    {String(s.status)}
-                  </span>
-                </td>
-                <td>
-                  <button
-                    disabled={busy || s.status !== "registered"}
-                    onClick={() => onDryRun(String(s.snapshot_id))}
-                  >
-                    dry-run
-                  </button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        snapTable(okSnaps, false)
       )}
 
-      <h3>TrainingRun（dry-run → 授权 → candidate → 独立发布审批）</h3>
+      <h3>③ 训练计划（dry-run：命令 / MPS G0 / 预算 / 停止线）</h3>
       {runs === null ? (
         <p className="muted">加载中…</p>
-      ) : runs.length === 0 ? (
-        <p className="muted">暂无运行。dry-run 将展示批准后将执行的命令、MPS G0、算力预算与停止线。</p>
+      ) : planRuns.length === 0 ? (
+        <p className="muted">暂无计划。对可训练快照执行 dry-run 生成（需登录）。</p>
       ) : (
-        runs.map((r) => (
-          <div key={r.run_id} style={{ marginBottom: 12 }}>
-            <p>
+        planRuns.map((r) =>
+          runCard(
+            r,
+            <button
+              disabled={busy !== null}
+              onClick={() => act(`approve:${r.run_id}`, () => approveTrainingPlan(r.run_id))}
+            >
+              {busy === `approve:${r.run_id}` ? "批准中…" : "批准训练计划"}
+            </button>
+          )
+        )
+      )}
+
+      <h3>④ 已批准计划（待提交训练 Job）</h3>
+      {runs === null ? (
+        <p className="muted">加载中…</p>
+      ) : approvedRuns.length === 0 ? (
+        <p className="muted">无已批准待提交的计划。</p>
+      ) : (
+        approvedRuns.map((r) =>
+          runCard(
+            r,
+            <button
+              disabled={busy !== null}
+              onClick={() => act(`enqueue:${r.run_id}`, () => enqueueTraining(r.run_id))}
+            >
+              {busy === `enqueue:${r.run_id}` ? "提交中…" : "提交训练 Job"}
+            </button>
+          )
+        )
+      )}
+
+      <h3>⑤ 活动训练 Job</h3>
+      {activeRuns.length === 0 && activeJobs.length === 0 ? (
+        <div className="banner banner-degraded">idle：当前无活动训练 Job，平台未消耗训练算力。</div>
+      ) : (
+        <>
+          {activeRuns.map((r) => (
+            <p key={r.run_id}>
               <span className="muted">{r.run_id.slice(0, 8)}…</span>{" "}
-              <span className={`pill pill-${r.kind === "authorized" ? "healthy" : "degraded"}`}>{r.kind}</span>{" "}
-              <span className="pill pill-degraded">publish: {r.publish_status}</span>{" "}
-              {r.approved_by && <span className="muted">批准人：{r.approved_by}</span>}
+              <span className="pill pill-healthy">{r.status}</span>{" "}
+              {r.job_id && <span className="muted">job: {r.job_id.slice(0, 8)}…</span>}
             </p>
-            <pre style={{ whiteSpace: "pre-wrap", fontSize: 12 }}>
-              {JSON.stringify(JSON.parse(r.command_json), null, 1)}
-            </pre>
-            <p className="muted" style={{ fontSize: 12 }}>
-              停止线：{JSON.stringify(JSON.parse(r.stop_lines_json))}
+          ))}
+          {activeJobs.map((j) => (
+            <p key={String(j.job_id)}>
+              <span className="muted">job {String(j.job_id).slice(0, 8)}…</span>{" "}
+              <span className="pill pill-healthy">{String(j.status)}</span>{" "}
+              <span className="muted">attempt {String(j.attempt_no ?? "?")}</span>
             </p>
-          </div>
+          ))}
+        </>
+      )}
+
+      <h3>⑥ 历史实验</h3>
+      {runs === null ? (
+        <p className="muted">加载中…</p>
+      ) : historyRuns.length === 0 ? (
+        <p className="muted">无历史实验记录。</p>
+      ) : (
+        historyRuns.map((r) => runCard(r, null))
+      )}
+
+      <h3>⑦ 生产模型（独立发布审批）</h3>
+      {runs === null ? (
+        <p className="muted">加载中…</p>
+      ) : publishRuns.length === 0 ? (
+        <p className="muted">无发布流程。训练完成只产生 candidate，发布需独立 admin 审批。</p>
+      ) : (
+        publishRuns.map((r) => (
+          <p key={r.run_id}>
+            <span className="muted">{r.run_id.slice(0, 8)}…</span>{" "}
+            <span className="pill pill-degraded">publish: {r.publish_status}</span>
+          </p>
         ))
       )}
 
@@ -167,7 +311,7 @@ export default function Training() {
           </div>
         </div>
       )}
-      {legacyRuns.length > 0 && (
+      {((overview?.yolo_runs as Array<Record<string, unknown>> | undefined) ?? []).length > 0 && (
         <table>
           <thead>
             <tr>
@@ -176,7 +320,7 @@ export default function Training() {
             </tr>
           </thead>
           <tbody>
-            {legacyRuns.map((r) => (
+            {((overview?.yolo_runs as Array<Record<string, unknown>> | undefined) ?? []).map((r) => (
               <tr key={String(r.run)}>
                 <td>{String(r.run)}</td>
                 <td>{Array.isArray(r.epochs) ? r.epochs.length : 0}</td>
@@ -186,8 +330,8 @@ export default function Training() {
         </table>
       )}
       <p className="muted">
-        红线：训练启动需显式授权；训练完成只产生 candidate，不自动发布；发布为独立 admin
-        审批；旧 /retrain auto_switch=true 不进新平台。
+        红线：写操作需本机登录 + CSRF；批准计划与提交 Job 为两步；训练完成只产生 candidate，不自动发布；
+        旧 /retrain auto_switch=true 不进新平台。
       </p>
     </section>
   );

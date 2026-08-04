@@ -79,6 +79,12 @@ class TestLoginSession:
         me = client.get("/api/v1/auth/me").json()
         assert me["actor"] == "admin" and me["role"] == "admin"
 
+    def test_me_returns_session_csrf_for_page_refresh(self, client):
+        """U1-009：页面刷新后前端需从 /auth/me 恢复 CSRF token。"""
+        csrf = _login(client)
+        me = client.get("/api/v1/auth/me").json()
+        assert me["csrf_token"] == csrf
+
     def test_mutating_without_csrf_rejected(self, client):
         _login(client)
         r = client.post("/api/v1/training/authorize", json={"value": True})

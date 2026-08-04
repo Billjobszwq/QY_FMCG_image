@@ -157,7 +157,9 @@ def create_auth_router(auth: AuthService) -> APIRouter:
         p = auth.principal(request.cookies.get(SESSION_COOKIE))
         if p is None:
             raise HTTPException(status_code=401, detail="未登录或会话过期")
-        return {"actor": p["actor"], "role": p["role"]}
+        # 页面刷新后前端需恢复 CSRF token（session 已验证，返回安全）
+        return {"actor": p["actor"], "role": p["role"],
+                "csrf_token": p["csrf"]}
 
     @router.post("/api/v1/auth/logout")
     def logout(request: Request, response: Response):

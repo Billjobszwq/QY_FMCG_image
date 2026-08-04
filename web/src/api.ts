@@ -256,6 +256,7 @@ export interface TrainingRunRow {
   budget_json: string;
   stop_lines_json: string;
   approved_by: string | null;
+  job_id: string;
   created_at: string;
 }
 
@@ -280,17 +281,81 @@ export async function fetchTrainingSnapshots(): Promise<{
   return r.json();
 }
 
+async function postJson(url: string, body: unknown): Promise<Response> {
+  const headers: Record<string, string> = { "content-type": "application/json" };
+  if (_csrfToken) headers["X-CSRF-Token"] = _csrfToken;
+  return fetch(url, { method: "POST", headers, body: JSON.stringify(body) });
+}
+
+async function parseError(r: Response, fallback: string): Promise<Error> {
+  const d = await r.json().catch(() => ({}));
+  return new Error(d.detail ?? `${fallback} HTTP ${r.status}`);
+}
+
 export async function dryRunTraining(snapshotId: string): Promise<{ run: TrainingRunRow }> {
-  const r = await fetch("/api/v1/training/runs/dry-run", {
+  const r = await postJson("/api/v1/training/runs/dry-run", { snapshot_id: snapshotId });
+  if (!r.ok) throw await parseError(r, "dry-run");
+  return r.json();
+}
+
+export async function approveTrainingPlan(runId: string): Promise<{ run: TrainingRunRow }> {
+  const r = await postJson(`/api/v1/training/runs/${runId}/approve-plan`, {});
+  if (!r.ok) throw await parseError(r, "approve-plan");
+  return r.json();
+}
+
+export async function enqueueTraining(runId: string): Promise<{ run: TrainingRunRow & { job_id: string } }> {
+  const r = await postJson(`/api/v1/training/runs/${runId}/enqueue`, {});
+  if (!r.ok) throw await parseError(r, "enqueue");
+  return r.json();
+}
+
+export async function fetchJobs(): Promise<{
+  stats: Record<string, number>;
+  count: number;
+  jobs: Array<Record<string, unknown>>;
+}> {
+  const r = await fetch("/api/v1/jobs");
+  if (!r.ok) throw new Error(`jobs HTTP ${r.status}`);
+  return r.json();
+}
+
+// ---------- auth (UMT-006) ----------
+
+export interface AuthMe {
+  actor: string;
+  role: string;
+}
+
+let _csrfToken: string | null = null;
+
+export function csrfToken(): string | null {
+  return _csrfToken;
+}
+
+export async function login(username: string, password: string): Promise<AuthMe> {
+  const r = await fetch("/api/v1/auth/login", {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ snapshot_id: snapshotId }),
+    body: JSON.stringify({ username, password }),
   });
-  if (!r.ok) {
-    const d = await r.json().catch(() => ({}));
-    throw new Error(d.detail ?? `dry-run HTTP ${r.status}`);
-  }
-  return r.json();
+  if (!r.ok) throw await parseError(r, "login");
+  const d = await r.json();
+  _csrfToken = d.csrf_token ?? null;
+  return { actor: d.actor, role: d.role };
+}
+
+export async function fetchMe(): Promise<AuthMe> {
+  const r = await fetch("/api/v1/auth/me");
+  if (!r.ok) throw new Error(`me HTTP ${r.status}`);
+  const d = await r.json();
+  if (d.csrf_token) _csrfToken = d.csrf_token;
+  return { actor: d.actor, role: d.role };
+}
+
+export async function logout(): Promise<void> {
+  await fetch("/api/v1/auth/logout", { method: "POST" });
+  _csrfToken = null;
 }
 
 export async function recognizeFile(file: File, conf = 0.25): Promise<RecognitionResult> {

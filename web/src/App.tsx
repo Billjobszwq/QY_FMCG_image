@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { NavLink, Route, Routes } from "react-router-dom";
-import { fetchHealth, HealthBody } from "./api";
+import { AuthMe, fetchHealth, fetchMe, HealthBody, login, logout } from "./api";
 import Overview from "./pages/Overview";
 import GraphRuns from "./pages/GraphRuns";
 import Recognition from "./pages/Recognition";
@@ -21,6 +21,37 @@ const NAV = [
 
 export default function App() {
   const [health, setHealth] = useState<HealthBody | null>(null);
+  const [me, setMe] = useState<AuthMe | null>(null);
+  const [authChecked, setAuthChecked] = useState(false);
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+  const [loginError, setLoginError] = useState<string | null>(null);
+  const [loginBusy, setLoginBusy] = useState(false);
+
+  useEffect(() => {
+    fetchMe()
+      .then(setMe)
+      .catch(() => setMe(null))
+      .finally(() => setAuthChecked(true));
+  }, []);
+
+  const onLogin = async () => {
+    setLoginBusy(true);
+    setLoginError(null);
+    try {
+      setMe(await login(username, password));
+      setPassword("");
+    } catch (e) {
+      setLoginError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setLoginBusy(false);
+    }
+  };
+
+  const onLogout = async () => {
+    await logout();
+    setMe(null);
+  };
 
   useEffect(() => {
     let stop = false;
@@ -47,6 +78,42 @@ export default function App() {
         </div>
         <div className={`overall overall-${overall ?? "unknown"}`}>
           {overall ? `平台状态：${overall}` : "平台状态：加载中…"}
+        </div>
+        <div style={{ marginLeft: "auto", display: "flex", gap: 8, alignItems: "center" }}>
+          {authChecked && me && (
+            <>
+              <span className="muted">
+                已登录：{me.actor}（{me.role}）
+              </span>
+              <button onClick={onLogout}>退出</button>
+            </>
+          )}
+          {authChecked && !me && (
+            <>
+              <input
+                placeholder="用户名"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                style={{ width: 90 }}
+              />
+              <input
+                placeholder="口令"
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && onLogin()}
+                style={{ width: 120 }}
+              />
+              <button onClick={onLogin} disabled={loginBusy}>
+                登录
+              </button>
+              {loginError && (
+                <span className="muted" style={{ color: "#c0392b" }}>
+                  {loginError}
+                </span>
+              )}
+            </>
+          )}
         </div>
       </header>
       {overall === "degraded" && (
