@@ -19,6 +19,8 @@ from typing import Any, Callable
 from src.eval.truebox_eval import evaluate_truebox
 from src.platform.iam import can as iam_can
 
+from .builder import BUILDER_VERSION, validate_and_stage
+
 
 class TrainingGovError(Exception):
     """训练治理错误基类。"""
@@ -175,6 +177,47 @@ class TrainingGovernanceService:
 
     def get_snapshot(self, snapshot_id: str) -> dict[str, Any] | None:
         return self.store.get_dataset_snapshot(snapshot_id)
+
+    def build_and_register_snapshot(
+        self,
+        name: str,
+        version: str,
+        mode: str,
+        entries: list[dict[str, Any]],
+        *,
+        actor: str,
+        datasets_root: Path,
+        protocol_dir: Path | None = None,
+    ) -> dict[str, Any]:
+        """UMT-003：服务端 builder 生成真实 Snapshot（拒绝自由 JSON）。
+
+        manifest 由逐文件校验结果推导，不接受客户端提交的 manifest；
+        审核结论为结构化 builder 记录，不接受自由文本。
+        """
+        dest = Path(datasets_root) / f"{name}_{version}"
+        try:
+            manifest, report = validate_and_stage(
+                entries, dest, mode=mode, protocol_dir=protocol_dir)
+        except (ValueError, RuntimeError) as e:
+            raise TrainingGovError(f"Snapshot builder 拒绝: {e}") from e
+        conclusion = (
+            f"{BUILDER_VERSION}: 逐文件校验通过"
+            f"（train={report['train_size']}, val={report['val_size']},"
+            f" mode={mode}）")
+        snap = self.register_snapshot(
+            name, version, mode, manifest,
+            source_actor=f"{actor}:{BUILDER_VERSION}",
+            source_conclusion=conclusion,
+            quality=report,
+        )
+        self.store.append_audit(
+            actor=actor, action="snapshot.build",
+            subject_type="dataset_snapshot", subject_id=snap["snapshot_id"],
+            detail={"name": name, "version": version,
+                    "manifest_hash": snap["manifest_hash"],
+                    "dest": report["dest"]})
+        return {"snapshot": self.store.get_dataset_snapshot(
+            snap["snapshot_id"]), "report": report}
 
     def list_snapshots(self) -> list[dict[str, Any]]:
         return self.store.list_dataset_snapshots()

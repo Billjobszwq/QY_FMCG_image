@@ -199,3 +199,4 @@
 | 2 | U1-003：红测试 `tests/platform/test_umt002_command.py` 5 项 RED → 实现 → 全绿 | 0 | train_v1 抽离 build_arg_parser（allow_abbrev=False）+ --parse-check；dry-run 命令只用真实参数并入库前 parser 预检；提交 **433f995**（321 passed） |
 | 3 | U0-2/U1-004：红测试 `tests/platform/test_u0_snapshot_marking.py` 3 项 RED → 实现 → 全绿 | 0 | migration 005（trainable/status_note）；mark_snapshot_demo 幂等 + audit；gates/dry_run 排除不可训练 Snapshot；全量 **324 passed + 1 skipped** |
 | 4 | 真实开发库标记演示 Snapshot | 0 | 072aeebebdb9（e2_product_pilot@v1）trainable=0 + 备注；audit snapshot.mark_demo；gates registered_snapshots=0、can_train=false；行与 manifest 保留未删除 |
+| 5 | U1-005：红测试 `tests/platform/test_umt003_snapshot_builder.py` 8 项 RED → 实现 → 全绿 | 0 | 新增 `src/modules/training_gov/builder.py`（逐文件校验/SHA+pHash 去重/五键守卫/protocol_guard/staging+data.yaml/拒绝覆盖）；service.build_and_register_snapshot；POST /snapshots → 410，新增 POST /snapshots/build；test_m5 E2E 改走真实 builder（修正：val 需独立门店满足 split 守卫）；全量 **332 passed + 1 skipped**，本批次提交 |

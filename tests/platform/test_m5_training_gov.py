@@ -246,16 +246,36 @@ def test_training_api_e2e(tmp_path: Path) -> None:
     g = client.get("/api/v1/training/gates").json()
     assert g["training_authorized"] is False and g["can_train"] is False
 
-    # snapshot 注册（guard 通过）
-    r = client.post("/api/v1/training/snapshots", json={
-        "name": "e2", "version": "v1", "manifest": MANIFEST_OK})
-    assert r.status_code == 200, r.text
-    sid = r.json()["snapshot"]["snapshot_id"]
-
-    # 泄漏 manifest 被拒
+    # UMT-003：自由 JSON manifest 注册已禁用（410）
     r2 = client.post("/api/v1/training/snapshots", json={
         "name": "bad", "version": "v1", "manifest": MANIFEST_LEAK})
-    assert r2.status_code == 400
+    assert r2.status_code == 410
+
+    # snapshot 由服务端 builder 生成（真实文件）
+    photos, labels = [], []
+    for n, split in (("t1", "train"), ("t2", "train"), ("v1", "val")):
+        p = tmp_path / "photos" / f"{n}.jpg"
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_bytes(f"img-{n}".encode())
+        lp = tmp_path / "labels" / f"{n}.txt"
+        lp.parent.mkdir(parents=True, exist_ok=True)
+        lp.write_text("0 0.5 0.5 0.2 0.2\n")
+        photos.append((p, lp, n, split))
+    entries = [{"path": str(p), "label_path": str(lp),
+                "photo_id": f"P-{n}",
+                "store": "门店X" if split == "train" else "门店Y",
+                "session": ("门店X" if split == "train" else "门店Y")
+                + f"@2026-08-0{1+i}", "split": split,
+                "review_status": "human_final",
+                "quality_status": "accepted"}
+               for i, (p, lp, n, split) in enumerate(photos)]
+    import os
+    os.environ["PLATFORM_DATASETS_ROOT"] = str(tmp_path / ".datasets")
+    rb = client.post("/api/v1/training/snapshots/build", json={
+        "name": "e2", "version": "v1", "mode": "product",
+        "entries": entries})
+    assert rb.status_code == 200, rb.text
+    sid = rb.json()["snapshot"]["snapshot_id"]
 
     # dry-run
     r3 = client.post("/api/v1/training/runs/dry-run", json={"snapshot_id": sid})

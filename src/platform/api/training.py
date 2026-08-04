@@ -2,6 +2,8 @@
 
 平台只承载 HTTP 边界；治理逻辑在 src/modules/training_gov（经组合根注入）。
 角色经 X-Actor/X-Role 头传递（本机单租户最小 IAM，fail-closed）。
+UMT-003：Snapshot 只能由服务端 builder 生成，不再接受客户端自由
+manifest JSON；注册入口返回 410，改用 /snapshots/build。
 """
 
 from __future__ import annotations
@@ -22,9 +24,28 @@ class SnapshotBody(BaseModel):
     name: str
     version: str
     mode: str = "product"
-    manifest: dict[str, Any]
+    manifest: dict[str, Any] | None = None
     source_conclusion: str = "人工审核通过"
     quality: dict[str, Any] | None = None
+
+
+class BuildEntry(BaseModel):
+    path: str
+    label_path: str
+    photo_id: str
+    store: str
+    session: str
+    split: str
+    review_status: str
+    quality_status: str
+
+
+class BuildSnapshotBody(BaseModel):
+    name: str
+    version: str
+    mode: str = "product"
+    entries: list[BuildEntry]
+    protocol_dir: str | None = None
 
 
 class DryRunBody(BaseModel):
@@ -53,21 +74,35 @@ def create_training_router(service: Any) -> APIRouter:
         return {"count": len(snaps), "snapshots": snaps}
 
     @router.post("/api/v1/training/snapshots")
-    def create_snapshot(
-        body: SnapshotBody,
+    def create_snapshot(body: SnapshotBody):
+        """UMT-003：自由 JSON manifest 注册已禁用（410）。"""
+        raise HTTPException(
+            status_code=410,
+            detail=("客户端自由 manifest/自由文本审核结论已禁用；"
+                    "Snapshot 必须由服务端 builder 生成："
+                    "POST /api/v1/training/snapshots/build"))
+
+    @router.post("/api/v1/training/snapshots/build")
+    def build_snapshot(
+        body: BuildSnapshotBody,
         x_actor: str | None = Header(default=None),
         x_role: str | None = Header(default=None),
     ):
         actor, _role = _actor_role(x_actor, x_role)
+        import os
+        from pathlib import Path
+        datasets_root = Path(os.environ.get(
+            "PLATFORM_DATASETS_ROOT", ".datasets"))
         try:
-            snap = service.register_snapshot(
-                body.name, body.version, body.mode, body.manifest,
-                source_actor=actor, source_conclusion=body.source_conclusion,
-                quality=body.quality,
-            )
-        except Exception as e:  # split guard 失败等
+            out = service.build_and_register_snapshot(
+                body.name, body.version, body.mode,
+                [e.model_dump() for e in body.entries],
+                actor=actor, datasets_root=datasets_root,
+                protocol_dir=(Path(body.protocol_dir)
+                              if body.protocol_dir else None))
+        except Exception as e:
             raise HTTPException(status_code=400, detail=str(e))
-        return {"snapshot": snap}
+        return out
 
     @router.get("/api/v1/training/runs")
     def list_runs():

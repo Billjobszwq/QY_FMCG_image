@@ -11,7 +11,7 @@
 | ID | 目标 | 依赖 | Owner | 状态 | 测试 | 证据 | Commit | 剩余风险 |
 |---|---|---|---|---|---|---|---|---|
 | U0-1 | 建立/更新六治理文档（本文件+STATUS/ISSUES/DECISIONS/EXECUTION-LOG/PLAN） | — | agent | DONE | — | git status 保留未跟踪制品 | （随 U0 提交） | — |
-| U0-2 | M5 标 REOPENED，演示 Snapshot 标不可训练（不物理删除） | U0-1 | agent | DONE | `tests/platform/test_u0_snapshot_marking.py`（3 红→绿） | 真实库 072aeebe trainable=0 + audit；gates registered_snapshots=0/can_train=false | 同 U1-004 提交 | — |
+| U0-2 | M5 标 REOPENED，演示 Snapshot 标不可训练（不物理删除） | U0-1 | agent | DONE | `tests/platform/test_u0_snapshot_marking.py`（3 红→绿） | 真实库 072aeebe trainable=0 + audit；gates registered_snapshots=0/can_train=false | c5fcca2 | — |
 | U0-3 | 文档/代码/DB/UI 状态一致性自查（G-TRUTH） | U0-2 | agent | TODO | — | 逐项对照表 | — | — |
 
 ## U1 训练真实性 P0（UMT-001～008）
@@ -21,8 +21,8 @@
 | U1-001 | recall@FP 改为全数据集统一置信度阈值扫描（one-to-one、FP 含重复/背景/定位、输出阈值与曲线）；独立参考实现 + 对抗测试 | — | agent | DONE | `tests/platform/test_umt001_true_fp.py`（5 红→绿） | "2 TP 后才出现第 1 个 FP"反例：FP1=2 TP；跨图统一阈值；随机 21 案例与内建参考实现互验 | 0908127 | 已改写旧锁定测试 |
 | U1-002 | 错误账本互斥 + FP 守恒式 `FP_total = dup+loc+bg+taxonomy...`，门禁用 total FP/photo | U1-001 | agent | DONE | 守恒断言 + `test_promotion_gate_uses_total_fp_not_background_only` | `assert n_tp+total_fp==n_proposals` 内置 evaluate_truebox；门禁优先 total_fp | 0908127 | — |
 | U1-003 | dry-run 生成 train_v1.py 真实支持的命令（--data-yaml/--run-name 等）+ CLI parse 预检（no-train 检查） | U1-002 | agent | DONE | `tests/platform/test_umt002_command.py`（5 红→绿） | 真实子进程 `--parse-check` 退出码 0；`--dataset` 被 allow_abbrev=False parser 拒绝；未知参数 fail-closed；默认 imgsz 960 非 1280 | 433f995 | data.yaml 路径默认 .datasets/<name>_<version>/，真实训练前需 builder 产出 |
-| U1-004 | 演示 Snapshot 标 demo/invalid_for_training | U0-2 | agent | DONE | `tests/platform/test_u0_snapshot_marking.py` | migration 005（trainable/status_note 列）；幂等标记；dry_run 拒绝 demo | 同批次提交 | UI 展示待 U1-009 训练页分区 |
-| U1-005 | 服务端 Snapshot builder：逐文件存在/SHA/标签/data.yaml/五键/近重复/协议/质量/审核校验；拒绝客户端自由 JSON | U1-004 | agent | TODO | `tests/platform/test_umt003_snapshot_builder.py` | 伪造/缺文件/协议命中/近重复跨 split 拒绝 | — | — |
+| U1-004 | 演示 Snapshot 标 demo/invalid_for_training | U0-2 | agent | DONE | `tests/platform/test_u0_snapshot_marking.py` | migration 005（trainable/status_note 列）；幂等标记；dry_run 拒绝 demo | c5fcca2 | UI 展示待 U1-009 训练页分区 |
+| U1-005 | 服务端 Snapshot builder：逐文件存在/SHA/标签/data.yaml/五键/近重复/协议/质量/审核校验；拒绝客户端自由 JSON | U1-004 | agent | DONE | `tests/platform/test_umt003_snapshot_builder.py`（8 红→绿）+ E2E 改写 | builder 逐文件校验 + SHA/pHash 去重 + 五键守卫 + protocol_guard + staging+data.yaml；POST /snapshots → 410，新增 POST /snapshots/build | 本批次提交 | 全量 332 passed + 1 skipped |
 | U1-006 | MPS G0 真实门禁：arm64/torch MPS built+available/1024²矩阵/模型前向/无 fallback/电源/内存/swap/磁盘，证据写 run | U1-003 | agent | TODO | `tests/platform/test_umt005_mps_g0.py`（主机门控） | 任一失败禁用训练按钮 | — | 沙箱无 MPS，主机验证 |
 | U1-007 | 可信身份：本机 login session/CSRF/服务端 role；禁止客户端 X-Role/X-Actor 自证 | U1-005 | agent | TODO | `tests/platform/test_umt006_auth.py` | 伪造 header 不能授权训练/批准门 | — | — |
 | U1-008 | 拆分 approve_plan 与 enqueue_training_job；训练走 M6 可恢复 Worker（job/attempt/PID/log） | U1-007 | agent | TODO | `tests/platform/test_umt007_job_semantics.py` | 批准不消耗算力；启动产生 job | — | — |
