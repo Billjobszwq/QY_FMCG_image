@@ -752,7 +752,7 @@ Web、App、API 和 Agent 使用同一领域服务。所有命令支持 Idempote
 
 ### L0：契约与治理冻结
 
-- 前置验收：统一 Foundation Milestone 的 Module SDK 和 Reference Work Pack 契约测试已通过；
+- 前置验收：统一 Foundation Milestone 的 Module SDK 和 Reference Echo Pack 契约测试已通过；
 - Location、FieldSession、PositionBatch、Geofence、Campaign、Task、Assignment、RoutePlan、Evidence 契约；
 - 坐标系统、版本、不变性、租户和保留策略；
 - Map Provider、Planner、Evidence Capability；

@@ -4,6 +4,8 @@
 
 > **平台最终架构入口（2026-08-04）：** 整个产品的唯一总纲是 [`Graph+Loop 智能业务操作系统最终统一架构设计`](./superpowers/specs/2026-08-04-fmcg-vision-saas-platform-design.md)。它定义一套统一底座和可插拔 Domain Pack；位置外勤规格只是从属模块文档，不是第二套系统。
 >
+> **实施 Agent 开工入口：** 先读 [`全项目实施总纲`](./superpowers/plans/2026-08-04-full-project-execution-program.md)，再严格执行 [`Stage 0–1 Unified Foundation 代码级计划`](./superpowers/plans/2026-08-04-stage0-1-graph-loop-kernel.md)。当前只允许 Stage 0–1 开工；Task 26 验收前不得进入后续模块。
+>
 > **现有识别/训练运行入口：** 本页前半部分保留早期系统说明；级联生产架构以 [`handbook.md`](./handbook.md) 为准，最终训练准入、Apple M3 Max/MPS 规范和最新阻断项以 [`2026-08-04-final-training-execution-gate.md`](./superpowers/plans/2026-08-04-final-training-execution-gate.md) 为准。这些文档说明当前系统如何运行，不覆盖最终平台架构。较早严格复核保留在 [`latest-handbook-reverification-2026-08-04.md`](./latest-handbook-reverification-2026-08-04.md) 作为历史证据。
 
 用多模态大模型当"老师"自动打标签、人工把关，训出 YOLO 当"学生"上识别热路径。原始资产只读、标签追加式留痕、张张过人工才进训练。
@@ -37,6 +39,8 @@ python -m src.recognize.api --port 8091    # 识别接口
 | 文档 | 内容 |
 |---|---|
 | [`superpowers/specs/2026-08-04-fmcg-vision-saas-platform-design.md`](./superpowers/specs/2026-08-04-fmcg-vision-saas-platform-design.md) | **平台唯一架构总纲**：一套底座、Graph+Loop 内核、统一数据系统、Module SDK 和积木式 Domain Pack |
+| [`superpowers/plans/2026-08-04-full-project-execution-program.md`](./superpowers/plans/2026-08-04-full-project-execution-program.md) | **全项目开工总纲**：Stage 0–9 依赖、交付物、门禁、需求映射、Agent 启动提示词和审查清单 |
+| [`superpowers/plans/2026-08-04-stage0-1-graph-loop-kernel.md`](./superpowers/plans/2026-08-04-stage0-1-graph-loop-kernel.md) | **当前唯一可执行代码级计划**：26 个 TDD 任务完成 Unified Foundation、双模块隔离和最终验收 |
 | [`superpowers/specs/2026-08-04-location-field-operations-design.md`](./superpowers/specs/2026-08-04-location-field-operations-design.md) | **从属 Domain Pack 规格**：位置、路线、围栏、外勤、普查和现场证据；禁止自建平行底座 |
 | [`setup.md`](./setup.md) | **环境+项目部署**：依赖、omlx、`.env`、校验、可选 Docker/镜像源、可选 Label Studio |
 | [`structure.md`](./structure.md) | **结构**：三阶段数据流、`src/` 模块地图、运行时数据目录、数据仓库 schema、红线 |
@@ -92,7 +96,7 @@ python -m pytest tests/unit tests/contract -q     # 不变性/对齐/命名/别�
 - ✅ 本机为 Apple M3 Max / arm64 / 128 GB；真实终端中的 MPS 张量与当前级联 MPS 推理均已通过，硬件路线 GO。
 - ⏹️ 当前训练已停止；生产 classifier 为 208 类 ResNet18，记录 val_acc 83.67%，不含 `__unknown__`。
 - ⚠️ 复核时实际监听 8091/8092；8300 Label Studio、8301 ML backend、8304 orchestrator 均未运行。
-- ✅ Git 已初始化并与 `origin/main` 对齐；本次 fresh 测试为 46 passed。
+- ✅ Git 已初始化；2026-08-04 统一架构交付前只读 fresh 测试为 74 passed。
 - 🟥 新协议集虽已冻结，但 dev_v1 有 2 个规范化门店别名与 batch2 重叠，旧 v6 与四协议集也有大量门店重叠；不得续跑 v6 checkpoint。
 - 🟥 `.datasets/sku_v6` 和两个 crop 数据仍是旧制品；默认 builder 会命中冻结集并失败，且门店/session 隔离未进入 fail-closed。
 - 🟥 E0 的 89.0% 是 matched-conditional precision；纳入 accepted FP 后业务 precision 为 60.45%，且当前仍是 point-in-box 而非严格 IoU。

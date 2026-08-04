@@ -1368,7 +1368,7 @@ Stage 0 和 Stage 1 组成一个不可拆开的 Foundation Milestone。实施 Ag
 底座必须用两个“最薄插件”验证：
 
 1. FMCG Recognition Bridge：只把现有单图级联推理包装为 Capability，不重写模型线。
-2. Reference Work Pack（契约测试包）：位于测试 fixture，只提供候选工作项 → 人工确认 → 完成的虚拟闭环，不创建正式外勤事实，不提前实现定位、地图或路线算法。
+2. Reference Echo Pack（契约测试包）：只提供输入 → Capability echo → 人工确认 → 完成与用量记录的虚拟闭环，不创建任何正式业务事实，用来证明模块发现、Graph、任务、计量和禁用隔离。
 
 两个验证包必须共用相同 IAM、ModuleManifest、PostgreSQL、CAS、Outbox/Inbox、UsageLedger、Audit、Web 导航插槽和 Run 时间线。如果为第二个包增加功能时需要改写 Kernel 内部的领域特例，Foundation Milestone 直接判定失败。
 
@@ -1404,7 +1404,7 @@ Stage 0 和 Stage 1 组成一个不可拆开的 Foundation Milestone。实施 Ag
 - UsageLedger、meter 注册、预算预留/结算、RateCard 接口和冲正语义；
 - 统一配置、结构化日志、备份与恢复演练；
 - FMCG Recognition Bridge：单图输入 → 现有级联识别适配器 → 结果与用量记录；
-- Reference Work Pack（契约测试包）：虚拟候选工作项 → 人工确认 → 完成与用量记录，不写正式外勤表；
+- Reference Echo Pack（契约测试包）：输入 → echo → 人工确认 → 完成与用量记录，不写正式业务表；
 - 模块启用、停用、故障、升级、不兼容拒绝和历史可读的端到端契约测试。
 
 退出门禁：两个最薄验证包均只靠 Manifest 和稳定契约注册；它们共用同一身份、数据、证据、事件、账本、Web 壳和 Graph Runtime；停用/破坏一个模块不影响另一个；跨进程重启可从检查点恢复；幂等节点不重复执行；预算、权限、停滞和人工门可验证；无 SQLite 双事实源；备份恢复和迁移失败演练通过。
@@ -1727,7 +1727,7 @@ Stage 1 未通过前，实施 Agent 不得通过复制新服务、新数据库�
 
 ## 30. 对实施 Agent 的约束
 
-在本文被产品负责人确认之前，任何 Agent 都不得根据本文开始大规模实现。确认后仍需先为每个 Stage 编写独立实施计划，精确到文件、数据库迁移、测试、命令、验收和回滚。
+本文已被产品负责人确认为唯一总体架构。实施入口为 `docs/superpowers/plans/2026-08-04-full-project-execution-program.md`；当前只有 Stage 0–1 拥有已批准的代码级计划，后续 Stage 仍须通过前置验收和 Admission Package。
 
 实施 Agent 必须遵守：
 
@@ -1748,11 +1748,12 @@ Stage 1 未通过前，实施 Agent 不得通过复制新服务、新数据库�
 
 ## 31. 下一步
 
-当前下一步是由产品负责人复核本次“唯一总纲 + 从属 Domain Pack”修订。通过后：
+总体设计、全项目实施总纲和 Stage 0–1 代码级计划已经完成。当前下一步固定为：
 
-1. 使用 writing-plans 重写现有 Stage 0–1 详细计划，将交付目标升级为完整 Foundation Milestone；
-2. 计划严格映射现有仓库，采用 Adapter 保留现有识别/训练入口，不做一次性重写；
-3. Foundation 计划经用户单独批准后，实施 Agent 才可修改底座代码；
-4. Foundation 实施和退出门验收完成后，再为各 Domain Pack 编写并审批独立的积木式实施计划。
+1. 将全项目总纲第 18 章的启动提示词交给第一位实施 Agent；
+2. Agent 在独立 worktree 执行 Stage 0–1 Task 1–26；
+3. Task 16 只验收 Graph Kernel，不得提前宣布底座完成；
+4. Task 26 生成 `UF1-foundation-acceptance.md` 后停止；
+5. 只有用户确认 `UF1=ACCEPTED` 后，Stage 2 才创建 Admission Package 和实施分支。
 
-在 Stage 0-1 计划获批前，训练 Agent 可继续执行已经单独批准的训练工作，但不得提前创建新的系统事实库、Graph Runtime、全局身份或替换现有生产入口。
+Foundation 实施期间不得并行启动新的正式训练、替换生产入口或引入平行数据底座。此前已经单独授权的实验也必须遵守最终训练执行门禁，且不得与 Foundation 争抢 MPS/统一内存而污染性能结论。
