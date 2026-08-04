@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import hashlib
 import json
-import sys
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
@@ -18,6 +17,8 @@ from typing import Any, Callable
 
 from src.eval.truebox_eval import evaluate_truebox
 from src.platform.iam import can as iam_can
+
+from .mps_gate import run_mps_g0
 
 from .builder import BUILDER_VERSION, validate_and_stage
 
@@ -298,7 +299,8 @@ class TrainingGovernanceService:
             "total FP/photo > 1.0 即停",
             f"wall-clock > {budget_minutes}min 即停",
         ]
-        mps_g0 = sys.platform == "darwin"
+        # UMT-005：MPS G0 必须真实实测，禁止 sys.platform 假判；证据写入 run
+        g0 = run_mps_g0(disk_root=".")
         run_name = f"{snap['name']}_{snap['version']}"
         yaml_path = data_yaml or f".datasets/{run_name}/data.yaml"
         command = [
@@ -322,7 +324,8 @@ class TrainingGovernanceService:
             "kind": "dry_run",
             "plan_json": json.dumps({
                 "epochs": epochs, "imgsz": imgsz, "device": device,
-                "mps_g0": mps_g0, "manifest_hash": snap["manifest_hash"],
+                "mps_g0": g0["ok"], "mps_g0_report": g0,
+                "manifest_hash": snap["manifest_hash"],
             }, ensure_ascii=False),
             "command_json": json.dumps(command, ensure_ascii=False),
             "budget_json": json.dumps({"minutes": budget_minutes},
@@ -342,6 +345,13 @@ class TrainingGovernanceService:
         run = self.store.get_training_run(run_id)
         if run is None:
             raise KeyError(run_id)
+        plan = json.loads(run.get("plan_json") or "{}")
+        if not plan.get("mps_g0"):
+            failed = [c["name"] for c in
+                      plan.get("mps_g0_report", {}).get("checks", [])
+                      if not c.get("ok")]
+            raise TrainingGovError(
+                f"MPS G0 未通过，训练保持禁用；失败项: {failed or '无报告'}")
         if self.store.get_flag("training_authorized") != "true":
             raise AuthorizationRequired(
                 "training_authorized=false：训练启动需显式人工授权")
