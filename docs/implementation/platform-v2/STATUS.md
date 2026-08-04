@@ -6,7 +6,7 @@
 | 项 | 值 |
 |---|---|
 | 当前状态 | M5 完成（cef025a）；M6 代码侧完成（可恢复 Worker/CAS 加固/安全加固/PG 迁移脚本），PG 真实运行待安装/生产迁移授权 |
-| 当前 HEAD | cef025a + M6 未提交变更（feat/usable-platform-foundation） |
+| 当前 HEAD | 49172d5（M6，feat/usable-platform-foundation） |
 | 分支 | `feat/usable-platform-foundation` |
 | 基线 commit | `c9998af`（feat/sam-reannotation） |
 | 基线测试 | 170 passed；M6 后全量 **310 passed，1 skipped**（PG 门控，4.12s） |
