@@ -203,3 +203,10 @@
 | 6 | U1-006：红测试 `tests/platform/test_umt005_mps_g0.py` 7 项 → 实现 → 全绿 | 0 | 新增 `src/modules/training_gov/mps_gate.py`：arm64/torch MPS built+available/1024² matmul/Conv2d 前向/禁 PYTORCH_ENABLE_MPS_FALLBACK/pmset AC/sysctl 内存+swap/磁盘，全部实测；dry_run 写入 mps_g0_report 证据；start_training 对 G0 失败 raise；主机实测（AC、MPS 真实运算）全绿；提交 **7cd3c81**，全量 **339 passed + 1 skipped** |
 | 7 | U1-007：红测试 `tests/platform/test_umt006_auth.py` 6 项 RED → 实现 → 全绿 | 0 | 新增 `src/platform/auth.py`：pbkdf2 口令哈希/登录 session（migration 006 auth_sessions）/session 绑定 CSRF；training+jobs+share 写端点 require_principal（401/403 fail-closed），X-Role/X-Actor 不再作为身份依据；E2E（test_m5/test_m6）改走登录流；顺修 DryRunBody imgsz 默认 1280→960；提交 **4085023**，全量 **345 passed + 1 skipped** |
 | 8 | U1-008：红测试 `tests/platform/test_umt007_job_semantics.py` 5 项 RED → 实现 → 全绿 | 0 | service.approve_plan（只落状态，worker.submitted==[]）与 enqueue_training_job（需 approved+授权+G0；提交 training.run job）；Worker handler 真实子进程留 PID/日志（PLATFORM_RUNS_ROOT/.runs/<run_id>/attempt_N.log）；migration 007 training_run.job_id；API /approve-plan /enqueue；全量 **350 passed + 1 skipped** |
+| 9 | U1-009/U0-3：前端登录 + 训练页七分区 + 浏览器 E2E | 0 | 红测试：/auth/me 返回 csrf_token（页面刷新恢复 CSRF）→ 实现；api.ts login/me/logout + CSRF 封装 + approvePlan/enqueue/jobs；App.tsx topbar 登录表单；Training.tsx 七分区（演示快照标不可训练/可训练/计划/已批准/活动 Job 显 idle/历史/生产）；`tsc --noEmit` + vite build 42 modules；重启 8400（旧进程无 auth router 的旧代码占端口，kill 后以 src.composition.serve + PLATFORM_USERS 启动）；browser E2E：未登录表单→admin 登录 200→已登录态→七分区全显→idle 横幅→console 无 error；截图 `.eval/training_login_check_{1..4}_*.png`；全量 **351 passed + 1 skipped**；提交 **87f16d5** |
+
+### U1 结论
+
+- UMT-001～008 全部落地（008 文档一致性由 U0 承担）；U1-001～009 全 DONE。
+- 三冻结值保持：production_switch=false、training_started=false、deleted_files=false。
+- 下一步：U2 统一管理 MVP（角色首页/统一任务中心/真实数据中心）。

@@ -6,11 +6,11 @@
 
 | 项 | 值 |
 |---|---|
-| 当前状态 | 平台原型可运行但尚非统一管理产品；M5 REOPENED，训练 NO-GO；U0 治理文档已建立，当前实施 U1（UMT-001～008 TDD） |
+| 当前状态 | U0 治理 + U1 训练真实性 P0 全部完成（UMT-001～008 + 前端登录/训练页分区，HEAD 87f16d5）；训练仍 NO-GO（待 G 门禁机器证据与真实 Snapshot）；下一步 U2 统一管理 MVP |
 | 当前 HEAD | 分支基点 `9db9946`；实时值以 `git rev-parse HEAD` 为准 |
 | 分支 | `feat/unified-workbench-training-readiness`（基于 `9db9946`，审计文档改动随本分支提交） |
 | 任务清单 | `docs/implementation/platform-v2/IMPLEMENTATION-LIST.md`（U0–U5/T0–T2 逐项：ID/依赖/Owner/状态/测试/证据/Commit） |
-| 基线测试 | **310 passed，1 skipped**（4.52s，主机 miniconda python3，2026-08-05 复核） |
+| 基线测试 | **351 passed，1 skipped**（主机 miniconda python3，U1-009 后全量回归） |
 | 生产 bundle | `prod_20260804_v4_r2`（16 文件校验通过，不修改） |
 | production_switch | **false**（冻结） |
 | training_started | **false**（冻结） |
@@ -39,9 +39,9 @@
 | M2 最小可信 Foundation | DONE（46d2f25 → 1dc4cc8，243 passed） |
 | M3 第一条真实 Graph | DONE（fb55084 → 7afa0bf → 7450d23 → b7513dc，265 passed） |
 | M4 Label Studio 闭环 | PARTIAL（机械对账 f42f882；人工标注/双审/仲裁/final box 未完成） |
-| M5 数据集训练治理 | **REOPENED / NO-GO**（真实 FP/photo 仍为 TopK；命令无效；唯一 Snapshot 为演示数据） |
+| M5 数据集训练治理 | **REOPENED / NO-GO**（UMT-001～008 代码修复全部落地并测试；尚缺真实 Snapshot、人工 truebox 与 G 门禁机器证据） |
 | M6 PostgreSQL + 可靠 Worker | DONE（49172d5 + PG 演练；生产切换待独立授权） |
-| U2 统一管理 MVP | PENDING（当前只有 7 页开发者 Shell，无统一待办/资产/真实训练作业） |
+| U2 统一管理 MVP | **NEXT**（当前只有 7 页开发者 Shell + 登录/训练分区，无统一待办/资产/真实训练作业） |
 | U3/U4 全照片与 SAM 审核 | PENDING（250 审核项全部 pending；qa_v3 仅 120 张） |
 | U5 Graph+Loop v2 | PENDING（当前 Kernel 是 fixed sequential for-loop） |
 | T0/T1/T2 训练 | BLOCKED（P0 修复后仅授权 1ep smoke + 3ep pilot） |
@@ -67,3 +67,5 @@
 - 现有 250 条人工 truebox 审核全部 pending，不能伪造完成。
 
 上述问题关闭并有机器证据前，`training_authorized` 必须保持 false。
+
+**修复进展（2026-08-05 U1）**：上述六项中前五项代码层已修复并有测试证据（统一阈值扫描/真实 CLI 命令+预检/演示 Snapshot 标不可训练/MPS G0 实测/approve 与 enqueue 拆分 + 可信登录）；剩余关闭条件：真实 Snapshot（服务端 builder）、人工 truebox、G 门禁机器证据。前端登录与训练页分区已上线（87f16d5，浏览器 E2E 截图 `.eval/training_login_check_*.png`）。

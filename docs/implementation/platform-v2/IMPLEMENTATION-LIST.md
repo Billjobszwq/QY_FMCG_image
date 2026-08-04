@@ -12,7 +12,7 @@
 |---|---|---|---|---|---|---|---|---|
 | U0-1 | 建立/更新六治理文档（本文件+STATUS/ISSUES/DECISIONS/EXECUTION-LOG/PLAN） | — | agent | DONE | — | git status 保留未跟踪制品 | （随 U0 提交） | — |
 | U0-2 | M5 标 REOPENED，演示 Snapshot 标不可训练（不物理删除） | U0-1 | agent | DONE | `tests/platform/test_u0_snapshot_marking.py`（3 红→绿） | 真实库 072aeebe trainable=0 + audit；gates registered_snapshots=0/can_train=false | c5fcca2 | — |
-| U0-3 | 文档/代码/DB/UI 状态一致性自查（G-TRUTH） | U0-2 | agent | TODO | — | 逐项对照表 | — | — |
+| U0-3 | 文档/代码/DB/UI 状态一致性自查（G-TRUTH） | U0-2 | agent | DONE | 浏览器 E2E（登录流+训练页七分区+idle+console 无错误） | 逐项对照：文档 M5=REOPENED/DB trainable=0/代码 410+守卫/UI 演示分区标不可训练；截图 .eval/training_login_check_*.png | 87f16d5 | — |
 
 ## U1 训练真实性 P0（UMT-001～008）
 
@@ -25,8 +25,8 @@
 | U1-005 | 服务端 Snapshot builder：逐文件存在/SHA/标签/data.yaml/五键/近重复/协议/质量/审核校验；拒绝客户端自由 JSON | U1-004 | agent | DONE | `tests/platform/test_umt003_snapshot_builder.py`（8 红→绿）+ E2E 改写 | builder 逐文件校验 + SHA/pHash 去重 + 五键守卫 + protocol_guard + staging+data.yaml；POST /snapshots → 410，新增 POST /snapshots/build | 50e39ff | 全量 332 passed + 1 skipped |
 | U1-006 | MPS G0 真实门禁：arm64/torch MPS built+available/1024²矩阵/模型前向/无 fallback/电源/内存/swap/磁盘，证据写 run | U1-003 | agent | DONE | `tests/platform/test_umt005_mps_g0.py`（7 项含主机门控） | `mps_gate.run_mps_g0` 全项实测；dry_run 写入 mps_g0_report；start_training 对 G0 失败 fail-closed；主机 AC+MPS 实测全绿 | 7cd3c81 | 全量 339 passed + 1 skipped |
 | U1-007 | 可信身份：本机 login session/CSRF/服务端 role；禁止客户端 X-Role/X-Actor 自证 | U1-005 | agent | DONE | `tests/platform/test_umt006_auth.py`（6 红→绿） | `src/platform/auth.py`（pbkdf2 口令/session 表 migration 006/CSRF 绑定）；training+jobs+share 写端点 require_principal；伪造 header → 401；DryRunBody imgsz 默认 1280→960 | 4085023 | 前端登录 UI 待 U1-009/U2；全量 345 passed + 1 skipped |
-| U1-008 | 拆分 approve_plan 与 enqueue_training_job；训练走 M6 可恢复 Worker（job/attempt/PID/log） | U1-007 | agent | DONE | `tests/platform/test_umt007_job_semantics.py`（5 红→绿） | approve_plan 只落状态不提交 job；enqueue 需 approved+授权+G0，经 Worker training.run handler 真实子进程留 PID/日志；migration 007 job_id；新 API /approve-plan /enqueue | 本批次提交 | 全量 350 passed + 1 skipped |
-| U1-009 | 训练页分区：演示/候选/可训练/活动 job/历史实验/生产模型；无活动 job 显 idle | U1-008 | agent | TODO | tsc+build+截图 | 浏览器 E2E | — | — |
+| U1-008 | 拆分 approve_plan 与 enqueue_training_job；训练走 M6 可恢复 Worker（job/attempt/PID/log） | U1-007 | agent | DONE | `tests/platform/test_umt007_job_semantics.py`（5 红→绿） | approve_plan 只落状态不提交 job；enqueue 需 approved+授权+G0，经 Worker training.run handler 真实子进程留 PID/日志；migration 007 job_id；新 API /approve-plan /enqueue | 5c13177 | 全量 350 passed + 1 skipped |
+| U1-009 | 训练页分区：演示/候选/可训练/活动 job/历史实验/生产模型；无活动 job 显 idle | U1-008 | agent | DONE | tsc --noEmit + vite build（42 modules）+ 浏览器 E2E | Training.tsx 七分区（演示快照标不可训练/可训练/计划/已批准/活动 Job 显 idle/历史/生产）；App.tsx topbar 登录表单；api.ts CSRF 恢复（/auth/me 返回 csrf_token）；截图 .eval/training_login_check_*.png；全量 351 passed + 1 skipped | 87f16d5 | — |
 
 ## U2 统一管理 MVP
 
