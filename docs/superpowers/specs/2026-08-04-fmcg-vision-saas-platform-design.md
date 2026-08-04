@@ -12,7 +12,7 @@
 
 本项目的核心不是识别，也不是传统 SaaS。它要建设的是一个以 Graph+Loop 为运行内核的智能业务操作系统：系统能够围绕客户目标动态编排能力、持续观察结果、判断下一步、调用工具、请求人工介入，并在预算、权限和审计约束下完成业务闭环。
 
-FMCG 视觉识别是第一个落地领域和第一套行业能力包，用来验证这套智能内核能否在高数据量、强证据、模型不确定性、人工审核和计费约束下可靠运行。未来的问卷、数据库分析、BI、追踪和客户专属业务都应作为新的领域能力包接入同一内核，而不是继续扩展一个以识别为中心的系统。
+FMCG 视觉识别是第一个落地领域和第一套行业能力包，用来验证这套智能内核能否在高数据量、强证据、模型不确定性、人工审核和计费约束下可靠运行。第二个已确认的领域包是“Geo Foundation + Field Operations”，用于地址主数据、工作时定位、电子围栏、多点路线、任务派发、EDS 类无清单普查和现场证据闭环。未来的问卷、数据库分析、BI、追踪和客户专属业务也应作为新的领域能力包接入同一内核，而不是继续扩展一个以识别为中心的系统。
 
 已经确认的总体方案是：
 
@@ -26,8 +26,9 @@ FMCG 视觉识别是第一个落地领域和第一套行业能力包，用来验
 8. Label Studio、视觉模型、问卷、BI 和数据库分析都是 Capability Provider。它们通过统一能力契约接入，不反向控制平台。
 9. Agent 只能读取授权的客户数据和调用获批能力；可自动写系统自己的 Run、Checkpoint、用量、审计和衍生产物，不能直接写客户源数据或绕过领域服务。
 10. FMCG 识别首域仍采用多模型流水线，并保留商品版本、照片证据、人工审核和分档服务，但这些属于首个 Domain Pack，不是平台中心。
+11. 位置与外勤领域必须使用版本化地点、路线、围栏、任务和证据；Agent 只生成候选和建议，正式事实由领域服务与人工/策略门执行。
 
-本设计覆盖 Graph+Loop 智能内核、能力市场与工具治理、智能工作台、FMCG 识别首域、Label Studio、审核、训练、数据、计费、8TB 本地容量和每日十万张照片的增长目标。
+本设计覆盖 Graph+Loop 智能内核、能力市场与工具治理、智能工作台、FMCG 识别首域、位置与外勤第二领域、Label Studio、审核、训练、数据、计费、8TB 本地容量和每日十万张照片的增长目标。位置与外勤的完整语义以 `docs/superpowers/specs/2026-08-04-location-field-operations-design.md` 为准。
 
 ### 1.1 与传统 SaaS 的第一性区别
 
@@ -53,6 +54,7 @@ FMCG 视觉识别是第一个落地领域和第一套行业能力包，用来验
 - 建立统一能力契约，使识别、标注、审核、训练、问卷、BI、数据查询和未来客户能力都能成为可编排节点。
 - 建立目标驱动的智能工作台，同时保留确定性模块页面作为直接操作、审计和人工接管入口。
 - 以 FMCG 识别作为第一条端到端参考 Graph，完成照片或 URL 到质量、识别、审核、发布、计费和反馈学习的闭环。
+- 将 Geo Foundation 和 Field Operations 作为第二个独立 Domain Pack，冻结地址、工作会话、轨迹、围栏、路线、普查区块、任务和现场证据的统一契约。
 - 形成原始数据、标注、审核、数据集快照、训练运行、模型版本、Graph 版本和结果之间可追溯的生命周期。
 - 支持 API、Web 和 Agent 三种入口启动同一 Graph 或直接调用获批领域能力。
 - 从第一版开始具备租户、客户、项目、权限、保留策略、客户商品映射和用量账本的数据边界。
@@ -62,7 +64,7 @@ FMCG 视觉识别是第一个落地领域和第一套行业能力包，用来验
 ### 2.2 本期明确不做
 
 - 当前不进行公有云部署、自动扩缩容或跨地域容灾。
-- 当前不完整实现问卷、BI、小程序和 App，只冻结其 Capability Contract、数据产品契约、导航位置和统一 API 原则。
+- 当前 Stage 0–7 不完整实现问卷、BI、小程序和员工 App；员工 App 与地理外勤能力按第二 Domain Pack 的 L0–L6 单独计划实施。
 - 当前不承诺对任意客户、任意照片都成立的统一准确率；准确性承诺只针对客户确认的冻结验收集。
 - 当前不自动删除任何业务数据。保留策略、到期状态和预警先实现，真实删除必须经过明确审批与可恢复流程。
 - 当前不允许 Graph 节点或 Agent 直接更新客户源数据、模型发布状态、价格或结算结果；高风险变更只能生成待审批命令。
@@ -76,6 +78,7 @@ FMCG 视觉识别是第一个落地领域和第一套行业能力包，用来验
 - 同一业务目标可根据客户权限、数据、预算和服务档位选择不同 Graph，而不复制整套应用。
 - 每次 Run 能解释经过哪些节点、读了哪些授权数据、为何循环、何时请求人工、花费多少以及为何结束。
 - FMCG 识别、标注和审核可以作为一条参考 Graph 完成闭环，同时也能被其他 Graph 作为能力复用。
+- 明确门店任务与 EDS 类无清单普查可以在同一内核中分别通过点任务 Graph 和区域普查 Graph 闭环。
 - 新增问卷或 BI 时只需注册领域能力和数据产品，不需要重新建设身份、计费、Agent、审计和任务底座。
 - 开源版能运行最小 Graph+Loop 内核和示例能力包；商业能力通过注册接入，不污染开放内核。
 
@@ -123,10 +126,14 @@ flowchart TB
     K --> EV[Evaluation / Memory / Audit]
     CR --> VIS[FMCG Vision Domain Pack]
     CR --> LAB[Annotation & Review Pack]
+    CR --> GEO[Geo Foundation]
+    CR --> FIELD[Field Operations Domain Pack]
     CR --> DATA[Authorized Data Product Pack]
     CR --> FUT[Questionnaire / BI / Future Packs]
     VIS --> Q[隔离任务队列与 AI Worker]
     LAB --> LS[Label Studio 独立服务]
+    FIELD --> FQ[定位 / 围栏 / 规划 / 证据 Worker]
+    FIELD --> GEO
     K --> PG[(PostgreSQL 系统事实库)]
     K --> CAS[(内容寻址证据与产物)]
     K --> LEDGER[(不可变用量账本)]
@@ -141,6 +148,7 @@ flowchart TB
 |---|---|---|
 | 后端与 AI | Python 3.12、FastAPI、Pydantic、SQLAlchemy、Alembic | 领域服务和 API 类型统一；现有逻辑通过适配器迁移 |
 | 前端 | TypeScript、React、PWA | 同一代码基线支持管理端和客户 Web；移动端先响应式 |
+| 外勤移动端 | React Native/TypeScript + Swift/Kotlin 原生适配 | 可共享业务层；定位、相机、加密存储和设备信任不由 PWA 承担 |
 | 智能内核 | 版本化 Graph DSL + 持久状态机 + Capability SDK | 不把运行状态放在 LLM 上下文；运行时实现可替换 |
 | 事实库 | PostgreSQL | 第一版即包含 tenant_id、customer_id 和审计字段 |
 | 异步执行 | 可替换队列接口；本机可用 Redis 队列实现 | 领域层不绑定具体队列；支持优先级、重试、取消、死信 |
@@ -158,7 +166,7 @@ flowchart TB
 
 1. Experience：智能工作台、直接模块页面、API 和客户入口。
 2. Intelligence Kernel：Graph、Loop、策略、记忆、评估、检查点、人工介入和预算。
-3. Capability Layer：识别、标注、审核、训练、问卷、BI、数据产品和第三方工具。
+3. Capability Layer：识别、标注、审核、训练、地理、外勤、问卷、BI、数据产品和第三方工具。
 4. Trusted Foundation：身份、租户、PostgreSQL、存储、队列、审计和计费。
 
 模块化单体只是当前部署形态，不是产品中心。真正稳定的边界是 Graph Contract、Capability Contract、Domain Command 和 Data Product Contract。
@@ -193,6 +201,9 @@ flowchart TB
 | Usage & Billing | 原始用量事件、聚合、套餐、价格版本、账单对账 | 修改或删除已入账事件 |
 | Agent Interface | 将自然语言目标编译为已授权 Graph 输入，解释进度和结果 | 自行创建未注册工具或直接业务写入 |
 | Admin & Audit | 配置、健康、审计、导出、容量和合规 | 使用日志替代审计事实 |
+| Geo Foundation | 位置版本、地图适配、工作时位置、围栏、空间事件和路线矩阵 | 在领域对象中泄漏供应商字段或覆盖历史坐标 |
+| Field Operations | 工作会话、活动、候选/正式任务、派单、路线、普查区块、现场执行和重排 | Agent 直接写正式任务、派单或员工处置结论 |
+| Mobile Field Evidence | 工作会话定位、离线补传、门头必拍、可选自拍和证据链 | 非工作时跟踪或用单信号自动处罚 |
 | Questionnaire / BI | 当前只提供模块契约、导航和数据产品接口 | 本阶段扩张为完整业务实现 |
 
 ## 7. 智能工作台与管理端
@@ -219,6 +230,10 @@ flowchart TB
 - 数据中心：照片、URL 下载、批次、数据集快照、保留策略、导入导出。
 - 训练中心：实验、资源门禁、实时指标、评估、模型候选、对照实验。
 - 模型中心：模型卡、兼容硬件、许可证、版本、发布和路由策略。
+- 位置中心：公共地点、客户私有覆盖层、地址/坐标版本、出入口、围栏和候选查重。
+- 调度中心：工作中员工、任务池、不可达原因、路线方案、冻结窗口和动态重排。
+- 普查活动中心：地图区块、道路/POI 基线、覆盖热力、Agent 建议、管理协调和补扫闭环。
+- 现场证据中心：门头必拍、多轮匹配、新门头/位置变化候选、补拍和人工复核。
 - 用量计费：不可变用量、套餐消耗、估算成本、对账和异常。
 - 系统管理：身份、租户、角色、模块、Worker、健康、容量、审计。
 - 问卷与 BI：本阶段显示模块状态和未来接入契约，不伪造已实现能力。
@@ -302,6 +317,13 @@ RBAC 负责角色，ABAC 负责 tenant、customer、project、task、数据敏�
 | DatasetSnapshot | 冻结的数据集成员、标签和切分 | 通过 manifest 哈希可复现 |
 | TrainingRun | 训练配置、代码、数据、环境和输出 | 运行结束后只允许追加评估和审计 |
 | ModelVersion | 权重、配置、许可证、指标和兼容性 | 权重哈希唯一，发布状态走审批 |
+| Place / LocationVersion | 稳定地点身份与地址/坐标/出入口版本 | 任务和历史事件始终引用当时版本 |
+| FieldSession / PositionSample | 员工主动开始的工作会话与短期精确位置 | 会话结束后的新位置必须拒绝 |
+| GeofenceVersion / GeoEvent | 版本化围栏与到店、离店、偏航等派生事件 | 不以单漂移点形成重大结论 |
+| Campaign / TerritoryBlockVersion | 明确地点、普查或抽样活动及地图区块 | 进行中不静默修改范围和验收规则 |
+| TaskCandidate / Task / Assignment | 多来源候选、正式任务和已确认派单 | Agent 只能写候选/建议，不能越过领域命令 |
+| RoutePlanCandidate / RoutePlanVersion | 候选方案与已发布的矩阵、约束、站点、未分配原因和成本 | 发布/重排创建新版本，不覆盖旧方案 |
+| EvidenceArtifact / ValidationRun | 门头照、自拍等现场证据与多轮验证 | 原件不覆盖，模型不直接定性员工 |
 | UsageEvent | 一次可计费或可核算资源使用 | 只追加，冲正通过反向事件 |
 
 ### 9.2 状态机原则
@@ -789,6 +811,8 @@ docs/training-history-and-decisions.md 是当前训练事实与已批准动作�
 - 模型 ID/版本、调用次数、输入/输出 token；
 - 推理毫秒、设备类型、内存峰值代理；
 - SAM、OCR、VLM、人工复核等资源单位；
+- 定位样本、地理编码/POI/道路调用、路线矩阵 pair、规划计算、动态重排和围栏事件；
+- 正式外勤任务、普查区块/覆盖复杂度、门头验证阶段、现场证据和人工复核时长；
 - 幂等键、发生时间、入账时间；
 - 成功、失败、降级和冲正关联。
 
@@ -806,6 +830,7 @@ docs/training-history-and-decisions.md 是当前训练事实与已批准动作�
 - 人工复核；
 - 长期存储和导出；
 - 专属训练与模型托管。
+- 地址/路线/围栏基础能力、外勤任务、EDS 普查、门头验证和 Agent 调度。
 
 低、中、高、极高档的价格来自版本化价格表。价格、赠送额度、最低消费和 SLA 属于客户合同配置，不写死在识别代码中。
 
@@ -933,6 +958,16 @@ Graph/Agent 不可以：
 
 它验证内核的关键能力：条件路由、模型升级、循环重试、人工节点、证据、预算、恢复和反馈。后续问卷追踪或 BI 异常分析复用相同内核，但拥有完全不同的 Domain Pack。
 
+### 19.8 位置与外勤第二 Domain Pack
+
+第二领域包用三条参考 Graph 进一步验证内核不被识别流程绑定：
+
+1. Point Task Planning & Execution：候选任务 → 可行性/路线 → 自动或人工派单 → 工作会话/到店 → 门头和业务证据 → 复核/结案。
+2. Territory Census：活动范围 → 地图区块 → Agent 推荐/管理协调 → 新地点候选 → 覆盖评估 → 未达标补扫。
+3. Dynamic Replanning：延误/偏航/临时任务 → 冻结执行中与临近任务 → 重算剩余方案 → 低风险自动或高影响人工 → 新路线版本。
+
+Agent 在这三条 Graph 中负责解释、推荐、协调和追踪；PostGIS/地图供应商/约束优化器负责空间事实与可行路线；领域服务负责正式任务、派单和决定。
+
 ## 20. 性能、容量与本机资源
 
 ### 20.1 每日十万张的含义
@@ -1002,6 +1037,10 @@ Graph/Agent 不可以：
 
 十万张/天也不能解释为“一台 Mac 可让全部照片运行极高档模型”。正式容量承诺必须基于客户档位分布、每张商品数、VLM 升级比例和人工复核比例的加权负载模型。若单机测试未达标，通过增加独立 Mac/NVIDIA Worker 水平扩展；不得让 API 主进程承担重模型来伪造吞吐。
 
+### 20.6 位置与外勤容量
+
+第二 Domain Pack 以“单客户 1,000 名活跃外勤、10 万地点、每天 5 万任务”为容量目标，不把未压测的目标写成 SLA。PositionSample 按 tenant hash + 日期分区，规划 Worker 按城市/活动分片，H3 用于粗筛与覆盖聚合，PostGIS 负责精确几何。规划必须限时、先过滤硬约束，并返回可行方案或“当前运力不可达”，不运行无界全局优化。
+
 ## 21. API 与集成
 
 ### 21.1 统一端口
@@ -1020,6 +1059,8 @@ Graph/Agent 不可以：
 
 内部服务端口只监听回环或私有网络，不直接向客户暴露。
 
+位置与外勤在 `/api/v1` 下提供 locations/location-versions/geofences、field-sessions/position-batches/geo-events、campaigns/territory-blocks/coverage、task-candidates/tasks/assignments、route-plans/replanning 和 evidence/storefront-validations 等领域资源。Web、App、API 和 Agent 必须共用相同的命令与权限语义。
+
 ### 21.2 API 原则
 
 - OpenAPI 是接口事实源，SDK 从规范生成。
@@ -1031,7 +1072,7 @@ Graph/Agent 不可以：
 
 ### 21.3 事件
 
-系统事件分为 Run 事件和领域事件。Run 事件包括 RunStarted、NodeCompleted、CheckpointCreated、HumanRequested、BudgetExhausted、RunCompleted；领域事件包括 AssetIngested、QualityAssessed、AnnotationSubmitted、ReviewResolved、RecognitionCompleted、ModelActivated、UsageRecorded。
+系统事件分为 Run 事件和领域事件。Run 事件包括 RunStarted、NodeCompleted、CheckpointCreated、HumanRequested、BudgetExhausted、RunCompleted；领域事件包括 AssetIngested、QualityAssessed、AnnotationSubmitted、ReviewResolved、RecognitionCompleted、ModelActivated、UsageRecorded，以及 LocationVersionConfirmed、FieldSessionStarted/Ended、PositionBatchAccepted/Rejected、GeofenceEntered/Exited、TaskFormalized、AssignmentProposed/Confirmed、RoutePlanPublished、EvidenceCaptured/Validated、CoverageEvaluated 和 CampaignCompleted。
 
 事务采用 outbox：领域写入和 outbox 同一数据库事务提交，发布器异步投递。消费者使用 inbox 幂等去重，避免 Webhook 或队列至少一次语义造成重复处理。
 
@@ -1042,6 +1083,8 @@ Graph/Agent 不可以：
 - 本机也必须使用最小权限服务账号、密钥分离和可轮换凭证。
 - 密码使用现代自适应哈希；会话短期、可撤销、CSRF 防护完整。
 - 敏感字段和导出按客户策略加密或脱敏。
+- 精确位置只能在员工主动开始的工作会话中采集；管理端默认看派生事件，查看历史精确轨迹需额外 scope、目的和审计。
+- 自拍与未来人脸数据属独立高敏能力；首版不自动比对人脸，启用前必须完成必要性、单独同意、替代方式、影响评估、最短保留和访问门。
 - 上传、URL 下载、媒体解码和模型文件加载均视为不可信输入。
 - 模型权重只从批准注册中心加载，并校验哈希。
 - 日志禁止记录完整 token、密码、签名 URL 和不必要的原始客户数据。
@@ -1081,6 +1124,7 @@ Graph/Agent 不可以：
 - 安全测试：越权、SSRF、签名链接、恶意媒体、导出和 Agent 工具。
 - 恢复测试：数据库备份恢复、对象校验、模型回滚和未完成任务续跑。
 - 智能内核回归：Graph 版本兼容、检查点恢复、停滞检测、预算耗尽、人工接管和工具越权。
+- 位置外勤：坐标系、工作会话边界、离线幂等补传、围栏迟滞、不可达、冻结窗口、普查覆盖和租户隔离。
 
 ### 23.2 关键验收用例
 
@@ -1098,6 +1142,11 @@ Graph/Agent 不可以：
 12. 相同幂等键重复提交，不产生重复节点、重复识别和重复用量。
 13. Agent 尝试任意 SQL 或越租户查询，被网关拒绝并写审计。
 14. 磁盘超过 90% 时停止低优先级训练，不自动删除任何原图。
+15. FieldSession 结束后的新位置被拒绝，非工作时不形成轨迹。
+16. 离线批次含乱序和重复事件时可幂等恢复，不重复到店、任务和计费。
+17. 电动车续航、返程或时间窗不满足时返回“当前运力不可达”及约束原因。
+18. 每次任务都具有门头原图、位置/围栏、验证版本和人工决定证据链；新门头不被直接定性为员工问题。
+19. 无门店清单的 TerritoryCampaign 可按地图区块派发，并通过覆盖、POI、新发现证据和抽检门形成补扫 Loop。
 
 ## 24. 实施路线图
 
@@ -1208,17 +1257,28 @@ Graph/Agent 不可以：
 
 退出门禁：账单能逐项回溯到 Run 和 Node；客户定制 Graph 不能扩大授权，Agent 无法直接写客户源数据或越权读取。
 
-### Stage 8：第二领域包、BI 与混合部署
+### Stage 8：位置与外勤第二 Domain Pack
+
+交付：
+
+- 按独立规格 L0–L6 实施 Geo Foundation 和 Field Operations；
+- PostgreSQL/PostGIS、位置版本、地图适配、员工 App、工作会话、离线补传和围栏；
+- 明确门店任务调度、路线规划、门头多轮证据和动态重排；
+- EDS 类 TerritoryCampaign、Agent 区块建议、管理协调、新地点候选、覆盖验收和补扫 Loop；
+- 位置、地图、规划、任务、证据和人工的用量账本。
+
+退出门禁：点任务、区域普查和动态重排三条 Graph 均可恢复且可审计；非工作时不定位；路线无可行解时明确失败；门头、轨迹和任务跨租户读取全部拒绝；容量门达标或标记 NOT ACCEPTED。
+
+### Stage 9：问卷、BI 与混合部署
 
 交付：
 
 - QuestionnaireProvider 和 BI DataProduct 契约实现；
-- 至少一条“问卷执行 → 数据分析 → 异常追踪 → 人工确认”的非识别参考 Graph；
+- “问卷执行 → 数据分析 → 异常追踪 → 人工确认”的独立参考 Graph；
 - 云控制面/本地数据面设备注册、策略下发和脱敏遥测；
-- 小程序、App SDK；
-- 客户保留期执行流程和商业运维。
+- 小程序轻量入口、客户保留期执行流程和商业运维。
 
-退出门禁：非识别领域能复用同一 Graph+Loop 内核；本机单体无重写地拆分控制面和能力执行面；数据主权和离线行为清楚。
+退出门禁：问卷/BI 可复用同一内核；本机部署无重写地拆分控制面和能力执行面；数据主权和离线行为清楚。
 
 各 Stage 必须单独编写实施计划、测试清单、回滚方案和验收报告。未通过退出门禁不得用“功能已展示”代替完成。
 
@@ -1244,6 +1304,9 @@ Graph/Agent 不可以：
 | models | models、versions、deployments、routing_policies、model_cards |
 | billing | usage_events、plans、price_versions、subscriptions、invoice_lines、adjustments |
 | intelligence | evaluations、tool_calls、derived_artifacts、feedback_events |
+| geo | places、place_candidates、location_versions、access_points、geofence_versions、provider_references、position_samples、geo_events |
+| field | field_sessions、campaigns、territory_block_versions、task_candidates、tasks、assignment_proposals、assignments、route_plan_versions、executions、visits |
+| evidence | artifacts、requirements、storefront_validation_runs、review_tasks、decision_events |
 | audit | audit_events、outbox、inbox、exports |
 
 应用层仍应通过领域服务访问，schema 不是绕过模块接口的理由。
@@ -1262,6 +1325,7 @@ Graph/Agent 不可以：
 
 - 高频查询索引必须以 tenant_id 开头，再接 project_id、status、created_at。
 - graph.run_events、graph.node_executions、recognition.jobs、usage_events、audit_events 和 metrics 按月或规模阈值分区。
+- geo.position_samples 按 tenant hash + 日期分区；几何列使用经压测的 GiST/SP-GiST，H3 cell 只用于粗筛、分区和覆盖聚合。
 - JSONB 只用于真正可扩展的模型元数据和证据详情；核心过滤字段必须正规化。
 - 列表采用 created_at + id 的稳定游标。
 - 模糊商品搜索使用受控全文或 trigram 索引；向量召回使用独立 pgvector/向量服务适配器，不能把向量当商品事实。
@@ -1341,7 +1405,7 @@ Graph/Agent 不可以：
 | D-09 | 证据链是未来考核和争议处理依据，原始证据不可覆盖 |
 | D-10 | 客户提供低/中/高/极高四档，内部使用不可变用量账本 |
 | D-11 | 第一发布先具备最小 Graph+Loop 内核，再完整纳入识别、标注、审核、训练、数据、模型、计费和管理 |
-| D-12 | 问卷与 BI 当前冻结 Capability/DataProduct 契约，并作为第二领域包验证内核通用性 |
+| D-12 | 问卷与 BI 当前冻结 Capability/DataProduct 契约，后续作为独立领域包验证内核通用性 |
 | D-13 | Python 3.12 + FastAPI；TypeScript + React PWA；统一 API |
 | D-14 | VLM 生产最低建议 Apple Silicon 32GB 或 NVIDIA 16GB；CPU 不承诺吞吐 |
 | D-15 | 准确性承诺只针对客户确认的冻结验收集 |
@@ -1352,10 +1416,20 @@ Graph/Agent 不可以：
 | D-20 | 商品主档、包装版本、客户映射分离，支持客户不同命名策略 |
 | D-21 | 开源层拟用 Apache-2.0，商业能力闭源，发布前法律复核 |
 | D-22 | 基础客户使用固定 Graph，高级客户购买可定制 Graph、持续 Loop、专属工具和预算 |
+| D-23 | Geo Foundation + Field Operations 是第二个已确认 Domain Pack，按独立 L0–L6 计划实施 |
+| D-24 | 定位只在员工主动工作会话中开启；原始精确轨迹默认 90–180 天，派生证据按客户策略保留 |
+| D-25 | 每次外勤任务门头照必选，新门头/位置变化与员工异常分开处理 |
+| D-26 | 自拍证据接口和风险触发保留，首版不自动进行人脸身份比对 |
+| D-27 | 派单默认人工确认；低风险自动化可由客户策略开启，高风险/跨区仍需人工 |
+| D-28 | 路线按 SLA、安全可达、技能、效率、均衡顺序优化；无解时返回“当前运力不可达” |
+| D-29 | EDS 类无清单普查使用地图区块，Agent 推荐、管理人员协调，覆盖未达标进入补扫 Loop |
+| D-30 | 位置、轨迹、任务和照片租户隔离；公共 Place 与客户私有 Overlay 分层 |
 
 以上是基线。后续改变任何一项必须记录新的 Architecture Decision Record，并列出影响模块、迁移方案和兼容窗口。
 
 ## 28. 用户原始 15 项要求覆盖矩阵
+
+### 28.1 原始 15 项要求
 
 | 原始要求 | 设计响应 | 主要实施阶段 |
 |---|---|---|
@@ -1377,6 +1451,17 @@ Graph/Agent 不可以：
 
 覆盖不等于已经实现。每个条目只有在对应 Stage 的退出门禁、自动化测试和验收报告全部通过后，才能标记为完成。
 
+### 28.2 新增位置与外勤模块覆盖
+
+| 新增要求 | 设计响应 | 主要实施阶段 |
+|---|---|---|
+| 地址管理、地图适配、多入口和客户私有名称 | Place/LocationVersion/AccessPoint + CustomerLocationOverlay | Stage 8 / L1 |
+| 工作时位置、电子围栏和弱网 | FieldSession + PositionBatch + GeoEvent + 离线幂等补传 | Stage 8 / L2 |
+| 基于员工位置荐任务、路线和动态重排 | TaskCandidate/AssignmentProposal/RoutePlanVersion + 冻结窗口 | Stage 8 / L3、L6 |
+| 每任务门头照、多轮匹配、可选自拍 | EvidenceArtifact + StorefrontValidationRun + Human Review | Stage 8 / L2、L4 |
+| EDS 类无门店清单普查 | TerritoryCampaign + H3/业务区块 + 覆盖验收 + 补扫 Loop | Stage 8 / L5 |
+| 初期模块成本、后期 token | UsageEvent 明细 + 版本化 RateCard | Stage 8 / L0–L6 |
+
 ## 29. 外部技术依据
 
 以下是设计阶段采用的官方或项目一手资料，实际实施时必须锁定具体版本并再次验证：
@@ -1395,6 +1480,14 @@ Graph/Agent 不可以：
 - DINOv3 官方仓库：https://github.com/facebookresearch/dinov3
 - SigLIP 2 官方说明：https://github.com/google-research/big_vision/blob/main/big_vision/configs/proj/image_text/README_siglip2.md
 - Florence-2 官方模型卡：https://huggingface.co/microsoft/Florence-2-large
+- 高德 Web Service 路径规划：https://lbs.amap.com/api/webservice/guide/api/direction
+- Google OR-Tools Routing：https://developers.google.com/optimization/routing
+- H3 网格库概述：https://h3geo.org/docs/library/index/cell/
+- PostGIS 官方手册：https://postgis.net/stuff/postgis-3.6.1-en.pdf
+- Apple 后台位置更新：https://developer.apple.com/documentation/corelocation/handling-location-updates-in-the-background
+- Android 后台位置限制：https://developer.android.com/about/versions/oreo/background-location-limits?hl=en
+- 《中华人民共和国个人信息保护法》官方全文：https://www.samr.gov.cn/wljys/gzzd/art/2023/art_3ef1e889c1e644d4b65b5f5c7f432386.html
+- 人脸识别技术应用安全管理办法：https://www.cac.gov.cn/2025-03/21/c_1744174262342111.htm
 
 ## 30. 对实施 Agent 的约束
 
@@ -1402,7 +1495,7 @@ Graph/Agent 不可以：
 
 实施 Agent 必须遵守：
 
-1. 先读取本设计、当前仓库状态、现有手册和 training-history-and-decisions。
+1. 先读取本设计、位置与外勤专项规格、当前仓库状态、现有手册和 training-history-and-decisions。
 2. 不覆盖其他 Agent 或用户的未提交改动。
 3. 先写契约和测试，再迁移现有功能。
 4. 每次只跨越一个 Stage 的最小可验收切片。
@@ -1412,9 +1505,15 @@ Graph/Agent 不可以：
 8. 任何发布都能回滚，并能追溯到 commit、数据、模型和路由版本。
 9. 任何自动删除、生产部署、云端上传或客户数据迁移都需单独授权。
 10. 每个阶段结束提交证据包：测试报告、性能报告、架构差异、风险、剩余问题和下一阶段准入判断。
+11. 位置与外勤按专项 L0–L6 独立计划实施；不得把员工 App、轨迹、地图、路线和普查功能偷塞进当前 Stage 0–1 内核计划。
+12. 不以单个 GPS、围栏、门头模型或自拍信号直接形成员工处罚、工资或身份结论。
 
 ## 31. 下一步
 
-本总体设计经产品负责人逐章确认后，下一份文档应是 Stage 0-1 的详细实施计划，而不是直接修改代码。该计划需要把现有目录和服务逐项映射到新模块，列出精确文件、迁移顺序、测试命令、验收样例和回滚点。
+当前下一步是由产品负责人书面复核 `docs/superpowers/specs/2026-08-04-location-field-operations-design.md`。通过后：
+
+1. 重新审查现有 Stage 0–1 详细实施计划，只补充通用契约与未来扩展点，不将位置模块提前塞入内核阶段；
+2. 单独编写位置与外勤 L0–L6 实施计划，精确到契约、数据库迁移、App 能力、Worker、测试命令、验收样例和回滚点；
+3. 每份实施计划再次获批后，实施 Agent 才可修改代码。
 
 在 Stage 0-1 计划获批前，训练 Agent 可继续执行已经单独批准的训练工作，但不得提前创建新的系统事实库、Graph Runtime、全局身份或替换现有生产入口。
