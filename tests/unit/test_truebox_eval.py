@@ -1,10 +1,10 @@
-"""真实框统一评估器测试（手册§十）。
+"""真实框统一评估器测试（手册§十，2026-08-05 审计纠偏后口径）。
 
 锁定行为：
 - one-to-one greedy matching（按 IoU 降序，GT 与 pred 各至多一次配对）；
-- recall@FP/image=1/3/5 与 IoU=0.50/0.75；
-- 逐实例错误账本覆盖 10 类；
-- 同一 evaluator/配置可复现，禁止 confidence-greedy 与 IoU-pair 混用。
+- recall@FP/image 为全数据集统一置信度阈值扫描（非逐图 TopK）；
+- FP 为 total FP：重复框 + 定位错误 + 背景误检；守恒式 TP+FP=proposals；
+- 逐实例错误账本覆盖 10 类；同一 evaluator/配置可复现。
 """
 from __future__ import annotations
 
@@ -52,21 +52,23 @@ class TestRecallAtFp:
         return {"gt": gts, "preds": preds}
 
     def test_recall_at_budgets(self):
+        # 统一阈值扫描：预算内阈值切在全部 FP 之前，2 TP 全计入
         img = self._one_image()
         r = recall_at_fp([img], fp_budgets=(1, 3, 5), iou_thresh=0.5)
-        assert r[1] == pytest.approx(1 / 3)   # 预算1：只留最高置信度(TP)
-        assert r[3] == pytest.approx(2 / 3)   # 预算3：2 TP 在列
+        assert r[1] == pytest.approx(2 / 3)   # 预算1：FP 均为低置信，不影响 2 TP
+        assert r[3] == pytest.approx(2 / 3)
         assert r[5] == pytest.approx(2 / 3)
 
-    def test_low_conf_tp_excluded_when_budget_tight(self):
+    def test_high_conf_fp_consumes_budget(self):
         gts = [_box(0, 0, 10, 10), _box(30, 0, 40, 10)]
-        preds = [{"box": [200, 200, 210, 210], "conf": 0.99},  # FP 排最前
+        preds = [{"box": [200, 200, 210, 210], "conf": 0.99},  # 高置信 FP
                  {"box": [0, 0, 10, 10], "conf": 0.5},
                  {"box": [30, 0, 40, 10], "conf": 0.4}]
+        # 预算 0：任何阈值下 FP=1 > 0 → recall 0（验证预算约束真实生效）
         r = recall_at_fp([{"gt": gts, "preds": preds}],
-                         fp_budgets=(1, 3), iou_thresh=0.5)
-        assert r[1] == 0.0
-        assert r[3] == 1.0
+                         fp_budgets=(0, 1), iou_thresh=0.5)
+        assert r[0] == 0.0
+        assert r[1] == pytest.approx(1.0)  # 预算1：FP 恰好 1，两 TP 全收
 
 
 class TestEvaluateTruebox:

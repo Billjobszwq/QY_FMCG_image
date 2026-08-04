@@ -19,7 +19,7 @@ ERROR_CATEGORIES = (
     "annotation_error", "taxonomy_conflict",
 )
 
-EVAL_VERSION = "truebox_eval_v1"
+EVAL_VERSION = "truebox_eval_v2"
 
 
 def _iou(a: list, b: list) -> float:
@@ -56,17 +56,66 @@ def match_one_to_one(gt: list, preds: list, iou_thresh: float) -> list:
     return out
 
 
+def _classify_unmatched(preds: list, matched_p: set,
+                        gt: list, localization_iou: float = 0.3) -> dict:
+    """未配对 pred 的互斥分类：duplicate / localization / background。
+
+    每个 pred 恰属一类（TP 不在此处）；重复框判定：与任一更高
+    置信度 pred（含已配对）IoU≥0.5。"""
+    order = sorted(range(len(preds)),
+                   key=lambda i: (-float(preds[i]["conf"]), i))
+    pos = {pi: k for k, pi in enumerate(order)}
+    n_dup = n_loc = n_bg = 0
+    for pi in range(len(preds)):
+        if pi in matched_p:
+            continue
+        dup = any(
+            pos[pj] < pos[pi]
+            and _iou(preds[pi]["box"], preds[pj]["box"]) >= 0.5
+            for pj in range(len(preds)) if pj != pi)
+        if dup:
+            n_dup += 1
+            continue
+        if any(localization_iou <= _iou(preds[pi]["box"], g["box"]) < 0.5
+               for g in gt):
+            n_loc += 1
+        else:
+            n_bg += 1
+    return {"duplicate": n_dup, "localization": n_loc, "background": n_bg}
+
+
+def _tp_fp_at_threshold(images: list, t: float, iou_thresh: float) -> tuple:
+    """全数据集在统一阈值 t（conf≥t）下的 (tp, total_fp)。"""
+    tp = fp = 0
+    for img in images:
+        kept = [p for p in img["preds"] if float(p["conf"]) >= t]
+        pairs = match_one_to_one(img["gt"], kept, iou_thresh)
+        tp += len(pairs)
+        c = _classify_unmatched(kept, {pi for _, pi, _ in pairs}, img["gt"])
+        fp += c["duplicate"] + c["localization"] + c["background"]
+    return tp, fp
+
+
 def recall_at_fp(images: list, fp_budgets=(1, 3, 5),
                  iou_thresh: float = 0.5) -> dict:
-    """recall@FP/image：每图按 conf 降序取前 budget 个 proposal 后配对。"""
+    """recall@FP/image：全数据集统一置信度阈值扫描（非逐图 TopK）。
+
+    对每个 FP 预算 b（每图）：扫描全部唯一 conf 阈值（降序），
+    total FP（重复+定位+背景）≤ b×n_images 时取最大 TP。
+    """
     n_gt = sum(len(img["gt"]) for img in images)
+    n_images = len(images)
+    thresholds = sorted({float(p["conf"]) for img in images
+                         for p in img["preds"]}, reverse=True)
     out = {}
     for b in fp_budgets:
-        tp = 0
-        for img in images:
-            top = sorted(img["preds"], key=lambda p: -float(p["conf"]))[:b]
-            tp += len(match_one_to_one(img["gt"], top, iou_thresh))
-        out[b] = (tp / n_gt) if n_gt else 0.0
+        budget = b * n_images
+        best_tp = 0
+        for t in thresholds:
+            tp, fp = _tp_fp_at_threshold(images, t, iou_thresh)
+            if fp <= budget:
+                best_tp = max(best_tp, tp)
+        out[b] = (best_tp / n_gt) if n_gt else 0.0
     return out
 
 
@@ -80,7 +129,7 @@ def evaluate_truebox(images: list, iou_thresholds=(0.5, 0.75),
     n_proposals = sum(len(img["preds"]) for img in images)
     n_gt = sum(len(img["gt"]) for img in images)
     ledger = {c: 0 for c in ERROR_CATEGORIES}
-    n_tp = n_dup = n_bg = 0
+    n_tp = n_dup = n_loc = n_bg = 0
 
     for img in images:
         gt, preds = img["gt"], img["preds"]
@@ -89,28 +138,14 @@ def evaluate_truebox(images: list, iou_thresholds=(0.5, 0.75),
         matched_p = {pi for _, pi, _ in pairs5}
         matched_g = {gi for gi, _, _ in pairs5}
 
-        # 重复框：低置信度 pred 与任一更高置信度 pred IoU≥0.5
-        order = sorted(range(len(preds)),
-                       key=lambda i: (-float(preds[i]["conf"]), i))
-        dup_flags = {}
-        for k, pi in enumerate(order):
-            dup_flags[pi] = any(
-                _iou(preds[pi]["box"], preds[pj]["box"]) >= 0.5
-                for pj in order[:k])
-        n_dup += sum(dup_flags.values())
-        ledger["duplicate_detection"] += sum(dup_flags.values())
-
-        # 背景误检：未配对且非重复框
-        for pi in range(len(preds)):
-            if pi in matched_p or dup_flags[pi]:
-                continue
-            n_bg += 1
-            ledger["background_shelf_edge"] += 1
-
-        # 坏定位：IoU∈[0.3,0.5) 的 one-to-one 配对
-        for gi, pi, v in match_one_to_one(gt, preds, localization_iou):
-            if v < 0.5:
-                ledger["bad_localization"] += 1
+        # 未配对 pred 互斥分类：重复框 / 定位差 / 背景误检
+        c = _classify_unmatched(preds, matched_p, gt, localization_iou)
+        n_dup += c["duplicate"]
+        n_loc += c["localization"]
+        n_bg += c["background"]
+        ledger["duplicate_detection"] += c["duplicate"]
+        ledger["bad_localization"] += c["localization"]
+        ledger["background_shelf_edge"] += c["background"]
 
         ledger["missed_detection"] += len(gt) - len(matched_g)
 
@@ -120,15 +155,21 @@ def evaluate_truebox(images: list, iou_thresholds=(0.5, 0.75),
                 raise KeyError(f"未知错误类别: {k}")
             ledger[k] += int(v)
 
+    total_fp = n_dup + n_loc + n_bg
+    assert n_tp + total_fp == n_proposals, "FP 守恒式被破坏（分类重叠或遗漏）"
     return {
         "eval_version": EVAL_VERSION,
         "matching": "one_to_one_greedy_iou_desc",
+        "recall_definition": "global_confidence_threshold_sweep",
         "n_images": len(images),
         "n_gt": n_gt,
         "n_proposals": n_proposals,
         "n_tp_iou0.5": n_tp,
         "n_duplicates": n_dup,
+        "n_localization_fp": n_loc,
         "n_background_fp": n_bg,
+        "total_fp": total_fp,
+        "fp_per_photo": (total_fp / len(images)) if images else 0.0,
         "precision": (n_tp / n_proposals) if n_proposals else 0.0,
         "recall_at_fp": recall,
         "error_ledger": ledger,

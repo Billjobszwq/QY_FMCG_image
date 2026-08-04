@@ -70,14 +70,21 @@ def promotion_gate(
     min_recall_fp3_iou05: float = 0.8,
     max_fp_per_photo: float = 1.0,
 ) -> dict[str, Any]:
-    """基于 truebox_eval 报告的真实 FP/photo 晋级门。
+    """基于 truebox_eval 报告的真实 total FP/photo 晋级门。
 
-    不得使用 retrieval TopK 等代理指标。
+    不得使用 retrieval TopK 等代理指标；FP 必须为 total FP
+    （重复框+定位错误+背景误检），不得只数背景误检。
     """
     recall = eval_report.get("recall_at_fp", {}).get("iou_0.50", {})
     n_images = int(eval_report.get("n_images", 0))
-    n_bg = int(eval_report.get("n_background_fp", 0))
-    fp_photo = (n_bg / n_images) if n_images else float("inf")
+    if "total_fp" in eval_report:  # truebox_eval_v2：total FP 守恒口径
+        fp_photo = float(eval_report["total_fp"]) / n_images if n_images \
+            else float("inf")
+        fp_label = "FP/photo(total)"
+    else:  # 旧 v1 报告：仅背景误检，明示降级口径
+        fp_photo = (int(eval_report.get("n_background_fp", 0)) / n_images) \
+            if n_images else float("inf")
+        fp_label = "FP/photo(background-only, legacy v1)"
     checks = [
         {"name": "recall@FP1(IoU0.5)", "value": recall.get(1, 0.0),
          "threshold": min_recall_fp1_iou05, "op": ">=",
@@ -85,7 +92,7 @@ def promotion_gate(
         {"name": "recall@FP3(IoU0.5)", "value": recall.get(3, 0.0),
          "threshold": min_recall_fp3_iou05, "op": ">=",
          "ok": recall.get(3, 0.0) >= min_recall_fp3_iou05},
-        {"name": "FP/photo(background)", "value": fp_photo,
+        {"name": fp_label, "value": fp_photo,
          "threshold": max_fp_per_photo, "op": "<=",
          "ok": fp_photo <= max_fp_per_photo},
     ]

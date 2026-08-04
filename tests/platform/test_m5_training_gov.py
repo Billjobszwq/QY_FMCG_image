@@ -160,8 +160,8 @@ def test_publish_separate_and_candidate_only(svc) -> None:
 # ---------- 晋级门（truebox FP/photo，禁 TopK） ----------
 
 def _report(recall1, recall3, bg, n_images):
-    return {"eval_version": "truebox_eval_v1", "n_images": n_images,
-            "n_background_fp": bg,
+    return {"eval_version": "truebox_eval_v2", "n_images": n_images,
+            "n_background_fp": bg, "total_fp": bg,
             "recall_at_fp": {"iou_0.50": {1: recall1, 3: recall3, 5: recall3}}}
 
 
@@ -171,7 +171,14 @@ def test_promotion_gate_pass_and_fail() -> None:
     bad = promotion_gate(_report(0.2, 0.4, 30, 10))
     assert bad["pass"] is False
     names = [c["name"] for c in bad["checks"] if not c["ok"]]
-    assert "recall@FP1(IoU0.5)" in names and "FP/photo(background)" in names
+    assert "recall@FP1(IoU0.5)" in names and "FP/photo(total)" in names
+
+
+def test_promotion_gate_uses_total_fp_not_background_only() -> None:
+    """UMT-002：门禁必须用 total FP（含重复/定位），不得只数背景。"""
+    rep = _report(0.7, 0.9, 2, 10)   # background-only 看似过门
+    rep["total_fp"] = 30             # 但 total FP 含重复/定位超阈
+    assert promotion_gate(rep)["pass"] is False
 
 
 # ---------- 统一评估 / 推理导出 ----------
