@@ -58,7 +58,7 @@
 - [ ] 训练启动（需授权，暂停中；training_started=false）
 
 ### M6 PostgreSQL + 可靠 Worker
-- [x] 单次迁移脚本（不双写，逐表计数+哈希核对）；真实 PG 运行待安装/生产迁移授权
+- [x] 单次迁移脚本（不双写，逐表计数+哈希核对）；真实演练通过（brew PG 16.14，16/16 match）；生产切换待独立授权
 - [x] CAS 备份恢复演练（verify_all/backup/restore/磁盘水位）
 - [x] 可恢复 Worker（lease 认领/崩溃恢复/取消/超时/重试/dead-letter/背压）
 - [x] 安全加固（CORS 白名单/分享 token scope+有效期/审计）+ 性能测试（100 job 吞吐基线）

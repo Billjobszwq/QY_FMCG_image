@@ -81,8 +81,8 @@
 
 | 项 | 验收标准 | 结果 |
 |---|---|---|
-| PG 原生/容器 | 真实通过 | ⏳（无 docker/无 server 二进制/5432 closed → 安装需授权；脚本与门控测试就绪） |
-| 单次迁移核对 | 不双写；逐表行数+哈希一致 | ✅（migrate_sqlite_to_pg.py：依赖顺序建表+单事务插入+canonical sha256 双侧核对；纯函数离线断言 4 项） |
+| PG 原生/容器 | 真实通过 | ✅（brew postgresql@16 演练集群；单次迁移 16/16 表行数+哈希 match，0.17s；生产切换仍为独立授权点） |
+| 单次迁移核对 | 不双写；逐表行数+哈希一致 | ✅（migrate_sqlite_to_pg.py：依赖顺序建表+单事务插入+canonical sha256 双侧核对；真实演练 16/16 match；纯函数离线断言 4 项 + PG 门控测试 5 passed） |
 | 可恢复 Worker | lease 认领/崩溃恢复/取消/超时/重试/dead-letter/背压 | ✅（22 TDD：崩溃后 lease 过期 requeue、不重复完成（attempt 记账、终态单一）；dead_letter 前缀；背压单轮放行；100 job 吞吐 <1s） |
 | CAS 校验/备份/恢复/水位 | fail-closed | ✅（verify_all 检出损坏/缺失；backup→restore 往返 + 损坏归档拒恢复；真实开发库演练 archive_sha256 ac3f39e0…；水位 0.753） |
 | 安全加固 | CORS/CSRF/分享链接/审计 | ✅（CORS 白名单预检拒非白名单 Origin；JSON POST 无表单路径；分享 token scope/有效期/吊销 fail-closed 真实 E2E；job/share 动作 audit_event 留痕） |

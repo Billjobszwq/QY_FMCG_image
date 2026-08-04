@@ -138,8 +138,11 @@
 | 10 | PG 迁移脚本 `scripts/migrate_sqlite_to_pg.py` | 0 | — | 单次不双写；逐表行数+规范化 sha256 核对；psycopg 缺失时明确报错；真实 PG 运行门控于 PLATFORM_TEST_PG_URL |
 | 11 | 吞吐基线测试 | 0 | — | 100 job <10s 软上限（实测 <1s） |
 | 12 | Web 未回归验证 | 0 | — | /#/training 截图 /tmp/m6_training.png 正常渲染 |
+| 13 | 授权后：`brew install postgresql@16` + `pg_ctl start` + createdb platform_drill | 0 | — | PostgreSQL 16.14（Homebrew，演练集群 /opt/homebrew/var/postgresql@16）；5432 accepting connections |
+| 14 | `pip install psycopg[binary]`（3.3.4）后真实迁移核对 | 0 | 0.17s | **16/16 表 match=true**（逐表行数 + 规范化 sha256 双侧一致；含 graph_run 2/node_execution 9/audit_event 7/schema_migrations 4）；不双写；SQLite 原库保留 |
+| 15 | PG 门控测试（PLATFORM_TEST_PG_URL 设置） | 0 | 0.13s | 5 passed（含真实 migrate 往返） |
 
 ### M6 事实记录
 
-- PG 环境调研：无 docker；/Applications/PostgreSQL 17 仅 EDB app bundle 无 server 二进制；5432 closed；homebrew/conda 无 PG → PG 真实运行需安装授权（暂停点）。
+- PG 演练（已授权）：brew postgresql@16 本机演练集群；单次迁移 16/16 表计数+哈希一致；演练库 platform_drill；生产切换（DATABASE_URL 指向生产 + 服务重启）仍为独立授权点，未执行。
 - 8091/8092 未触碰；生产 bundle 未触碰；三冻结值不变。

@@ -5,7 +5,7 @@
 
 | 项 | 值 |
 |---|---|
-| 当前状态 | M5 完成（cef025a）；M6 代码侧完成（可恢复 Worker/CAS 加固/安全加固/PG 迁移脚本），PG 真实运行待安装/生产迁移授权 |
+| 当前状态 | M6 完成：可恢复 Worker/CAS 加固/安全加固/PG 演练迁移（brew PG 16.14，16/16 表计数+哈希一致）；生产切换/人工标注/训练待授权 |
 | 当前 HEAD | 49172d5（M6，feat/usable-platform-foundation） |
 | 分支 | `feat/usable-platform-foundation` |
 | 基线 commit | `c9998af`（feat/sam-reannotation） |
@@ -27,6 +27,7 @@
 | 8301 | LS ml-backend | ⛔ DOWN（M4 处理） |
 | 8304 | orchestrator | ⛔ DOWN |
 | 8400 | 统一平台 | ✅ UP（degraded：ml_backend/8301 不可用，非关键） |
+| 5432 | PostgreSQL 16.14（brew 演练集群 platform_drill） | ✅ UP（M6 演练专用；生产切换待授权） |
 
 ## 里程碑状态
 
@@ -38,7 +39,7 @@
 | M3 第一条真实 Graph | DONE（fb55084 → 7afa0bf → 7450d23 → b7513dc，265 passed） |
 | M4 Label Studio 闭环 | DONE（机械闭环 f42f882；人工标注待授权） |
 | M5 数据集训练治理 | DONE（cef025a，288 passed；训练启动待授权） |
-| M6 PostgreSQL + 可靠 Worker | IN_PROGRESS（Worker/CAS/安全/迁移脚本完成，310 passed；PG 真实运行待安装授权） |
+| M6 PostgreSQL + 可靠 Worker | DONE（49172d5 + PG 演练；生产切换待独立授权） |
 | M7 后续 Domain Pack | PENDING |
 
 ## 红线（任何阶段不得越过）
