@@ -105,7 +105,11 @@ def test_dry_run_produces_plan_without_starting(svc) -> None:
     import json
     cmd = json.loads(run["command_json"])
     assert cmd[0:3] == ["python3", "-m", "src.training.train_v1"]
-    assert "--budget-minutes" in cmd and "30" in cmd
+    # UMT-002：只允许 train_v1 真实参数；预算为计划元数据不入命令
+    assert "--budget-minutes" not in cmd and "--dataset" not in cmd
+    assert "--data-yaml" in cmd and "--run-name" in cmd
+    budget = json.loads(run["budget_json"])
+    assert budget["minutes"] == 30
     plan = json.loads(run["plan_json"])
     assert plan["mps_g0"] is True  # darwin
     # dry-run 不改变授权状态

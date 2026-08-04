@@ -284,8 +284,9 @@ def train(epochs=80, imgsz=640, batch=8, device="mps", model_name="yolo26m.pt",
     return mv_id
 
 
-if __name__ == "__main__":
-    ap = argparse.ArgumentParser()
+def build_arg_parser() -> argparse.ArgumentParser:
+    """train_v1 真实参数集（dry-run 命令预检的单一事实源）。"""
+    ap = argparse.ArgumentParser(allow_abbrev=False)
     ap.add_argument("--epochs", type=int, default=80)
     ap.add_argument("--imgsz", type=int, default=640)
     ap.add_argument("--batch", type=int, default=8)
@@ -313,7 +314,16 @@ if __name__ == "__main__":
     ap.add_argument("--erasing", type=float, default=0.4)
     ap.add_argument("--optimizer", default="auto")
     ap.add_argument("--seed", type=int, default=42)
-    a = ap.parse_args()
+    ap.add_argument("--parse-check", action="store_true",
+                    help="仅解析参数后退出，不执行训练（dry-run 预检）")
+    return ap
+
+
+if __name__ == "__main__":
+    a = build_arg_parser().parse_args()
+    if a.parse_check:
+        print("train_v1 parse-check ok")
+        raise SystemExit(0)
     train(a.epochs, a.imgsz, a.batch, a.device, a.model, a.cls_weight, a.run_name,
           a.data_yaml, a.scale, a.lr0, a.mosaic, a.mixup, a.copy_paste,
           a.cos_lr, a.dropout, a.close_mosaic, a.patience, a.weight_decay,

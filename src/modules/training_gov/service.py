@@ -212,26 +212,44 @@ class TrainingGovernanceService:
         *,
         actor: str,
         epochs: int = 3,
-        imgsz: int = 1280,
+        imgsz: int = 960,
         device: str = "mps",
         budget_minutes: int = 60,
         stop_lines: list[str] | None = None,
+        extra_args: list[str] | None = None,
+        data_yaml: str | None = None,
     ) -> dict[str, Any]:
+        """生成训练计划：命令只允许 train_v1.py 真实参数集（UMT-002）。
+
+        命令在入库前经真实 argparse 预检；未知参数 fail-closed。
+        预算/停止线为计划元数据，不是 train_v1 CLI 参数。
+        """
         snap = self.store.get_dataset_snapshot(snapshot_id)
         if snap is None or snap["status"] != "registered":
             raise TrainingGovError(f"snapshot 不可用: {snapshot_id}")
         stop = stop_lines or [
             "val_recall@FP3 连续 2 epoch 无提升即停",
-            "FP/photo > 1.0 即停",
+            "total FP/photo > 1.0 即停",
             f"wall-clock > {budget_minutes}min 即停",
         ]
         mps_g0 = sys.platform == "darwin"
+        run_name = f"{snap['name']}_{snap['version']}"
+        yaml_path = data_yaml or f".datasets/{run_name}/data.yaml"
         command = [
             "python3", "-m", "src.training.train_v1",
-            "--dataset", f"{snap['name']}@{snap['version']}",
+            "--data-yaml", yaml_path,
+            "--run-name", run_name,
             "--epochs", str(epochs), "--imgsz", str(imgsz),
-            "--device", device, "--budget-minutes", str(budget_minutes),
-        ]
+            "--device", device, "--parse-check",
+        ] + list(extra_args or [])
+        # CLI 预检：用 train_v1 真实 parser 解析，未知参数即拒绝
+        try:
+            from src.training.train_v1 import build_arg_parser
+            build_arg_parser().parse_args(command[3:])
+        except SystemExit as e:
+            raise TrainingGovError(
+                f"dry-run 命令未通过 train_v1 CLI 预检: {command[3:]}"
+            ) from e
         run = {
             "run_id": uuid.uuid4().hex,
             "snapshot_id": snapshot_id,
