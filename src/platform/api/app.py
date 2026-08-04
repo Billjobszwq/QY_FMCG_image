@@ -2,16 +2,24 @@
 
 from __future__ import annotations
 
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
+from ..adapters.legacy.monitor import MonitorAdapter, MonitorAdapterError
+from ..adapters.legacy.recognition import (
+    CAPABILITY_ID as RECOGNITION_CAPABILITY,
+    RecognitionAdapterError,
+    RecognitionV2Adapter,
+)
 from .health import DEFAULT_SERVICES, aggregate_platform, probe_service
 
 PLATFORM_VERSION = "0.1.0"
+MAX_UPLOAD_BYTES = 10 * 1024 * 1024  # 10 MiB；超限 413，与 8091 限制对齐
 
 
 def _utcnow_iso() -> str:
@@ -22,6 +30,8 @@ def create_app(
     services=DEFAULT_SERVICES,
     probe=probe_service,
     web_dist: Path | None = None,
+    recognition_adapter: RecognitionV2Adapter | None = None,
+    monitor_adapter: MonitorAdapter | None = None,
 ) -> FastAPI:
     app = FastAPI(
         title="Unified Platform API",
@@ -29,6 +39,8 @@ def create_app(
         docs_url="/api/v1/docs",
         openapi_url="/api/v1/openapi.json",
     )
+    rec_adapter = recognition_adapter or RecognitionV2Adapter()
+    mon_adapter = monitor_adapter or MonitorAdapter()
 
     @app.get("/api/v1/version")
     def version():
@@ -45,6 +57,49 @@ def create_app(
                 for spec, st in pairs
             ],
         }
+
+    # ---- W4 Recognition bridge（legacy.recognition.v2 → 8091）----
+    @app.post("/api/v1/recognition/recognize")
+    async def recognize(file: UploadFile = File(...), conf: float = 0.25):
+        data = await file.read()
+        if len(data) > MAX_UPLOAD_BYTES:
+            raise HTTPException(status_code=413, detail="payload too large")
+        if len(data) == 0:
+            raise HTTPException(status_code=400, detail="empty file")
+        t0 = time.monotonic()
+        try:
+            upstream = rec_adapter.recognize(data, conf=conf)
+        except RecognitionAdapterError as e:
+            status = {
+                "bad_request": 400,
+                "overloaded": 429,
+                "model_unavailable": 503,
+                "timeout": 504,
+            }.get(e.kind, 502)
+            return JSONResponse(
+                status_code=status,
+                content={"error": e.kind, "detail": e.detail, "capability": RECOGNITION_CAPABILITY},
+            )
+        return {
+            "capability": RECOGNITION_CAPABILITY,
+            "bridge_elapsed_ms": round((time.monotonic() - t0) * 1000, 2),
+            **upstream,
+        }
+
+    # ---- 8092 监控只读代理（legacy.training.monitor）----
+    @app.get("/api/v1/monitor/live")
+    def monitor_live():
+        try:
+            return mon_adapter.live()
+        except MonitorAdapterError as e:
+            raise HTTPException(status_code=503, detail=f"{e.kind}: {e.detail}")
+
+    @app.get("/api/v1/monitor/overview")
+    def monitor_overview():
+        try:
+            return mon_adapter.overview()
+        except MonitorAdapterError as e:
+            raise HTTPException(status_code=503, detail=f"{e.kind}: {e.detail}")
 
     # 静态托管 React Web Shell 构建产物；未构建时返回明确 JSON（不谎报）
     if web_dist is not None and web_dist.is_dir():
