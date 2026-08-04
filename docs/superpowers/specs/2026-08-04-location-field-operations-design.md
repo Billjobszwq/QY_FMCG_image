@@ -1,16 +1,20 @@
-# 位置地理底座与外勤运营 Domain Pack 总体设计
+# 统一 Graph+Loop 系统之位置与外勤 Domain Pack 详细规格
 
 > 文档日期：2026-08-04
 >
-> 文档状态：业务与架构设计已逐段确认，等待书面规格复核
+> 文档状态：业务设计已确认，已纳入统一系统总纲
+>
+> 文档性质：从属 Domain Pack 详细规格；不定义独立系统、独立平台底座或第二数据事实源
 >
 > 当前约束：100% 本机优先；只形成设计和实施依据，不修改项目实现代码
 >
-> 上位规格：`docs/superpowers/specs/2026-08-04-fmcg-vision-saas-platform-design.md`
+> 唯一上位总纲：`docs/superpowers/specs/2026-08-04-fmcg-vision-saas-platform-design.md`
 
 ## 1. 执行摘要
 
-本模块不是在任务页面上增加一张地图，而是继 FMCG 识别之后的第二个重要 Domain Pack。它由两个边界清晰的部分组成：
+本文定义的不是第二套系统。位置与外勤是统一 Graph+Loop 智能业务操作系统内的一个可插拔 Domain Pack，必须在总纲定义的统一身份、数据、证据、事件、任务、审计、计费、Web 壳和 Graph Runtime 之上运行。它可以独立维护和启停，但不得自建平行底座。
+
+该 Domain Pack 不是在任务页面上增加一张地图，而是继 FMCG 识别之后的第二个重要业务能力包。它由两个边界清晰的部分组成：
 
 1. **Geo Foundation**：通用位置主数据、地址版本、地图适配、工作时轨迹、电子围栏、空间事件、路线矩阵和规划引擎接口。
 2. **Field Operations Domain Pack**：外勤工作会话、普查活动、候选任务、正式任务、派单、地图区块、路线计划、现场执行、门头证据、动态重排和异常闭环。
@@ -67,23 +71,47 @@ Graph+Loop 仍是整个系统的智能运行核心。Agent 可以基于授权数
 
 ~~~mermaid
 flowchart TB
-    APP[员工 App] --> ING[Position / Evidence Ingest]
-    WEB[管理 Web / API / Agent] --> CP[Graph+Loop Control Plane]
-    CP --> GF[Geo Foundation]
-    CP --> FO[Field Operations Domain Pack]
-    ING --> OUTBOX[Durable Outbox / Queue]
-    GF --> MAP[Map Provider Adapter]
-    GF --> FENCE[Geofence Engine]
-    GF --> MATRIX[Route Matrix Cache]
-    FO --> PLAN[Planning Workers]
-    FO --> EVID[Evidence Validation Workers]
-    PLAN --> OPT[Constraint Optimizer]
-    EVID --> VIS[Storefront Vision Capability]
-    CP --> PG[(PostgreSQL + PostGIS)]
-    ING --> PG
-    OUTBOX --> PG
-    EVID --> CAS[(Content-addressed Evidence Storage)]
-    CP --> LEDGER[(Usage / Decision / Audit Ledger)]
+    subgraph SHARED["统一系统底座（本 Domain Pack 只复用）"]
+        SHELL["Web 壳 / API Gateway / Agent 入口"]
+        KERNEL["Graph+Loop Kernel / Policy / Human Gate"]
+        IAM["Identity / Tenant / Project"]
+        DATA[("PostgreSQL Unified Fact Store")]
+        EVENT["Outbox / Inbox / Job / Worker Control"]
+        CAS[("CAS / Evidence Storage")]
+        LEDGER["Usage / Billing / Audit"]
+        SHELL --> KERNEL
+    end
+
+    subgraph PACK["Geo + Field Operations Domain Pack"]
+        MANIFEST["ModuleManifest / Capability / API / UI Slots"]
+        GF["Geo Foundation"]
+        FO["Field Operations"]
+        ING["Position / Evidence Ingest"]
+        FENCE["Geofence Engine"]
+        MATRIX["Route Matrix Cache"]
+        PLAN["Planning Workers"]
+        EVID["Evidence Validation Workers"]
+        GF --> FENCE
+        GF --> MATRIX
+        FO --> PLAN
+        FO --> EVID
+    end
+
+    APP["员工 App"] --> SHELL
+    KERNEL --> MANIFEST
+    MANIFEST --> GF
+    MANIFEST --> FO
+    APP --> ING
+    GF --> MAP["Map Provider Adapter"]
+    PLAN --> OPT["Constraint Optimizer"]
+    EVID --> VIS["Storefront Vision Capability"]
+    ING --> EVENT
+    ING --> DATA
+    GF --> DATA
+    FO --> DATA
+    EVID --> CAS
+    MANIFEST --> LEDGER
+    MANIFEST --> IAM
 ~~~
 
 依赖规则：
@@ -92,8 +120,23 @@ flowchart TB
 2. Graph+Loop 只能通过 Geo/Field Operations 领域服务执行写命令。
 3. Geo Foundation 不依赖 Field Operations；Field Operations 可以引用 Geo Foundation 的版本化位置对象。
 4. 地图、规划和视觉都是可替换能力提供者，不拥有业务任务状态。
-5. PostgreSQL 保存结构化事实，照片原件进入内容寻址存储，数据库只保存哈希和引用。
-6. Redis 可加速队列与缓存，但数据库 Outbox、幂等键和 Checkpoint 才是恢复事实。
+5. 统一 PostgreSQL 中的 `geo`/`field` schema 保存本模块结构化事实；照片原件进入平台 CAS，本模块只保存哈希和 ResourceRef。
+6. 本模块复用平台 Outbox/Inbox、Job/Attempt、UsageLedger、Audit 和 Checkpoint，禁止再建一套队列真相、账本或审计表。
+7. Redis 只可加速缓存和队列；统一数据底座中的 Outbox、幂等键、Job 和 Checkpoint 才是恢复事实。
+
+### 3.1 本 Domain Pack 复用与自有的边界
+
+| 必须复用统一底座 | 本 Domain Pack 自有 |
+|---|---|
+| Identity/Tenant/Project、Policy、HumanTask | Location、Geofence、Campaign、Task、Assignment、RoutePlan 领域规则 |
+| ModuleManifest、Capability Registry、Graph Runtime | Geo/Field Capability、DomainCommand、Graph 模板和事件 schema |
+| PostgreSQL 连接、Unit of Work、Migration Orchestrator | `geo`/`field` schema 及模块迁移 |
+| CAS、Evidence、Retention、Export | 门头/自拍证据要求、地理一致性和验证策略 |
+| Outbox/Inbox、Job/Attempt、Worker Control | Position、Geofence、Planning、Coverage、Evidence Worker 声明 |
+| UsageLedger、RateCard、Audit、Observability | 地图、定位、规划、任务、普查和证据 meter |
+| Web 壳、全局上下文、Run/证据抽屉 | 位置、调度、普查、现场证据页面插槽和员工 App 业务界面 |
+
+只有右列能在本模块中实现。左列如果尚未由 Foundation Milestone 提供，本模块应标记 blocked，不得为赶进度在 `geo_field` 内建临时永久替代品。
 
 ## 4. 模块职责
 
@@ -173,6 +216,8 @@ TaskCandidate 可以来自管理人员、客户 API、问卷、识别异常、BI
 | DecisionEvent | 推荐、人工确认、拒绝、重排和例外决定 |
 | UsageEvent | 定位、地图、规划、任务、视觉、人工、Agent 和存储明细 |
 | AuditEvent | 谁在何时查看/修改/决定了什么以及原因 |
+
+其中 EvidenceArtifact、DecisionEvent、UsageEvent、AuditEvent 和用于复核的 HumanTask 都是统一底座对象。本 Domain Pack 通过 ResourceRef、module_id、meter 和决策类型填充领域语义，不另建同名事实表。
 
 原始证据不可覆盖。重新拍摄创建新 EvidenceArtifact，并通过 supersedes 关系连接旧证据；旧证据继续保留。
 
@@ -703,10 +748,11 @@ Web、App、API 和 Agent 使用同一领域服务。所有命令支持 Idempote
 
 ## 22. 实施阶段建议
 
-本模块必须拆成独立规格和计划周期，不能塞入当前 Stage 0–1 Graph 内核计划一次实施。
+本模块是统一系统内的独立可维护 Domain Pack，因此需要自有 L0–L6 计划周期，但绝不是建第二套系统。总纲 Stage 0–1 Foundation Milestone 必须先通过；本模块之后只在已有 ModuleManifest、数据、Graph、Web、事件、证据、账本和审计插槽中实现领域能力。
 
 ### L0：契约与治理冻结
 
+- 前置验收：统一 Foundation Milestone 的 Module SDK 和 Reference Work Pack 契约测试已通过；
 - Location、FieldSession、PositionBatch、Geofence、Campaign、Task、Assignment、RoutePlan、Evidence 契约；
 - 坐标系统、版本、不变性、租户和保留策略；
 - Map Provider、Planner、Evidence Capability；
@@ -829,7 +875,7 @@ Web、App、API 和 Agent 使用同一领域服务。所有命令支持 Idempote
 ## 26. 对实施 Agent 的约束
 
 1. 本规格确认前不得编写实现代码。
-2. 位置与外勤运营必须单独拆分 L0–L6 实施计划，不得附加到当前 Graph Stage 0–1 计划后一次完成。
+2. 位置与外勤运营必须在统一 Foundation Milestone 验收后再单独拆分 L0–L6 模块计划，不得与底座实施混写或一次完成。
 3. 每次计划先写失败测试、再实现最小行为、再运行验收并保存证据。
 4. 不修改或覆盖现有识别、训练、SQLite 历史、原图、模型和审核结果。
 5. 不删除 `.superpowers`、测试产物、失败证据、数据库或业务文件；清理必须另行获得明确批准。
@@ -838,12 +884,14 @@ Web、App、API 和 Agent 使用同一领域服务。所有命令支持 Idempote
 8. 不启用人脸比对，除非后续独立规格和合规门明确批准。
 9. 不在没有真实道路矩阵时用直线距离冒充路线规划。
 10. 不声明“最优”或目标吞吐达成，除非相应验收证据通过。
+11. 不自建身份、数据库连接层、CAS、队列真相、Graph Runtime、人工任务、账本、审计或第二 Web 管理壳。
+12. 不直接写其他 Domain Pack schema；跨域交互只使用总纲规定的 API、DomainCommand、事件、DataProduct 和 ResourceRef。
 
 ## 27. 下一步
 
-书面规格经用户审核后：
+用户复核本次“单一系统”修订后：
 
-1. 修订总体架构规格，将 Geo Foundation 和 Field Operations Domain Pack 纳入模块、导航、对象、API、事件、计费、性能和路线图；
-2. 重新审查当前 Stage 0–1 Graph Kernel 计划，只补充通用扩展点和未来兼容性，不把位置模块实现塞入内核阶段；
-3. 单独编写 L0“位置与外勤契约和治理”实施计划；
-4. 用户再次确认后，才允许实施 Agent 开始任何代码工作。
+1. 先重写 Stage 0–1 计划，使其交付统一 Foundation Milestone，包括 Module SDK、统一数据底座、Web 壳、Graph+Loop 内核与两个最薄验证包；
+2. Foundation 计划获批并实施验收后，再分别编写/执行识别、标注训练和位置外勤等 Domain Pack 计划；
+3. 位置外勤 L0–L6 只实现本文右列的领域语义，不重复平台底座；
+4. 任何实施代码仍需对应计划单独获批。

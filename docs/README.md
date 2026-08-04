@@ -2,7 +2,9 @@
 
 > 货架陈列巡检 · **知识库驱动的自动标注 + YOLO** · 人机协同 · **本机原生优先（不依赖 Docker）**
 
-> **当前入口（2026-08-04）：** 本页前半部分保留早期系统说明；级联生产架构以 [`handbook.md`](./handbook.md) 为准，最终训练准入、Apple M3 Max/MPS 规范和最新阻断项以 [`2026-08-04-final-training-execution-gate.md`](./superpowers/plans/2026-08-04-final-training-execution-gate.md) 为准。较早的严格复核保留在 [`latest-handbook-reverification-2026-08-04.md`](./latest-handbook-reverification-2026-08-04.md) 作为历史证据。
+> **平台最终架构入口（2026-08-04）：** 整个产品的唯一总纲是 [`Graph+Loop 智能业务操作系统最终统一架构设计`](./superpowers/specs/2026-08-04-fmcg-vision-saas-platform-design.md)。它定义一套统一底座和可插拔 Domain Pack；位置外勤规格只是从属模块文档，不是第二套系统。
+>
+> **现有识别/训练运行入口：** 本页前半部分保留早期系统说明；级联生产架构以 [`handbook.md`](./handbook.md) 为准，最终训练准入、Apple M3 Max/MPS 规范和最新阻断项以 [`2026-08-04-final-training-execution-gate.md`](./superpowers/plans/2026-08-04-final-training-execution-gate.md) 为准。这些文档说明当前系统如何运行，不覆盖最终平台架构。较早严格复核保留在 [`latest-handbook-reverification-2026-08-04.md`](./latest-handbook-reverification-2026-08-04.md) 作为历史证据。
 
 用多模态大模型当"老师"自动打标签、人工把关，训出 YOLO 当"学生"上识别热路径。原始资产只读、标签追加式留痕、张张过人工才进训练。
 
@@ -34,6 +36,8 @@ python -m src.recognize.api --port 8091    # 识别接口
 
 | 文档 | 内容 |
 |---|---|
+| [`superpowers/specs/2026-08-04-fmcg-vision-saas-platform-design.md`](./superpowers/specs/2026-08-04-fmcg-vision-saas-platform-design.md) | **平台唯一架构总纲**：一套底座、Graph+Loop 内核、统一数据系统、Module SDK 和积木式 Domain Pack |
+| [`superpowers/specs/2026-08-04-location-field-operations-design.md`](./superpowers/specs/2026-08-04-location-field-operations-design.md) | **从属 Domain Pack 规格**：位置、路线、围栏、外勤、普查和现场证据；禁止自建平行底座 |
 | [`setup.md`](./setup.md) | **环境+项目部署**：依赖、omlx、`.env`、校验、可选 Docker/镜像源、可选 Label Studio |
 | [`structure.md`](./structure.md) | **结构**：三阶段数据流、`src/` 模块地图、运行时数据目录、数据仓库 schema、红线 |
 | [`runbook.md`](./runbook.md) | **启动方式**：逐步命令、起服务、测试、闭环验证、故障排查、当前状态 |
@@ -56,7 +60,7 @@ python -m src.recognize.api --port 8091    # 识别接口
 | [`data-and-annotation-plan.md`](./data-and-annotation-plan.md) | 数据盘点、金标准、标注一致性、防泄漏、多样性 |
 | `../2026-07-31-general-sku-recognition-system.md` | 早期技术实施计划（13 Task；其中 docker 假设已被 `setup.md` 的原生路径取代） |
 
-> 阅读建议：新读者先看本 README → `runbook.md` 跑通 → `structure.md` 理解结构 → `architecture.md` 理解取舍；治理/排期看背景四篇。
+> 阅读建议：任何新 Agent 先读平台唯一架构总纲，再按任务读对应 Domain Pack 规格；需要操作当前识别系统时，再读 `runbook.md` → `structure.md` → `architecture.md`。当前运行文档与最终总纲冲突时，以总纲为目标架构，通过 Adapter 渐进迁移，不直接重写。
 
 ---
 

@@ -1,12 +1,39 @@
-# Graph+Loop 智能业务操作系统与 FMCG 识别首域总体设计
+# Graph+Loop 智能业务操作系统最终统一架构设计
 
 > 文档日期：2026-08-04
 >
-> 文档性质：经多轮讨论确认的总体架构规格
+> 文档性质：整个产品的唯一权威架构总纲（Single Architecture Source of Truth）
+>
+> 路径说明：为保留已确认引用和 Git 历史，文件名暂保留 `fmcg-vision-saas-platform-design`；文件名不代表另建 FMCG 独立系统
 >
 > 当前阶段：本机优先、文档先行、尚未授权修改实现代码
 >
 > 适用对象：产品负责人、架构师、开发 Agent、训练 Agent、测试与运营人员
+
+## 0. 唯一系统声明与文档权威关系
+
+本项目只建设一套系统，不建设“识别系统”与“位置外勤系统”两个独立平台。所有业务共用：
+
+- 一套身份、租户、客户、项目和权限体系；
+- 一个 Graph+Loop Kernel 与能力注册表；
+- 一套统一数据系统底座和全局 ID/版本/时间语义；
+- 一个内容寻址对象与证据存储；
+- 一套事件、任务、Outbox/Inbox 和 Worker 管理；
+- 一套策略、审批、审计、用量和计费账本；
+- 一个 Web 应用壳、API Gateway 与 Agent 入口。
+
+FMCG 识别、标注训练、Geo/Field Operations、问卷、BI 和未来客户模块都是这套系统内的 Domain Pack。它们可以独立开发、测试、发布、启停和维护，但不得复制平台底座，不得自建身份、账本、证据库、Agent Runtime 或第二个业务事实源。
+
+文档权威层级：
+
+| 级别 | 文档 | 权威语义 |
+|---|---|---|
+| L0 | 本文档 | 唯一总架构、边界、底座、依赖和实施顺序 |
+| L1 | 位置外勤、识别训练等领域规格 | 只定义 Domain Pack 内部业务语义，必须从属 L0 |
+| L2 | Stage/L0–L6 实施计划 | 将已批准规格映射到文件、测试、迁移和提交 |
+| L3 | Runbook、测试报告、ADR 和验收证据 | 记录如何运行、决策变更和是否达标 |
+
+任何从属文档与本文冲突时，默认以本文为准；确需改变总架构时，必须先新建 ADR，再同步修订所有受影响文档。
 
 ## 1. 执行摘要
 
@@ -50,11 +77,12 @@ FMCG 视觉识别是第一个落地领域和第一套行业能力包，用来验
 
 ### 2.1 本期目标
 
+- 首先交付完整 Foundation Milestone：统一身份与数据底座、Module SDK、Graph+Loop Kernel、证据、事件任务、账本、审计、Web 壳和运维基线。
 - 建立 Graph+Loop 最小内核：Graph 定义、版本、执行、循环、检查点、工具调用、预算、人工介入、终态和审计。
 - 建立统一能力契约，使识别、标注、审核、训练、问卷、BI、数据查询和未来客户能力都能成为可编排节点。
 - 建立目标驱动的智能工作台，同时保留确定性模块页面作为直接操作、审计和人工接管入口。
 - 以 FMCG 识别作为第一条端到端参考 Graph，完成照片或 URL 到质量、识别、审核、发布、计费和反馈学习的闭环。
-- 将 Geo Foundation 和 Field Operations 作为第二个独立 Domain Pack，冻结地址、工作会话、轨迹、围栏、路线、普查区块、任务和现场证据的统一契约。
+- 将 Geo Foundation 和 Field Operations 作为第二个可插拔 Domain Pack，冻结地址、工作会话、轨迹、围栏、路线、普查区块、任务和现场证据的统一契约。
 - 形成原始数据、标注、审核、数据集快照、训练运行、模型版本、Graph 版本和结果之间可追溯的生命周期。
 - 支持 API、Web 和 Agent 三种入口启动同一 Graph 或直接调用获批领域能力。
 - 从第一版开始具备租户、客户、项目、权限、保留策略、客户商品映射和用量账本的数据边界。
@@ -115,32 +143,70 @@ Graph+Loop 是业务运行主干，能力模块是可注册节点，PostgreSQL�
 
 ~~~mermaid
 flowchart TB
-    U[智能工作台 / 管理端 / 客户端] --> G[统一 Experience/API Gateway]
-    SDK[API / 小程序 / App / 外部 Agent] --> G
-    G --> K[Graph+Loop Kernel]
-    K --> GR[Graph Registry / Version]
-    K --> LE[Loop Engine / Checkpoint / Resume]
-    K --> PR[Policy / Permission / Budget]
-    K --> CR[Capability & Tool Registry]
-    K --> HM[Human Task / Approval]
-    K --> EV[Evaluation / Memory / Audit]
-    CR --> VIS[FMCG Vision Domain Pack]
-    CR --> LAB[Annotation & Review Pack]
-    CR --> GEO[Geo Foundation]
-    CR --> FIELD[Field Operations Domain Pack]
-    CR --> DATA[Authorized Data Product Pack]
-    CR --> FUT[Questionnaire / BI / Future Packs]
-    VIS --> Q[隔离任务队列与 AI Worker]
-    LAB --> LS[Label Studio 独立服务]
-    FIELD --> FQ[定位 / 围栏 / 规划 / 证据 Worker]
-    FIELD --> GEO
-    K --> PG[(PostgreSQL 系统事实库)]
-    K --> CAS[(内容寻址证据与产物)]
-    K --> LEDGER[(不可变用量账本)]
-    K --> CMD[受策略约束的领域命令]
-    CMD --> DOMAIN[领域服务]
-    DOMAIN --> PG
+    subgraph EXPERIENCE["One Experience Plane"]
+        WEB["Web 应用壳 / 智能工作台"]
+        ENTRY["API / App / 小程序 / 外部 Agent"]
+        GW["Unified API Gateway"]
+        WEB --> GW
+        ENTRY --> GW
+    end
+
+    subgraph KERNEL["One Graph+Loop Intelligence Kernel"]
+        RUNTIME["Graph Registry / Loop Runtime / Checkpoint"]
+        POLICY["Policy / Permission / Budget / Human Gate"]
+        CAPREG["Module / Capability / Tool Registry"]
+        EVAL["Evaluation / Memory / Audit"]
+    end
+
+    subgraph MODULES["Pluggable Domain Packs"]
+        FMCG["FMCG Vision"]
+        LABEL["Annotation / Review"]
+        TRAIN["Dataset / Training / Model"]
+        GEOFIELD["Geo Foundation / Field Operations"]
+        QB["Questionnaire / BI"]
+        CUSTOM["Customer-specific Future Packs"]
+    end
+
+    subgraph FOUNDATION["One Trusted Platform and Data Foundation"]
+        IAM["Identity / Tenant / Project"]
+        PG[("PostgreSQL Unified Fact Store")]
+        OBJECTS[("CAS / Evidence / Artifact Storage")]
+        BUS["Outbox / Inbox / Job / Worker Control"]
+        MONEY["Usage / Billing / RateCard"]
+        OPS["Config / Feature Flag / Observability"]
+    end
+
+    GW --> RUNTIME
+    GW --> CAPREG
+    RUNTIME --> POLICY
+    RUNTIME --> CAPREG
+    RUNTIME --> EVAL
+    CAPREG --> FMCG
+    CAPREG --> LABEL
+    CAPREG --> TRAIN
+    CAPREG --> GEOFIELD
+    CAPREG --> QB
+    CAPREG --> CUSTOM
+    RUNTIME --> IAM
+    FMCG --> PG
+    LABEL --> PG
+    TRAIN --> PG
+    GEOFIELD --> PG
+    QB --> PG
+    CUSTOM --> PG
+    FMCG --> OBJECTS
+    LABEL --> OBJECTS
+    TRAIN --> OBJECTS
+    GEOFIELD --> OBJECTS
+    FMCG --> BUS
+    LABEL --> BUS
+    TRAIN --> BUS
+    GEOFIELD --> BUS
+    RUNTIME --> MONEY
+    RUNTIME --> OPS
 ~~~
+
+这张图的核心不是“每个模块都连一个数据库”，而是所有 Domain Pack 进入同一平台后，在统一身份、数据、事件、证据、计费和运行规则下拥有自己的领域边界。本机阶段它们可在一个模块化单体中运行；未来只拆需要独立扩容或故障隔离的 Worker/数据面，不重写平台契约。
 
 ## 5. 技术基线
 
@@ -162,20 +228,26 @@ flowchart TB
 
 ## 6. 内核与能力边界
 
-系统分为四层，依赖只能向下，领域能力不得反向接管内核：
+系统分为五个边界，领域能力不得反向接管内核或复制底座：
 
 1. Experience：智能工作台、直接模块页面、API 和客户入口。
 2. Intelligence Kernel：Graph、Loop、策略、记忆、评估、检查点、人工介入和预算。
-3. Capability Layer：识别、标注、审核、训练、地理、外勤、问卷、BI、数据产品和第三方工具。
-4. Trusted Foundation：身份、租户、PostgreSQL、存储、队列、审计和计费。
+3. Module Integration Plane：Module SDK、Manifest、注册表、UI 插槽、Capability/DataProduct/DomainCommand 契约和版本兼容性。
+4. Domain Pack：识别、标注、审核、训练、地理、外勤、问卷、BI 和客户专属模块。
+5. Trusted Foundation：身份、租户、PostgreSQL、对象存储、事件任务、审计、计费、配置和可观测性。
 
 模块化单体只是当前部署形态，不是产品中心。真正稳定的边界是 Graph Contract、Capability Contract、Domain Command 和 Data Product Contract。
 
-三条强制架构规则：
+八条强制架构规则：
 
 1. 任何识别专属功能必须通过 Capability 或 Domain Pack 接入，禁止在 Graph Runtime 中写 FMCG 特例。
 2. 任何通用内核能力除用 FMCG 参考 Graph 验证外，还要用一个极小的非识别 Graph 验证，防止所谓通用内核实际被识别流程绑死。
 3. 不先空造一个庞大通用平台再接识别；最小内核与 FMCG 识别纵向切片共同迭代，每增加一个内核能力都必须解决当前参考 Graph 的真实问题。
+4. Platform 代码不得 import 任何具体 Domain Pack；模块只能通过 Module Contract 反向注册。
+5. Domain Pack 不得直接写其他模块的 schema；跨域交互只能通过领域 API、DomainCommand、事件或经授权 DataProduct。
+6. 身份、租户、证据存储、事件任务、审计、计费和可观测性只由平台底座提供，模块禁止自建平行版本。
+7. 本机首版不接受上传任意代码的运行时插件；所有模块必须随代码审查、版本锁定和签名 Manifest 进入系统。
+8. 停用、升级或故障的模块不能删除历史事实、证据、Run 和账本，也不能阻断其他模块。
 
 | 模块 | 核心职责 | 禁止行为 |
 |---|---|---|
@@ -205,6 +277,110 @@ flowchart TB
 | Field Operations | 工作会话、活动、候选/正式任务、派单、路线、普查区块、现场执行和重排 | Agent 直接写正式任务、派单或员工处置结论 |
 | Mobile Field Evidence | 工作会话定位、离线补传、门头必拍、可选自拍和证据链 | 非工作时跟踪或用单信号自动处罚 |
 | Questionnaire / BI | 当前只提供模块契约、导航和数据产品接口 | 本阶段扩张为完整业务实现 |
+
+### 6.1 必须先完成的统一底座
+
+“底座先行”不是先建大量空表和空页面，而是先建立所有模块无法各自正确重做的共享语义。底座最小完整集为：
+
+| 底座单元 | 必须统一的事实 | 完成标志 |
+|---|---|---|
+| Identity & Scope | Platform/Tenant/Customer/Project、用户、服务身份、RBAC + ABAC | 同一身份从 Web/API/Agent 访问任意模块时语义一致 |
+| Module Platform | ModuleManifest、注册、依赖、版本、启停、健康和租户功能开关 | 新模块只通过插槽接入，无需修改 Kernel |
+| Graph+Loop Kernel | Graph/Run/Node/Checkpoint、预算、停滞、人工门和恢复 | 两个不同领域的最薄 Graph 都能注册和恢复 |
+| Unified Data | 全局 ID、租户范围、UTC、版本、幂等、迁移、事务和数据所有权 | 模块拥有独立 schema，但共用一套治理和备份恢复 |
+| Asset & Evidence | CAS、哈希、血缘、签名访问、保留、legal hold | 识别照、门头照、问卷附件和报表不重做存储 |
+| Event & Job | 事务 Outbox、幂等 Inbox、Job/Attempt、租约、重试、死信和 Worker 配额 | 模块故障不丢任务且不重复产生业务副作用 |
+| Policy & Human Gate | 权限、数据范围、成本、风险、审批和 PendingCommand | Agent 不能因模块不同而获得更大权限 |
+| Usage & Billing | UsageEvent、资源单位、冲正、RateCardVersion、预算和对账 | 新模块只注册 meter，不自建计费表 |
+| Audit & Decision | AuditEvent、DecisionEvent、证据引用、correlation_id 和导出审计 | 可从结果追到 Run、人/模型、输入、规则、成本和历史版本 |
+| Experience Shell | 统一登录、全局上下文、导航插槽、通知、人工待办、Run/证据抽屉 | 模块只提供页面和操作声明，不自建第二管理端 |
+| Configuration & Operations | 统一配置、密钥引用、feature flag、health、metrics、trace、backup | 可以独立观测/停用单模块，不影响其他模块 |
+
+底座通过的核心验收不是“页面能打开”，而是一个新 Domain Pack 可仅提交 Manifest、自有 schema/迁移、Capability、API、事件、UI 插槽、meter 和测试，即被同一平台发现、授权、编排、计费、审计和运维。
+
+### 6.2 Domain Pack 强制契约
+
+每个模块必须交付一份版本化 ModuleManifest：
+
+| Manifest 部分 | 必填内容 |
+|---|---|
+| Identity | module_id、display_name、semantic_version、owner、license/open-source tier |
+| Compatibility | platform_api_range、contract_versions、dependency modules 及版本范围 |
+| Data Ownership | 拥有的 schema/table family、保留分类、可发布 DataProduct；禁止声明其他模块表 |
+| Capabilities | capability_id、input/output schema、effect level、permission、timeout、cost unit、idempotency |
+| Commands & Events | DomainCommand、发布/订阅事件、schema version、失败与补偿语义 |
+| API & UI | OpenAPI route namespace、菜单/工作台插槽、页面权限、空状态和故障状态 |
+| Workers | worker_type、queue、resource profile、concurrency、retry/dead-letter 策略 |
+| Billing | Usage meter、业务量单位、成本类别和免费/冲正事件 |
+| Operations | config schema、secret references、feature flags、health check、metrics、alerts |
+| Verification | contract tests、migration tests、tenant-isolation tests、disable/upgrade/failure behavior、performance gate |
+
+模块状态为 discovered → validated → migrated → enabled ↔ degraded/disabled → upgrading；失败进入 failed 并保留诊断。disabled 只停止新命令、导航和 Worker，不删除数据，历史 Run 仍可阅读。
+
+首版采用“受审查的代码包 + 启动时注册 + 租户 feature flag”，不做任意代码热加载。这样既能像积木一样组合，又不会把客户上传插件变成远程代码执行风险。
+
+### 6.3 模块独立维护的真正含义
+
+独立维护不等于独立系统或独立数据真相。每个 Domain Pack 应拥有：
+
+- 独立代码目录、模块负责人和 CODEOWNERS 边界；
+- 独立 schema 与只向前迁移，但由统一 Migration Orchestrator 检查顺序和备份；
+- 独立契约、回归集、性能门、发布版本和回滚/前向修复策略；
+- 独立 Worker 资源档位、队列、并发上限和故障隔离；
+- 可按 tenant/project 启用或锁定版本，但继续复用统一权限、证据、账本和审计。
+
+禁止通过共享 Python 内部函数或跨 schema SQL 形成隐式依赖。高频同进程调用也必须经过稳定的领域接口，以便未来不改变消费者即可将重 Worker 拆为独立进程或设备。
+
+本机模块化单体阶段的“独立发布”，是指模块拥有独立语义版本、迁移、契约回归、feature flag 和前向修复边界；应用主进程仍可作为一个受控发布物升级。只有当独立扩缩容、硬件或故障域已产生真实收益时，才拆出独立进程/数据面，不在本机初期为了“微服务化”增加运维成本。
+
+### 6.4 目标代码边界（逻辑目录）
+
+后续实施计划必须将当前代码渐进映射到以下逻辑边界，不要一次性搬家：
+
+~~~text
+src/platform/                 # 内核和全局共享底座，禁止 import src/modules
+  kernel/                     # Graph / Loop / Checkpoint / Evaluation
+  modules/                    # Module SDK / Manifest / Registry / lifecycle
+  iam/                        # identity / tenant / policy scopes
+  data/                       # unit of work / outbox / migration orchestration
+  assets/                     # CAS / evidence / retention
+  jobs/                       # job / attempt / queue / worker control
+  billing/                    # usage ledger / RateCard
+  audit/                      # audit / decision / export trails
+  api/                        # gateway / shared error and idempotency semantics
+  observability/              # logs / metrics / traces / health
+
+src/modules/
+  fmcg_vision/                # 识别、商品、包装、场景
+  annotation_review/          # Label Studio、任务、审核、仲裁
+  dataset_training/           # 数据集、训练、评估、模型注册和发布门
+  geo_field/                  # Geo Foundation + Field Operations
+  questionnaire/             # 问卷 Domain Pack
+  bi/                        # BI / DataProduct Domain Pack
+
+contracts/                    # 跨模块稳定 schema，不放领域实现
+migrations/platform/          # 平台底座迁移
+migrations/modules/{module_id}/ # 各模块自有迁移
+web/src/platform/             # Web 壳、权限、Run/待办/证据共享 UI
+web/src/modules/{module_id}/  # 模块页面和导航插槽
+tests/contract/               # 平台与模块必过契约测试
+~~~
+
+实施时必须保留当前 `src/recognize`、`src/labeling`、`src/training`、`src/ls_platform` 等现有入口的兼容性，先用 Adapter 接入新底座，验收后再逐步迁移；禁止为了目录整齐一次性重写现有识别和训练线。
+
+### 6.5 领域积木目录与依赖方向
+
+| Domain Pack | 自有事实 | 允许依赖 | 降级/未安装语义 |
+|---|---|---|---|
+| FMCG Vision | 识别 Job/Attempt/Result、商品/包装和路由策略 | Platform Asset/Evidence、Model Capability | 不提供商品识别，其他模块仍可上传/审核证据 |
+| Annotation & Review | 标注任务、提交、审核和仲裁 | Platform HumanTask/Evidence；可选订阅 Vision/Questionnaire 对象 | 业务 Graph 可转客户自有复核或明确停在 waiting_human |
+| Dataset / Training / Model | DatasetSnapshot、TrainingRun、Evaluation、ModelVersion | Platform Asset/Job；可选消费冻结 Annotation/Review | 不能新建训练，已发布模型仍按注册状态供其他能力使用 |
+| Geo + Field Operations | Location、Campaign、Task、Assignment、Route、Execution | Platform Evidence/Job；可选调用 Storefront Vision | Vision 未安装或不健康时转基础质量 + 人工复核，不停止整个外勤系统 |
+| Questionnaire | Questionnaire、Response、Assignment、Validation | Platform Task/Human/Evidence；可选引用 Location ResourceRef | 不提供问卷任务，不影响识别或外勤 |
+| BI / DataProduct | MetricDefinition、SemanticModel、ReportSnapshot | 只消费经授权 DataProduct/事件 | BI 停用不阻断交易写入，历史报表仍作为 DerivedArtifact 可读 |
+| Customer Graph Pack | GraphDefinition/Version 与客户策略 | 只调用已安装且授权 Capability/DataProduct | 依赖缺失时禁止发布或运行，不自动替换工具 |
+
+依赖可以是 required 或 optional，但必须在 Manifest 中明示。required 缺失时模块不允许 enabled；optional 缺失时必须有已测试的降级语义，不得在运行时才临时猜测。
 
 ## 7. 智能工作台与管理端
 
@@ -303,6 +479,7 @@ RBAC 负责角色，ABAC 负责 tenant、customer、project、task、数据敏�
 | PolicyDecision | 一次权限、预算、路由或审批判断 | 保存规则版本、输入证据和结果 |
 | HumanTask | Graph 暂停后交给人的审核、补充或审批 | 人工决定独立保存，不改写节点历史 |
 | PendingCommand | 建议对领域状态执行的受控命令 | 执行前重新校验权限和目标版本 |
+| WorkItemProjection | 跨模块统一待办/调度视图 | 只是可重建投影；业务命令必须返回 owner module |
 | DerivedArtifact | 报告、解释、追踪结果等系统衍生产物 | 保存输入引用、生成链和适用范围 |
 | Asset | 一份原始照片、下载内容或衍生内容 | content_hash 指向唯一内容；原始对象不可覆盖 |
 | AssetRelation | 原图与纠偏图、裁剪图、缩略图之间的关系 | 必须记录算法、参数和父对象 |
@@ -349,6 +526,40 @@ created → validating → queued → running → awaiting_review → completed
 original Asset → derived Asset → algorithm version → parameters → metrics → reviewer decision
 
 导出结果应同时包含稳定对象 ID 和可验证哈希。外部 URL 只保存为来源，下载后的内容必须落为独立 Asset；同 URL 内容变化时形成新版本。
+
+### 9.4 统一数据系统底座
+
+“统一数据底座”指统一数据身份、治理、访问、事件、血缘、保留、备份和读模型规则，不是把所有业务字段塞进一张通用表。本机阶段使用一个 PostgreSQL 实例和一套统一存储管理，内部按 schema 明确事实所有权。
+
+数据底座分为四层：
+
+1. **Authoritative Facts**：平台和各 Domain Pack 的权威事实表，每个事实只有一个拥有者。
+2. **Immutable Assets & Evidence**：图片、文档、模型、数据集 manifest 和报表进入 CAS，数据库保存哈希、引用和血缘。
+3. **Events & Change Log**：领域事件通过事务 Outbox 发布，供 Graph、其他模块和读模型幂等消费。
+4. **Derived Read Models**：搜索、向量、BI、热力图、报表和 Agent Retrieval 都是可重建派生物，不得反向写为业务真相。
+
+对“全系统都会用到”的概念，必须区分平台事实与领域事实：
+
+| 通用概念 | 统一底座拥有 | Domain Pack 拥有 |
+|---|---|---|
+| 人与组织 | User/ServiceIdentity/Tenant/Customer/Project 及授权 | WorkerProfile、ReviewerProfile、问卷对象等领域角色扩展 |
+| 文件与证据 | Asset/EvidenceArtifact、哈希、存储、保留和访问审计 | “这份证据证明什么”的任务要求和验证结论 |
+| 任务与待办 | HumanTask、PendingCommand 和跨模块 WorkItemProjection | AnnotationTask、FieldTask、QuestionnaireAssignment 等业务状态机 |
+| 运行与调度 | LoopRun、NodeExecution、Job/Attempt、Checkpoint | RecognitionJob、TrainingRun、RoutePlan 等领域执行语义 |
+| 费用与审计 | UsageEvent、RateCardVersion、AuditEvent、DecisionEvent | 模块 meter 和业务量计量方法 |
+
+WorkItemProjection 只用于统一待办箱和调度视图，保存 owner_module、ResourceRef、assignee、due_at、risk、display_status 和 deep_link。它不是所有业务任务的通用真相；接受、退回、完成等命令必须路由回拥有该任务的 Domain Pack。
+
+所有模块对象共用一个标准 ResourceRef：`resource_type + resource_id + resource_version + tenant_id + project_id`。跨域引用保存当时版本，不通过复制其他模块字段建立影子真相。
+
+交易边界：
+
+- 一个 DomainCommand 在自有 schema 内修改事实并写 Outbox，必须使用同一个数据库事务；
+- 跨 Domain Pack 的长流程由 Graph/Saga 协调，不使用跨 schema 直接写和超长数据库事务；
+- 跨模块只读分析使用授权 DataProduct 或版本化读模型，Agent 不获得任意 SQL；
+- 全局数据导出必须通过 Export Service 并记录字段范围、用途、数量、对象哈希和审计事件。
+
+数据底座可以在增长后将轨迹、分析或对象存储拆到不同物理设备，但 ResourceRef、DataProduct、事件、权限、保留和审计契约不变，因此客户和 Domain Pack 仍然看到一套统一数据系统。
 
 ## 10. 数据输入、下载与预处理
 
@@ -1150,36 +1361,55 @@ Agent 在这三条 Graph 中负责解释、推荐、协调和追踪；PostGIS/�
 
 ## 24. 实施路线图
 
+### 24.0 底座先行总门
+
+Stage 0 和 Stage 1 组成一个不可拆开的 Foundation Milestone。实施 Agent 先完成统一数据底座、平台服务、Module SDK/注册表、Graph+Loop Kernel、Web 壳和运维基线，再开始 Stage 2 以后的任何完整业务模块。
+
+底座必须用两个“最薄插件”验证：
+
+1. FMCG Recognition Bridge：只把现有单图级联推理包装为 Capability，不重写模型线。
+2. Reference Work Pack（契约测试包）：位于测试 fixture，只提供候选工作项 → 人工确认 → 完成的虚拟闭环，不创建正式外勤事实，不提前实现定位、地图或路线算法。
+
+两个验证包必须共用相同 IAM、ModuleManifest、PostgreSQL、CAS、Outbox/Inbox、UsageLedger、Audit、Web 导航插槽和 Run 时间线。如果为第二个包增加功能时需要改写 Kernel 内部的领域特例，Foundation Milestone 直接判定失败。
+
 ### Stage 0：契约与治理冻结
 
 交付：
 
 - GraphDefinition、GraphVersion、LoopRun、NodeExecution、Checkpoint 状态机和统一 ID；
 - Capability、DataProduct、DomainCommand、HumanTask、PolicyDecision 契约；
+- ModuleManifest、模块状态机、UI 插槽、Usage meter、Worker profile 和兼容矩阵；
 - 领域词汇表和 FMCG 首个参考 Graph；
 - OpenAPI 基线；
 - tenant/customer/project 权限模型；
 - Asset、Evidence、UsageEvent、DatasetSnapshot 契约；
 - 内核/能力/领域边界、开源边界和许可证清单；
-- 现有系统适配器清单。
+- 现有系统适配器清单；
+- 平台底座与 Domain Pack 的 import/data ownership 依赖规则；
+- 统一 ResourceRef、跨域事件、读模型和交易边界。
 
-退出门禁：15 项需求都能映射到 Graph 内核或领域能力；无两个模块同时拥有同一事实；任何副作用节点的授权和幂等语义明确。
+退出门禁：原始 15 项与新增位置外勤需求都能映射到平台底座或 Domain Pack；无两个模块同时拥有同一事实；任何副作用节点的授权和幂等语义明确；新模块不需修改 Kernel 即可声明全部插槽。
 
-### Stage 1：本机最小智能内核
+### Stage 1：本机统一底座与最小智能内核
 
 交付：
 
+- Module SDK、Module Registry、Manifest 校验、依赖/兼容检查、模块状态机和租户 feature flag；
 - Graph Registry、Capability Registry 和版本冻结；
 - Loop Runtime、Node Executor、持久 Checkpoint、暂停/恢复和终态；
 - Policy/Permission/Budget Engine 与人工检查点；
-- FastAPI 内核、React 智能工作台和 Run 时间线；
-- PostgreSQL、迁移、身份和审计；
-- 本机 CAS、队列、Worker 管理和健康页；
+- FastAPI 统一 Gateway、React Web 壳、导航插槽、人工待办、Run/证据/用量共享抽屉；
+- PostgreSQL 统一事实库、platform/module 迁移编排、Unit of Work、Outbox/Inbox、身份、租户、审计和备份恢复；
+- 本机 CAS、Evidence/Retention、Job/Attempt、队列、Worker 管理和健康页；
+- UsageLedger、meter 注册、预算预留/结算、RateCard 接口和冲正语义；
 - 统一配置、结构化日志、备份与恢复演练；
-- 一个最小识别 Graph：单图输入 → 现有级联识别适配器 → 结果与用量记录；
-- 一个不依赖识别的极小示例 Graph，用于证明内核没有写入 FMCG 特例。
+- FMCG Recognition Bridge：单图输入 → 现有级联识别适配器 → 结果与用量记录；
+- Reference Work Pack（契约测试包）：虚拟候选工作项 → 人工确认 → 完成与用量记录，不写正式外勤表；
+- 模块启用、停用、故障、升级、不兼容拒绝和历史可读的端到端契约测试。
 
-退出门禁：最小识别 Graph 与非识别示例 Graph 都能运行；跨进程重启可从检查点恢复；幂等节点不重复执行；预算、权限、停滞和人工检查点可验证；无 SQLite 双事实源。
+退出门禁：两个最薄验证包均只靠 Manifest 和稳定契约注册；它们共用同一身份、数据、证据、事件、账本、Web 壳和 Graph Runtime；停用/破坏一个模块不影响另一个；跨进程重启可从检查点恢复；幂等节点不重复执行；预算、权限、停滞和人工门可验证；无 SQLite 双事实源；备份恢复和迁移失败演练通过。
+
+Stage 1 未通过前，实施 Agent 不得通过复制新服务、新数据库、新管理端或模块专用 Agent 底座来提前搭建 Stage 2–9。
 
 ### Stage 2：FMCG 首个参考 Graph
 
@@ -1190,7 +1420,7 @@ Agent 在这三条 Graph 中负责解释、推荐、协调和追踪；PostGIS/�
 - 质量三级结论和完整证据；
 - 场景多标签、价签有/无/不可判断；
 - 容量水位与保留策略预警；
-- 将现有级联识别包装为 RecognitionCapability；
+- 将 Stage 1 的最薄 Recognition Bridge 扩展为生产级 RecognitionCapability；
 - “照片识别并形成可审计结果”Graph 的第一版；
 - Graph 节点、领域作业和 UsageEvent 的全链路关联。
 
@@ -1294,6 +1524,7 @@ Agent 在这三条 Graph 中负责解释、推荐、协调和追踪；PostGIS/�
 | graph | definitions、versions、runs、node_executions、checkpoints、run_events |
 | capability | definitions、versions、tool_bindings、data_products、health_states |
 | policy | decisions、budgets、human_tasks、pending_commands、customer_memories |
+| work | work_item_projections、projection_offsets（可由领域事件重建） |
 | assets | assets、asset_relations、ingestion_batches、retention_policies |
 | quality | assessments、signals、evidence_regions、manual_overrides |
 | catalog | canonical_products、packaging_versions、customer_product_mappings、new_package_candidates |
@@ -1404,8 +1635,8 @@ Agent 在这三条 Graph 中负责解释、推荐、协调和追踪；PostGIS/�
 | D-08 | 照片结论为通过/警告/拒绝，拒绝只用于证据不可恢复 |
 | D-09 | 证据链是未来考核和争议处理依据，原始证据不可覆盖 |
 | D-10 | 客户提供低/中/高/极高四档，内部使用不可变用量账本 |
-| D-11 | 第一发布先具备最小 Graph+Loop 内核，再完整纳入识别、标注、审核、训练、数据、模型、计费和管理 |
-| D-12 | 问卷与 BI 当前冻结 Capability/DataProduct 契约，后续作为独立领域包验证内核通用性 |
+| D-11 | 第一发布先完成统一 Foundation Milestone 和两个最薄验证包，再逐个完整实施领域模块 |
+| D-12 | 问卷与 BI 当前冻结 Capability/DataProduct 契约，后续作为可插拔领域包验证内核通用性 |
 | D-13 | Python 3.12 + FastAPI；TypeScript + React PWA；统一 API |
 | D-14 | VLM 生产最低建议 Apple Silicon 32GB 或 NVIDIA 16GB；CPU 不承诺吞吐 |
 | D-15 | 准确性承诺只针对客户确认的冻结验收集 |
@@ -1416,7 +1647,7 @@ Agent 在这三条 Graph 中负责解释、推荐、协调和追踪；PostGIS/�
 | D-20 | 商品主档、包装版本、客户映射分离，支持客户不同命名策略 |
 | D-21 | 开源层拟用 Apache-2.0，商业能力闭源，发布前法律复核 |
 | D-22 | 基础客户使用固定 Graph，高级客户购买可定制 Graph、持续 Loop、专属工具和预算 |
-| D-23 | Geo Foundation + Field Operations 是第二个已确认 Domain Pack，按独立 L0–L6 计划实施 |
+| D-23 | Geo Foundation + Field Operations 是同一系统的第二个已确认 Domain Pack，在统一底座上按自有 L0–L6 计划实施 |
 | D-24 | 定位只在员工主动工作会话中开启；原始精确轨迹默认 90–180 天，派生证据按客户策略保留 |
 | D-25 | 每次外勤任务门头照必选，新门头/位置变化与员工异常分开处理 |
 | D-26 | 自拍证据接口和风险触发保留，首版不自动进行人脸身份比对 |
@@ -1424,6 +1655,11 @@ Agent 在这三条 Graph 中负责解释、推荐、协调和追踪；PostGIS/�
 | D-28 | 路线按 SLA、安全可达、技能、效率、均衡顺序优化；无解时返回“当前运力不可达” |
 | D-29 | EDS 类无清单普查使用地图区块，Agent 推荐、管理人员协调，覆盖未达标进入补扫 Loop |
 | D-30 | 位置、轨迹、任务和照片租户隔离；公共 Place 与客户私有 Overlay 分层 |
+| D-31 | 整个产品只有一套系统；本文是唯一总架构事实源，领域规格全部从属 |
+| D-32 | Domain Pack 可独立开发、测试、发布、启停和维护，但不得复制身份、数据、事件、证据、账本、审计、Web 和 Agent 底座 |
+| D-33 | 先建 Foundation Milestone：Module SDK + 统一数据底座 + Graph+Loop + Web 壳 + 运维，通过后再完整开发业务模块 |
+| D-34 | 统一数据底座是统一治理与 schema 所有权，不是一张通用大表；跨域只用 API、命令、事件、DataProduct 和 ResourceRef |
+| D-35 | 首版模块是受审查代码包 + 启动注册 + 租户 feature flag，不支持任意代码热插件 |
 
 以上是基线。后续改变任何一项必须记录新的 Architecture Decision Record，并列出影响模块、迁移方案和兼容窗口。
 
@@ -1505,15 +1741,18 @@ Agent 在这三条 Graph 中负责解释、推荐、协调和追踪；PostGIS/�
 8. 任何发布都能回滚，并能追溯到 commit、数据、模型和路由版本。
 9. 任何自动删除、生产部署、云端上传或客户数据迁移都需单独授权。
 10. 每个阶段结束提交证据包：测试报告、性能报告、架构差异、风险、剩余问题和下一阶段准入判断。
-11. 位置与外勤按专项 L0–L6 独立计划实施；不得把员工 App、轨迹、地图、路线和普查功能偷塞进当前 Stage 0–1 内核计划。
+11. 位置与外勤在统一底座上按专项 L0–L6 计划实施；不得把员工 App、轨迹、地图、路线和普查功能偷塞进 Foundation Milestone。
 12. 不以单个 GPS、围栏、门头模型或自拍信号直接形成员工处罚、工资或身份结论。
+13. 任何新 Domain Pack 必须先通过 Manifest 和契约测试接入；不得因新模块而修改 Kernel 的领域特例或新建第二数据真相。
+14. Stage 0–1 实施计划必须先达到 Foundation Milestone 退出门，未达标前不得宣布“大架构已搭好”或启动后续完整模块实施。
 
 ## 31. 下一步
 
-当前下一步是由产品负责人书面复核 `docs/superpowers/specs/2026-08-04-location-field-operations-design.md`。通过后：
+当前下一步是由产品负责人复核本次“唯一总纲 + 从属 Domain Pack”修订。通过后：
 
-1. 重新审查现有 Stage 0–1 详细实施计划，只补充通用契约与未来扩展点，不将位置模块提前塞入内核阶段；
-2. 单独编写位置与外勤 L0–L6 实施计划，精确到契约、数据库迁移、App 能力、Worker、测试命令、验收样例和回滚点；
-3. 每份实施计划再次获批后，实施 Agent 才可修改代码。
+1. 使用 writing-plans 重写现有 Stage 0–1 详细计划，将交付目标升级为完整 Foundation Milestone；
+2. 计划严格映射现有仓库，采用 Adapter 保留现有识别/训练入口，不做一次性重写；
+3. Foundation 计划经用户单独批准后，实施 Agent 才可修改底座代码；
+4. Foundation 实施和退出门验收完成后，再为各 Domain Pack 编写并审批独立的积木式实施计划。
 
 在 Stage 0-1 计划获批前，训练 Agent 可继续执行已经单独批准的训练工作，但不得提前创建新的系统事实库、Graph Runtime、全局身份或替换现有生产入口。
