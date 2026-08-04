@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from typing import Any
 
@@ -90,6 +91,35 @@ def build_training_router(bundle: PlatformBundle):
     return create_training_router(TrainingGovernanceService(bundle.store))
 
 
+def build_jobs_router(bundle: PlatformBundle):
+    """M6：可恢复 Job Worker（platform.echo 内置 handler）+ Jobs router。"""
+    from datetime import datetime, timezone
+
+    from src.platform.api.jobs import create_jobs_router
+    from src.platform.worker import RecoverableJobWorker
+
+    def _echo(ctx):
+        return {
+            "echo": ctx["payload"],
+            "attempt_no": ctx["attempt_no"],
+            "processed_at": datetime.now(timezone.utc).isoformat(),
+        }
+
+    worker = RecoverableJobWorker(
+        bundle.store,
+        {"platform.echo": _echo},
+        max_concurrent=int(os.environ.get("PLATFORM_WORKER_MAX_CONCURRENT", "2")),
+        lease_seconds=int(os.environ.get("PLATFORM_WORKER_LEASE_SECONDS", "300")),
+    )
+    return worker, create_jobs_router(worker)
+
+
+def build_share_router(bundle: PlatformBundle):
+    from src.platform.api.jobs import create_share_router
+
+    return create_share_router(bundle.store)
+
+
 def build_app_with_bundle(
     bundle: PlatformBundle | None = None,
     *,
@@ -97,6 +127,11 @@ def build_app_with_bundle(
     services=DEFAULT_SERVICES,
     probe=probe_service,
 ) -> FastAPI:
+    if bundle is not None:
+        _worker, jobs_router = build_jobs_router(bundle)
+        share_router = build_share_router(bundle)
+    else:
+        jobs_router, share_router = None, None
     return create_app(
         services=services,
         probe=probe,
@@ -104,4 +139,6 @@ def build_app_with_bundle(
         bundle=bundle,
         labeling_router=build_labeling_router(bundle) if bundle is not None else None,
         training_router=build_training_router(bundle) if bundle is not None else None,
+        jobs_router=jobs_router,
+        share_router=share_router,
     )

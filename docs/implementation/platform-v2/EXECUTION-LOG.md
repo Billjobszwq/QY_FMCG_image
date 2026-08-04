@@ -103,3 +103,43 @@
 
 - 当前模型（cascade_v3 / prod_20260804_v4_r2）仅对三得利货架场景（.field 9 张）有检出；照片1106/1107/百事&可口 在 conf 0.25 与 0.1 均 0 检出 → 50 张 batch 中 41 张为"无预标注对照"，如实呈现模型覆盖；扩充训练数据属 M5。
 - 人工标注/双审/仲裁未执行：按红线暂停请求授权。
+
+## M5 数据集训练治理（W14）
+
+| # | 命令 | 退出码 | 耗时 | 结果摘要 |
+|---|---|---|---|---|
+| 1 | M5 TDD `tests/platform/test_m5_training_gov.py` | 0 | 0.4s | 14 测试一次全绿：split guard / snapshot hash / gates / dry-run / 授权门 / 发布分离 / 晋级门 / 统一评估 / API E2E |
+| 2 | store migration 003（dataset_snapshot/training_run/platform_flag） | 0 | — | training_authorized 默认 false（fail-closed） |
+| 3 | `src/modules/training_gov/` + `src/platform/api/training.py` + 组合根接线 | 0 | — | 平台只承载 HTTP 边界；治理逻辑在 modules 域 |
+| 4 | 全量回归 | 0 | 3.76s | **288 passed** |
+| 5 | 真实 API 验证（8400）：gates/snapshot/dry-run/无授权 start | 0 | — | gates 阻断（training_authorized=false）；snapshot 072aeebebdb9 注册；dry-run 3d3560b5 命令回显；无授权 start 403 |
+| 6 | Web 训练工作台（为什么不能训练/还差什么/批准后命令） | 0 | — | tsc 0 + build；截图 /tmp/m5_training.png |
+| 7 | M5 提交 | 0 | — | **cef025a**（10 files，1102 insertions） |
+
+### M5 事实记录
+
+- truebox 评估已是修正版：one-to-one 匹配 + 真实 FP/photo 预算扫描 + 互斥错误账本；TopK 不得用于晋级。
+- dry-run 只产计划不执行；start 需 flag+IAM admin 双校验；发布仅 completed_candidate 且独立 admin 审批；auto_switch 不进新平台。
+- 训练启动未执行：按红线暂停请求授权（training_started=false 冻结不变）。
+
+## M6 PostgreSQL + 可靠 Worker（W15）
+
+| # | 命令 | 退出码 | 耗时 | 结果摘要 |
+|---|---|---|---|---|
+| 1 | M6 TDD `tests/platform/test_m6_worker.py` + `test_m6_pg_migration.py` | 0 | 0.49s | 22 passed + 1 skipped（PG 门控）：成功/重试/dead-letter/崩溃恢复不重复/取消/背压/吞吐基线/CAS 校验备份恢复水位/分享 token/CORS/Jobs API E2E |
+| 2 | store migration 004（job lease/attempt 列 + share_token 表） | 0 | — | 开发库重启后自动应用 |
+| 3 | `src/platform/worker.py` RecoverableJobWorker | 0 | — | 原子认领+lease；requeue 退让（同轮不重领）；重试耗尽/lease 过期耗尽 → dead_letter；背压 max_concurrent |
+| 4 | CAS 加固：verify_all/backup/restore/disk_watermark | 0 | — | restore 先落临时区逐文件校验再并入（fail-closed） |
+| 5 | 安全加固：CORS 白名单（PLATFORM_CORS_ORIGINS）+ 分享 token（scope/有效期/吊销）+ 敏感动作审计 | 0 | — | CSRF：状态变更均 JSON POST；非白名单 Origin 预检被拒 |
+| 6 | 全量回归 | 0 | 4.12s | **310 passed，1 skipped**（PG 门控） |
+| 7 | 重启 8400 真实 E2E（curl） | 0 | — | echo job 提交→poll→succeeded（attempt 恰 1）；未知 kind 400；取消 200→再取消 409；stats dead_letters=0；audit_event 5 条（job.submit/cancel、share.create/revoke） |
+| 8 | 分享链接真实 E2E | 0 | — | create→check valid→错误 scope 403→revoke→check 403（fail-closed） |
+| 9 | CAS 备份恢复演练（真实开发库） | 0 | — | verify_all ok（2 blob）；backup /tmp/m6_cas_backup.tar.gz（archive_sha256 ac3f39e0…）；restore→新目录 verify ok；水位 free_fraction=0.753 未超 |
+| 10 | PG 迁移脚本 `scripts/migrate_sqlite_to_pg.py` | 0 | — | 单次不双写；逐表行数+规范化 sha256 核对；psycopg 缺失时明确报错；真实 PG 运行门控于 PLATFORM_TEST_PG_URL |
+| 11 | 吞吐基线测试 | 0 | — | 100 job <10s 软上限（实测 <1s） |
+| 12 | Web 未回归验证 | 0 | — | /#/training 截图 /tmp/m6_training.png 正常渲染 |
+
+### M6 事实记录
+
+- PG 环境调研：无 docker；/Applications/PostgreSQL 17 仅 EDB app bundle 无 server 二进制；5432 closed；homebrew/conda 无 PG → PG 真实运行需安装授权（暂停点）。
+- 8091/8092 未触碰；生产 bundle 未触碰；三冻结值不变。

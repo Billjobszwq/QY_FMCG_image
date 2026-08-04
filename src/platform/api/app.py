@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import os
 import time
 from datetime import datetime, timezone
 from pathlib import Path
 
 from fastapi import FastAPI, File, HTTPException, UploadFile
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -40,6 +42,8 @@ def create_app(
     bundle: PlatformBundle | None = None,
     labeling_router=None,
     training_router=None,
+    jobs_router=None,
+    share_router=None,
 ) -> FastAPI:
     app = FastAPI(
         title="Unified Platform API",
@@ -47,6 +51,21 @@ def create_app(
         docs_url="/api/v1/docs",
         openapi_url="/api/v1/openapi.json",
     )
+    # M6 CORS 白名单：仅显式配置的 Origin 授予跨域（默认拒绝 = 浏览器同源策略）。
+    # CSRF：状态变更端点均为 JSON body/自定义头，非白名单 Origin 预检被拒。
+    origins = [
+        o.strip()
+        for o in os.environ.get("PLATFORM_CORS_ORIGINS", "").split(",")
+        if o.strip()
+    ]
+    if origins:
+        app.add_middleware(
+            CORSMiddleware,
+            allow_origins=origins,
+            allow_methods=["GET", "POST", "OPTIONS"],
+            allow_headers=["Content-Type", "X-Actor", "X-Role", "X-Request-Id"],
+            allow_credentials=False,
+        )
     install_request_context_middleware(app)
     rec_adapter = recognition_adapter or RecognitionV2Adapter()
     mon_adapter = monitor_adapter or MonitorAdapter()
@@ -73,6 +92,12 @@ def create_app(
     # ---- M5 训练治理（组合根注入 router 时启用）----
     if training_router is not None:
         app.include_router(training_router)
+
+    # ---- M6 可恢复 Job Worker + 分享链接（组合根注入 router 时启用）----
+    if jobs_router is not None:
+        app.include_router(jobs_router)
+    if share_router is not None:
+        app.include_router(share_router)
 
     @app.get("/api/v1/health")
     def health():

@@ -13,7 +13,7 @@ import hashlib
 import json
 import sqlite3
 import threading
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
@@ -210,10 +210,29 @@ INSERT OR IGNORE INTO platform_flag (flag, value, updated_at, updated_by)
 VALUES ('training_authorized', 'false', '1970-01-01T00:00:00+00:00', 'system');
 """
 
+_M004 = """
+ALTER TABLE job ADD COLUMN lease_until TEXT;
+ALTER TABLE job ADD COLUMN worker_id TEXT;
+ALTER TABLE job ADD COLUMN attempt_count INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE job ADD COLUMN max_attempts INTEGER NOT NULL DEFAULT 3;
+CREATE INDEX IF NOT EXISTS idx_job_status ON job(status);
+
+CREATE TABLE IF NOT EXISTS share_token (
+    token TEXT PRIMARY KEY,
+    scope TEXT NOT NULL,
+    subject_id TEXT,
+    expires_at TEXT NOT NULL,
+    created_by TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    revoked INTEGER NOT NULL DEFAULT 0
+);
+"""
+
 MIGRATIONS: tuple[tuple[str, str], ...] = (
     ("001_platform_init", _M001),
     ("002_labeling_inbox", _M002),
     ("003_training_gov", _M003),
+    ("004_recoverable_worker", _M004),
 )
 
 
@@ -456,13 +475,18 @@ class PlatformStore:
         job_id: str,
         kind: str,
         payload: dict[str, Any] | None = None,
+        max_attempts: int = 3,
     ) -> dict[str, Any]:
         now = _utcnow()
         try:
             self._conn.execute(
-                "INSERT INTO job(job_id, kind, status, payload_json, created_at, updated_at)"
-                " VALUES (?,?,?,?,?,?)",
-                (job_id, kind, "queued", json.dumps(payload or {}, ensure_ascii=False), now, now),
+                "INSERT INTO job(job_id, kind, status, payload_json, max_attempts,"
+                " created_at, updated_at) VALUES (?,?,?,?,?,?,?)",
+                (
+                    job_id, kind, "queued",
+                    json.dumps(payload or {}, ensure_ascii=False),
+                    max_attempts, now, now,
+                ),
             )
         except sqlite3.IntegrityError as e:
             raise StoreError(f"job 已存在: {job_id}") from e
@@ -525,6 +549,140 @@ class PlatformStore:
             "SELECT * FROM job_attempt WHERE job_id=? ORDER BY attempt_no", (job_id,)
         ).fetchall()
         return [dict(r) for r in rows]
+
+    def claim_next_job(
+        self,
+        *,
+        worker_id: str,
+        lease_seconds: int,
+        exclude_job_ids: set[str] | None = None,
+    ) -> dict[str, Any] | None:
+        """原子认领最老 queued job 为 running（单语句 UPDATE，崩溃可恢复）。
+
+        lease_until 到期而 worker 未续期/完成 → 视为崩溃，可被重新排队。
+        exclude_job_ids：本轮刚 requeue 的 job 不重复认领（退让语义）。
+        """
+        now = datetime.now(timezone.utc)
+        lease = (now + timedelta(seconds=lease_seconds)).isoformat()
+        excluded = sorted(exclude_job_ids or ())
+        params: list[Any] = [worker_id, lease, now.isoformat()]
+        excl_sql = ""
+        if excluded:
+            excl_sql = f" AND job_id NOT IN ({', '.join('?' * len(excluded))})"
+            params.extend(excluded)
+        params.extend(excluded)  # 子查询同名排除
+        row = self._conn.execute(
+            "UPDATE job SET status='running', worker_id=?, lease_until=?, updated_at=?"
+            " WHERE job_id=(SELECT job_id FROM job WHERE status='queued'"
+            f"{excl_sql} ORDER BY created_at, job_id LIMIT 1){excl_sql} RETURNING *",
+            params,
+        ).fetchone()
+        self._conn.commit()
+        return dict(row) if row is not None else None
+
+    def increment_attempt(self, job_id: str) -> int:
+        self._conn.execute(
+            "UPDATE job SET attempt_count=attempt_count+1, updated_at=? WHERE job_id=?",
+            (_utcnow(), job_id),
+        )
+        self._conn.commit()
+        row = self._conn.execute(
+            "SELECT attempt_count FROM job WHERE job_id=?", (job_id,)
+        ).fetchone()
+        if row is None:
+            raise StoreError(f"job 不存在: {job_id}")
+        return int(row["attempt_count"])
+
+    def clear_lease(self, job_id: str) -> None:
+        self._conn.execute(
+            "UPDATE job SET lease_until=NULL, worker_id=NULL, updated_at=? WHERE job_id=?",
+            (_utcnow(), job_id),
+        )
+        self._conn.commit()
+
+    def list_jobs(
+        self, *, status: str | None = None, limit: int = 200
+    ) -> list[dict[str, Any]]:
+        if status is not None:
+            rows = self._conn.execute(
+                "SELECT * FROM job WHERE status=? ORDER BY created_at DESC LIMIT ?",
+                (status, limit),
+            ).fetchall()
+        else:
+            rows = self._conn.execute(
+                "SELECT * FROM job ORDER BY created_at DESC LIMIT ?", (limit,)
+            ).fetchall()
+        return [dict(r) for r in rows]
+
+    def count_jobs_by_status(self) -> dict[str, int]:
+        rows = self._conn.execute(
+            "SELECT status, COUNT(*) AS n FROM job GROUP BY status"
+        ).fetchall()
+        out = {s: 0 for s in JOB_STATUSES}
+        for r in rows:
+            out[r["status"]] = int(r["n"])
+        return out
+
+    def expired_running_leases(self, *, before_ts: str) -> list[dict[str, Any]]:
+        """lease 过期仍 running 的 job（worker 崩溃候选）。"""
+        rows = self._conn.execute(
+            "SELECT * FROM job WHERE status='running' AND lease_until IS NOT NULL"
+            " AND lease_until < ?",
+            (before_ts,),
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+    # ---------- share token（scope + 有效期，fail-closed） ----------
+
+    def create_share_token(
+        self,
+        *,
+        scope: str,
+        subject_id: str | None = None,
+        ttl_seconds: int,
+        created_by: str,
+        token: str | None = None,
+    ) -> dict[str, Any]:
+        import secrets
+
+        tok = token or secrets.token_urlsafe(24)
+        now = datetime.now(timezone.utc)
+        expires = (now + timedelta(seconds=ttl_seconds)).isoformat()
+        self._conn.execute(
+            "INSERT INTO share_token(token, scope, subject_id, expires_at,"
+            " created_by, created_at, revoked) VALUES (?,?,?,?,?,?,0)",
+            (tok, scope, subject_id, expires, created_by, now.isoformat()),
+        )
+        self._conn.commit()
+        row = self._conn.execute(
+            "SELECT * FROM share_token WHERE token=?", (tok,)
+        ).fetchone()
+        return dict(row)
+
+    def validate_share_token(
+        self, token: str, *, scope: str
+    ) -> dict[str, Any] | None:
+        """校验 token：存在 + 未吊销 + 未过期 + scope 匹配；任一不满足返回 None。"""
+        row = self._conn.execute(
+            "SELECT * FROM share_token WHERE token=?", (token,)
+        ).fetchone()
+        if row is None:
+            return None
+        r = dict(row)
+        if r["revoked"]:
+            return None
+        if r["scope"] != scope:
+            return None
+        if r["expires_at"] <= _utcnow():
+            return None
+        return r
+
+    def revoke_share_token(self, token: str) -> bool:
+        cur = self._conn.execute(
+            "UPDATE share_token SET revoked=1 WHERE token=?", (token,)
+        )
+        self._conn.commit()
+        return cur.rowcount > 0
 
     def flag_orphaned_jobs(self, *, before_ts: str) -> list[str]:
         """将超时仍处于 running 的 job 标记为 failed（可恢复语义，M2 要求）。"""

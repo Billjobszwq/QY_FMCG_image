@@ -63,3 +63,29 @@
 | 不可变 truebox manifest 导出 | — | ⏳（annotation 产生后导出；待授权） |
 | 10→50 张 | 先 10 张 E2E 再扩 50 张；不直接 2300 | ✅（f155180f 10+10 / 334dd7fc 50+50；真实 8091 预标注） |
 | 用户可见 | 工作台创建试验项目 → LS 标注 → 回平台看状态/导出 | ✅（标注审核页：batches/创建/导入/对账/inbox；截图 /tmp/m4_annotation*.png） |
+
+## M5 验收矩阵
+
+| 项 | 验收标准 | 结果 |
+|---|---|---|
+| DatasetSnapshot 契约 | split guard（train/val sha256/store/session 零交集）+ manifest hash + 人工审核来源字段 | ✅（泄漏 manifest 拒注册；hash 确定性；TDD 3+2 测试） |
+| truebox 评估修正 | 真实 FP/photo 预算扫描 + 互斥错误账本；TopK 不得用于晋级 | ✅（promotion_gate：recall@FP1/FP3 IoU0.5 + FP/photo；TDD pass/fail） |
+| 统一推理导出/评估 | E0/P0/P1 同一 GT 统一评估；导出 manifest 缺文件 fail-closed | ✅（unified_eval + export_inference_manifest TDD） |
+| dry-run | 只产计划不执行；展示命令/MPS G0/算力预算/停止线 | ✅（dry-run 3d3560b5 命令回显；授权状态不变） |
+| 训练启动授权门 | flag training_authorized + IAM admin 双校验 | ✅（无授权 start 403；operator 授权 403；admin 授权 200） |
+| 发布分离 | 训练完成仅 candidate；发布独立 admin 审批；禁 auto_switch | ✅（非 candidate 拒批；operator 拒批；TDD 全链路） |
+| 用户可见 | 训练页显示"为什么不能训练、还差什么、批准后将运行什么命令" | ✅（gates banner + reasons + command_json + stop_lines；截图 /tmp/m5_training.png） |
+| 红线 | 不启动训练（training_started=false） | ✅（平台只标记 authorized，不执行；冻结值不变） |
+
+## M6 验收矩阵
+
+| 项 | 验收标准 | 结果 |
+|---|---|---|
+| PG 原生/容器 | 真实通过 | ⏳（无 docker/无 server 二进制/5432 closed → 安装需授权；脚本与门控测试就绪） |
+| 单次迁移核对 | 不双写；逐表行数+哈希一致 | ✅（migrate_sqlite_to_pg.py：依赖顺序建表+单事务插入+canonical sha256 双侧核对；纯函数离线断言 4 项） |
+| 可恢复 Worker | lease 认领/崩溃恢复/取消/超时/重试/dead-letter/背压 | ✅（22 TDD：崩溃后 lease 过期 requeue、不重复完成（attempt 记账、终态单一）；dead_letter 前缀；背压单轮放行；100 job 吞吐 <1s） |
+| CAS 校验/备份/恢复/水位 | fail-closed | ✅（verify_all 检出损坏/缺失；backup→restore 往返 + 损坏归档拒恢复；真实开发库演练 archive_sha256 ac3f39e0…；水位 0.753） |
+| 安全加固 | CORS/CSRF/分享链接/审计 | ✅（CORS 白名单预检拒非白名单 Origin；JSON POST 无表单路径；分享 token scope/有效期/吊销 fail-closed 真实 E2E；job/share 动作 audit_event 留痕） |
+| 性能测试 | 吞吐基线 | ✅（100 job <10s 软上限测试；实测 <1s） |
+| 崩溃不重复完成/计量 | worker 崩溃不重复完成/计量 | ✅（TDD crash recovery + attempt 唯一记账 + result 单写；真实 E2E attempt 恰 1） |
+| 用户可见 | 8400 真实 E2E | ✅（jobs submit/poll/cancel/409；shares create/check/revoke；Web /#/training 未回归） |

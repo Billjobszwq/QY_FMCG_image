@@ -5,11 +5,11 @@
 
 | 项 | 值 |
 |---|---|
-| 当前状态 | M4 机械闭环完成（10+50 张 E2E、分离/去重/对账验证），人工标注待授权 |
-| 当前 HEAD | b31d67e + M4 未提交变更（feat/usable-platform-foundation） |
+| 当前状态 | M5 完成（cef025a）；M6 代码侧完成（可恢复 Worker/CAS 加固/安全加固/PG 迁移脚本），PG 真实运行待安装/生产迁移授权 |
+| 当前 HEAD | cef025a + M6 未提交变更（feat/usable-platform-foundation） |
 | 分支 | `feat/usable-platform-foundation` |
 | 基线 commit | `c9998af`（feat/sam-reannotation） |
-| 基线测试 | 170 passed；M4 后全量 **274 passed**（3.58s） |
+| 基线测试 | 170 passed；M6 后全量 **310 passed，1 skipped**（PG 门控，4.12s） |
 | 生产 bundle | `prod_20260804_v4_r2`（16 文件校验通过，不修改） |
 | production_switch | **false**（冻结） |
 | training_started | **false**（冻结） |
@@ -36,9 +36,9 @@
 | M1 统一 Web Shell | DONE（97020d6 → 54cac63 → 2d9a4ef，198 passed） |
 | M2 最小可信 Foundation | DONE（46d2f25 → 1dc4cc8，243 passed） |
 | M3 第一条真实 Graph | DONE（fb55084 → 7afa0bf → 7450d23 → b7513dc，265 passed） |
-| M4 Label Studio 闭环 | IN_PROGRESS（机械闭环完成；人工标注待授权） |
-| M5 数据集训练治理 | PENDING（训练需显式授权） |
-| M6 PostgreSQL + 可靠 Worker | PENDING |
+| M4 Label Studio 闭环 | DONE（机械闭环 f42f882；人工标注待授权） |
+| M5 数据集训练治理 | DONE（cef025a，288 passed；训练启动待授权） |
+| M6 PostgreSQL + 可靠 Worker | IN_PROGRESS（Worker/CAS/安全/迁移脚本完成，310 passed；PG 真实运行待安装授权） |
 | M7 后续 Domain Pack | PENDING |
 
 ## 红线（任何阶段不得越过）

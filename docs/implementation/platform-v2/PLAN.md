@@ -51,15 +51,17 @@
 - [ ] 人工标注/双审/仲裁（需授权，暂停中）
 
 ### M5 数据集训练治理（需授权）
-- [ ] DatasetSnapshot 契约
-- [ ] 修 truebox 评估：真实 FP/photo 预算扫描（当前为 TopK，不得用于晋级）
-- [ ] E0/P0/P1 统一推理导出
-- [ ] dry-run 能力；训练启动需显式人工授权；发布独立审批；禁 auto_switch
+- [x] DatasetSnapshot 契约（split guard + manifest hash + 来源审核）
+- [x] 修 truebox 评估：真实 FP/photo 预算扫描（TopK 不得用于晋级）
+- [x] E0/P0/P1 统一推理导出 + 统一评估
+- [x] dry-run 能力；训练启动需显式人工授权；发布独立审批；禁 auto_switch
+- [ ] 训练启动（需授权，暂停中；training_started=false）
 
 ### M6 PostgreSQL + 可靠 Worker
-- [ ] 单次迁移（不双写），CAS 备份恢复演练
-- [ ] 可恢复 Worker（替代 daemon thread）
-- [ ] 安全加固 + 性能测试
+- [x] 单次迁移脚本（不双写，逐表计数+哈希核对）；真实 PG 运行待安装/生产迁移授权
+- [x] CAS 备份恢复演练（verify_all/backup/restore/磁盘水位）
+- [x] 可恢复 Worker（lease 认领/崩溃恢复/取消/超时/重试/dead-letter/背压）
+- [x] 安全加固（CORS 白名单/分享 token scope+有效期/审计）+ 性能测试（100 job 吞吐基线）
 
 ### M7 后续 Domain Pack
 - [ ] （保留，不在第一阶段）
