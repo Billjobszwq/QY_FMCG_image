@@ -1,5 +1,7 @@
 # Graph+Loop 智能业务操作系统全项目实施总纲
 
+> **执行顺序更新（2026-08-04）：** 本文件保留 Stage 0–9 的完整业务范围、长期门禁和需求映射；当前实际开工顺序已由 [`2026-08-04-continuous-usable-framework-execution-manual.md`](./2026-08-04-continuous-usable-framework-execution-manual.md) 取代。新方法先接入当前可用的 8091/8092，交付统一 Web 和第一条真实 Graph，再持续补齐 Foundation 与 Domain Pack。不得继续将“Task 1–26 全部完成”作为出现首个可用系统的前置条件。
+
 > **For agentic workers:** 这是全项目唯一实施编排入口。任何 Agent 开工前必须先读本总纲与 L0 架构；Stage 0–1 按配套代码级计划逐任务执行。后续 Stage 必须满足前置门禁，不得跨阶段抢跑。实现使用 `superpowers:executing-plans`、`superpowers:test-driven-development` 和 `superpowers:verification-before-completion`。
 
 **Program Goal:** 以一个统一数据与智能底座承载 Graph+Loop、FMCG 识别、标注审核、数据集训练、位置外勤、问卷和 BI。平台先在单机稳定运行，模块像积木一样独立开发、测试、升级、启停和维护；成熟后可在不推翻契约的前提下拆分服务、迁移云端和支持多客户。

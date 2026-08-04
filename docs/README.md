@@ -4,7 +4,7 @@
 
 > **平台最终架构入口（2026-08-04）：** 整个产品的唯一总纲是 [`Graph+Loop 智能业务操作系统最终统一架构设计`](./superpowers/specs/2026-08-04-fmcg-vision-saas-platform-design.md)。它定义一套统一底座和可插拔 Domain Pack；位置外勤规格只是从属模块文档，不是第二套系统。
 >
-> **实施 Agent 开工入口：** 先读 [`全项目实施总纲`](./superpowers/plans/2026-08-04-full-project-execution-program.md)，再严格执行 [`Stage 0–1 Unified Foundation 代码级计划`](./superpowers/plans/2026-08-04-stage0-1-graph-loop-kernel.md)。当前只允许 Stage 0–1 开工；Task 26 验收前不得进入后续模块。
+> **实施 Agent 当前开工入口：** 先读 [`统一框架持续可用执行手册 V2`](./superpowers/plans/2026-08-04-continuous-usable-framework-execution-manual.md)。它以当前可用的 8091 识别和 8092 监控为第一批 Capability，先交付统一 Web 和真实 Graph，再持续补齐 Foundation、Label Studio、训练治理和后续 Domain Pack。旧 [`全项目实施总纲`](./superpowers/plans/2026-08-04-full-project-execution-program.md) 保留 Stage 0–9 完整范围，但其串行门禁不再是当前开工顺序。
 >
 > **现有识别/训练运行入口：** 本页前半部分保留早期系统说明；级联生产架构以 [`handbook.md`](./handbook.md) 为准，最终训练准入、Apple M3 Max/MPS 规范和最新阻断项以 [`2026-08-04-final-training-execution-gate.md`](./superpowers/plans/2026-08-04-final-training-execution-gate.md) 为准。这些文档说明当前系统如何运行，不覆盖最终平台架构。较早严格复核保留在 [`latest-handbook-reverification-2026-08-04.md`](./latest-handbook-reverification-2026-08-04.md) 作为历史证据。
 
@@ -39,8 +39,9 @@ python -m src.recognize.api --port 8091    # 识别接口
 | 文档 | 内容 |
 |---|---|
 | [`superpowers/specs/2026-08-04-fmcg-vision-saas-platform-design.md`](./superpowers/specs/2026-08-04-fmcg-vision-saas-platform-design.md) | **平台唯一架构总纲**：一套底座、Graph+Loop 内核、统一数据系统、Module SDK 和积木式 Domain Pack |
+| [`superpowers/plans/2026-08-04-continuous-usable-framework-execution-manual.md`](./superpowers/plans/2026-08-04-continuous-usable-framework-execution-manual.md) | **当前唯一实施入口**：保留现有可用能力，按 M0–M7 持续交付统一 Web、真实 Graph、标注、训练治理和平台硬化 |
 | [`superpowers/plans/2026-08-04-full-project-execution-program.md`](./superpowers/plans/2026-08-04-full-project-execution-program.md) | **全项目开工总纲**：Stage 0–9 依赖、交付物、门禁、需求映射、Agent 启动提示词和审查清单 |
-| [`superpowers/plans/2026-08-04-stage0-1-graph-loop-kernel.md`](./superpowers/plans/2026-08-04-stage0-1-graph-loop-kernel.md) | **当前唯一可执行代码级计划**：26 个 TDD 任务完成 Unified Foundation、双模块隔离和最终验收 |
+| [`superpowers/plans/2026-08-04-stage0-1-graph-loop-kernel.md`](./superpowers/plans/2026-08-04-stage0-1-graph-loop-kernel.md) | **详细设计参考**：26 个 TDD 任务中的 Graph、Capability、IAM、CAS、Job、Billing 设计供新纵向计划按需复用，不再机械串行执行 |
 | [`CODEX-PROJECT-HANDBOOK.md`](./CODEX-PROJECT-HANDBOOK.md) | **Codex 内部接续手册**：当前进度、上下文恢复、Bug/训练切换点和可复用方法论；只作索引，不覆盖 L0/L1 权威文件 |
 | [`superpowers/specs/2026-08-04-location-field-operations-design.md`](./superpowers/specs/2026-08-04-location-field-operations-design.md) | **从属 Domain Pack 规格**：位置、路线、围栏、外勤、普查和现场证据；禁止自建平行底座 |
 | [`setup.md`](./setup.md) | **环境+项目部署**：依赖、omlx、`.env`、校验、可选 Docker/镜像源、可选 Label Studio |
