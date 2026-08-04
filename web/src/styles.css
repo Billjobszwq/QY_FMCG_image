@@ -36,6 +36,7 @@ code { background: #22304a; padding: 1px 6px; border-radius: 4px; }
 
 .banner { padding: 8px 20px; font-size: 13px; }
 .banner-degraded { background: #3a2f14; color: var(--warn); border-bottom: 1px solid #5c4a1d; }
+.banner-healthy { background: #14301c; color: #9fdfae; border-bottom: 1px solid #1d5c2e; }
 .banner-unavailable { background: #3a1717; color: #ff9d9d; border-bottom: 1px solid #6b2626; }
 
 .body { display: flex; flex: 1; }

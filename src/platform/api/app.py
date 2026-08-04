@@ -39,6 +39,7 @@ def create_app(
     registry: CapabilityRegistry | None = None,
     bundle: PlatformBundle | None = None,
     labeling_router=None,
+    training_router=None,
 ) -> FastAPI:
     app = FastAPI(
         title="Unified Platform API",
@@ -68,6 +69,10 @@ def create_app(
     # ---- M4 Label Studio 闭环（组合根注入 router 时启用）----
     if labeling_router is not None:
         app.include_router(labeling_router)
+
+    # ---- M5 训练治理（组合根注入 router 时启用）----
+    if training_router is not None:
+        app.include_router(training_router)
 
     @app.get("/api/v1/health")
     def health():

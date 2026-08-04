@@ -161,9 +161,59 @@ CREATE TABLE IF NOT EXISTS webhook_event (
 );
 """
 
+_M003 = """
+CREATE TABLE IF NOT EXISTS dataset_snapshot (
+    snapshot_id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    version TEXT NOT NULL,
+    mode TEXT NOT NULL,
+    manifest_hash TEXT NOT NULL,
+    manifest_json TEXT NOT NULL,
+    guard_json TEXT NOT NULL,
+    source_actor TEXT NOT NULL,
+    source_conclusion TEXT NOT NULL,
+    quality_json TEXT NOT NULL DEFAULT '{}',
+    status TEXT NOT NULL DEFAULT 'registered'
+        CHECK (status IN ('registered','rejected','superseded')),
+    created_at TEXT NOT NULL,
+    UNIQUE (name, version)
+);
+
+CREATE TABLE IF NOT EXISTS training_run (
+    run_id TEXT PRIMARY KEY,
+    snapshot_id TEXT REFERENCES dataset_snapshot(snapshot_id),
+    kind TEXT NOT NULL DEFAULT 'dry_run'
+        CHECK (kind IN ('dry_run','authorized','started','completed_candidate','cancelled')),
+    plan_json TEXT NOT NULL,
+    command_json TEXT NOT NULL,
+    budget_json TEXT NOT NULL,
+    stop_lines_json TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'dry_run',
+    publish_status TEXT NOT NULL DEFAULT 'none'
+        CHECK (publish_status IN ('none','requested','approved','rejected','published')),
+    requested_by TEXT,
+    approved_by TEXT,
+    publish_requested_by TEXT,
+    publish_approved_by TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS platform_flag (
+    flag TEXT PRIMARY KEY,
+    value TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    updated_by TEXT NOT NULL
+);
+
+INSERT OR IGNORE INTO platform_flag (flag, value, updated_at, updated_by)
+VALUES ('training_authorized', 'false', '1970-01-01T00:00:00+00:00', 'system');
+"""
+
 MIGRATIONS: tuple[tuple[str, str], ...] = (
     ("001_platform_init", _M001),
     ("002_labeling_inbox", _M002),
+    ("003_training_gov", _M003),
 )
 
 
@@ -681,6 +731,89 @@ class PlatformStore:
             sql += " WHERE " + " AND ".join(cond)
         sql += " ORDER BY id"
         return [dict(r) for r in self._conn.execute(sql, args).fetchall()]
+
+    # ---------- dataset snapshot / training gov (M5) ----------
+
+    def create_dataset_snapshot(self, snapshot: dict[str, Any]) -> dict[str, Any]:
+        self._conn.execute(
+            """INSERT INTO dataset_snapshot (snapshot_id, name, version, mode,
+               manifest_hash, manifest_json, guard_json, source_actor,
+               source_conclusion, quality_json, status, created_at)
+               VALUES (?,?,?,?,?,?,?,?,?,?,?,?)""",
+            (snapshot["snapshot_id"], snapshot["name"], snapshot["version"],
+             snapshot["mode"], snapshot["manifest_hash"], snapshot["manifest_json"],
+             snapshot["guard_json"], snapshot["source_actor"],
+             snapshot["source_conclusion"], snapshot.get("quality_json", "{}"),
+             snapshot.get("status", "registered"), snapshot["created_at"]),
+        )
+        return snapshot
+
+    def get_dataset_snapshot(self, snapshot_id: str) -> dict[str, Any] | None:
+        return _row_to_dict(self._conn.execute(
+            "SELECT * FROM dataset_snapshot WHERE snapshot_id=?", (snapshot_id,)
+        ).fetchone())
+
+    def list_dataset_snapshots(self) -> list[dict[str, Any]]:
+        return [dict(r) for r in self._conn.execute(
+            "SELECT * FROM dataset_snapshot ORDER BY created_at DESC").fetchall()]
+
+    def create_training_run(self, run: dict[str, Any]) -> dict[str, Any]:
+        self._conn.execute(
+            """INSERT INTO training_run (run_id, snapshot_id, kind, plan_json,
+               command_json, budget_json, stop_lines_json, status, publish_status,
+               requested_by, created_at, updated_at)
+               VALUES (?,?,?,?,?,?,?,?,?,?,?,?)""",
+            (run["run_id"], run.get("snapshot_id"), run.get("kind", "dry_run"),
+             run["plan_json"], run["command_json"], run["budget_json"],
+             run["stop_lines_json"], run.get("status", "dry_run"),
+             run.get("publish_status", "none"), run.get("requested_by"),
+             run["created_at"], run["updated_at"]),
+        )
+        return run
+
+    def get_training_run(self, run_id: str) -> dict[str, Any] | None:
+        return _row_to_dict(self._conn.execute(
+            "SELECT * FROM training_run WHERE run_id=?", (run_id,)).fetchone())
+
+    def list_training_runs(self) -> list[dict[str, Any]]:
+        return [dict(r) for r in self._conn.execute(
+            "SELECT * FROM training_run ORDER BY created_at DESC").fetchall()]
+
+    _TRAINING_RUN_FIELDS = (
+        "kind", "status", "publish_status", "approved_by", "requested_by",
+        "publish_requested_by", "publish_approved_by", "plan_json",
+    )
+
+    def update_training_run(self, run_id: str, **fields: Any) -> dict[str, Any]:
+        bad = set(fields) - set(self._TRAINING_RUN_FIELDS)
+        if bad:
+            raise ValueError(f"不允许的字段: {sorted(bad)}")
+        if not fields:
+            raise ValueError("无更新字段")
+        fields["updated_at"] = _utcnow()
+        sets = ", ".join(f"{k}=?" for k in fields)
+        self._conn.execute(
+            f"UPDATE training_run SET {sets} WHERE run_id=?",
+            (*fields.values(), run_id),
+        )
+        got = self.get_training_run(run_id)
+        if got is None:
+            raise KeyError(run_id)
+        return got
+
+    def get_flag(self, flag: str) -> str | None:
+        row = self._conn.execute(
+            "SELECT value FROM platform_flag WHERE flag=?", (flag,)).fetchone()
+        return row["value"] if row else None
+
+    def set_flag(self, flag: str, value: str, actor: str) -> None:
+        self._conn.execute(
+            """INSERT INTO platform_flag (flag, value, updated_at, updated_by)
+               VALUES (?,?,?,?) ON CONFLICT(flag) DO UPDATE SET
+               value=excluded.value, updated_at=excluded.updated_at,
+               updated_by=excluded.updated_by""",
+            (flag, value, _utcnow(), actor),
+        )
 
     # ---------- backup ----------
 

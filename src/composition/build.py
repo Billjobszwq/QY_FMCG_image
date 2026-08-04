@@ -82,6 +82,14 @@ def build_labeling_router(bundle: PlatformBundle):
     )
 
 
+def build_training_router(bundle: PlatformBundle):
+    """M5：组合根唯一允许同时持有 platform 与 training_gov 域的位置。"""
+    from src.modules.training_gov import TrainingGovernanceService
+    from src.platform.api.training import create_training_router
+
+    return create_training_router(TrainingGovernanceService(bundle.store))
+
+
 def build_app_with_bundle(
     bundle: PlatformBundle | None = None,
     *,
@@ -95,4 +103,5 @@ def build_app_with_bundle(
         web_dist=web_dist if web_dist is not None else (REPO_ROOT / "web" / "dist"),
         bundle=bundle,
         labeling_router=build_labeling_router(bundle) if bundle is not None else None,
+        training_router=build_training_router(bundle) if bundle is not None else None,
     )

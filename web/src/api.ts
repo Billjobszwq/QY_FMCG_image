@@ -235,6 +235,64 @@ export async function fetchLabelingInbox(): Promise<{ count: number }> {
   return r.json();
 }
 
+// ---------- training governance (M5) ----------
+
+export interface TrainingGates {
+  training_authorized: boolean;
+  registered_snapshots: number;
+  reasons: string[];
+  can_dry_run: boolean;
+  can_train: boolean;
+}
+
+export interface TrainingRunRow {
+  run_id: string;
+  snapshot_id: string | null;
+  kind: string;
+  status: string;
+  publish_status: string;
+  plan_json: string;
+  command_json: string;
+  budget_json: string;
+  stop_lines_json: string;
+  approved_by: string | null;
+  created_at: string;
+}
+
+export async function fetchTrainingGates(): Promise<TrainingGates> {
+  const r = await fetch("/api/v1/training/gates");
+  if (!r.ok) throw new Error(`gates HTTP ${r.status}`);
+  return r.json();
+}
+
+export async function fetchTrainingRuns(): Promise<{ count: number; runs: TrainingRunRow[] }> {
+  const r = await fetch("/api/v1/training/runs");
+  if (!r.ok) throw new Error(`training runs HTTP ${r.status}`);
+  return r.json();
+}
+
+export async function fetchTrainingSnapshots(): Promise<{
+  count: number;
+  snapshots: Array<Record<string, unknown>>;
+}> {
+  const r = await fetch("/api/v1/training/snapshots");
+  if (!r.ok) throw new Error(`snapshots HTTP ${r.status}`);
+  return r.json();
+}
+
+export async function dryRunTraining(snapshotId: string): Promise<{ run: TrainingRunRow }> {
+  const r = await fetch("/api/v1/training/runs/dry-run", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ snapshot_id: snapshotId }),
+  });
+  if (!r.ok) {
+    const d = await r.json().catch(() => ({}));
+    throw new Error(d.detail ?? `dry-run HTTP ${r.status}`);
+  }
+  return r.json();
+}
+
 export async function recognizeFile(file: File, conf = 0.25): Promise<RecognitionResult> {
   const form = new FormData();
   form.append("file", file);
