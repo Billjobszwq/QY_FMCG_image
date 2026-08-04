@@ -88,6 +88,9 @@ def create_app(
         # UMT-006：本机登录 session/CSRF（身份不再由客户端 header 自证）
         from src.platform.auth import AuthService, create_auth_router
         app.include_router(create_auth_router(AuthService(bundle.store)))
+        # U2-1：统一任务中心（只读聚合，角色首页数据源）
+        from src.platform.api.workitems import create_workitems_router
+        app.include_router(create_workitems_router(bundle.store))
 
     # ---- M4 Label Studio 闭环（组合根注入 router 时启用）----
     if labeling_router is not None:

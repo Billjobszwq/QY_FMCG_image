@@ -157,6 +157,35 @@ export async function approveRun(
   return r.json();
 }
 
+// ---------- workitems (U2-1) ----------
+
+export interface WorkItem {
+  id: string;
+  kind: string;
+  status: string;
+  title: string;
+  owner: string;
+  detail: Record<string, unknown>;
+}
+
+export interface WorkItemsBody {
+  count: number;
+  items: WorkItem[];
+  summary: {
+    pending_review: number;
+    todos: number;
+    active: number;
+    blocked: string[];
+    next_steps: string[];
+  };
+}
+
+export async function fetchWorkItems(): Promise<WorkItemsBody> {
+  const r = await fetch("/api/v1/workitems");
+  if (!r.ok) throw new Error(`workitems HTTP ${r.status}`);
+  return r.json();
+}
+
 // ---------- labeling (M4) ----------
 
 export interface LabelingBatch {
