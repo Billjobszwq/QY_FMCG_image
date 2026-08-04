@@ -1,6 +1,6 @@
-# Platform V2 — PLAN（M0–M7 / W0–W11 可勾选清单）
+# Platform V2 — PLAN（历史 M0–M7 + 当前 U0–U5/T0–T2）
 
-> 来源：`2026-08-04-continuous-usable-framework-execution-manual.md` §6（里程碑）与 §13（工作包）。
+> 当前来源：`2026-08-05-unified-management-all-photo-training-execution-manual.md`。M0–M7 保留历史建设轨迹；2026-08-05 审计重新打开 M5。
 > 勾选规则：只有"真实启动 + 测试通过 + 浏览器/CLI 证据 + EXECUTION-LOG 记录"后才能勾选。
 
 ## 里程碑 M0–M7
@@ -50,11 +50,11 @@
 - [x] 先 10 张 E2E，再 50 张；不直接生成 2300 张
 - [ ] 人工标注/双审/仲裁（需授权，暂停中）
 
-### M5 数据集训练治理（需授权）
-- [x] DatasetSnapshot 契约（split guard + manifest hash + 来源审核）
-- [x] 修 truebox 评估：真实 FP/photo 预算扫描（TopK 不得用于晋级）
-- [x] E0/P0/P1 统一推理导出 + 统一评估
-- [x] dry-run 能力；训练启动需显式人工授权；发布独立审批；禁 auto_switch
+### M5 数据集训练治理（REOPENED / NO-GO）
+- [ ] DatasetSnapshot 真实契约（文件/标签/data.yaml/五键/近重复/冻结协议/审核/质量/builder audit/hash）
+- [ ] 修 truebox 评估：全局阈值真实 FP/photo 扫描 + total FP 守恒；TopK 不得用于晋级
+- [ ] E0/P0/P1 在同一人工 truebox 上统一推理与评估
+- [ ] 合法 dry-run 命令 + 真实 MPS G0 + 可信批准 + 可恢复训练 Job + 独立发布审批
 - [ ] 训练启动（需授权，暂停中；training_started=false）
 
 ### M6 PostgreSQL + 可靠 Worker
@@ -65,6 +65,50 @@
 
 ### M7 后续 Domain Pack
 - [ ] （保留，不在第一阶段）
+
+## 2026-08-05 当前执行清单
+
+### U0 事实恢复
+- [x] 当前分支/HEAD、310+1 测试、服务、开发库、页面和照片池只读复核
+- [x] 新建统一管理与全量照片训练执行手册
+- [x] STATUS/PLAN/ISSUES/ACCEPTANCE/EXECUTION-LOG 审计纠偏
+- [ ] 实施 Agent 建立逐任务 LIST、owner、依赖、证据和 commit
+
+### U1 训练真实性 P0
+- [ ] UMT-001～UMT-008 全部 TDD 修复
+- [ ] 独立参考 evaluator 和对抗样例一致
+- [ ] 演示 Snapshot 不可训练；真实 builder Snapshot 通过
+- [ ] 合法 CLI parse check、真实 MPS G0、可信身份和可恢复 Job 通过
+
+### U2 统一管理 MVP
+- [ ] 角色首页和统一任务中心
+- [ ] 真实数据资产/CAS/lineage/quality 页面
+- [ ] 识别文件/批量/URL/API/Agent 统一任务
+- [ ] 标注审核、训练、Graph+Loop 和系统管理使用统一业务状态
+- [ ] 普通用户浏览器 E2E，无需理解 M 编号/raw JSON
+
+### U3 全照片资产与质量
+- [ ] 全部来源进入 `source_asset_inventory_v1`
+- [ ] SHA 精确去重 + pHash/embedding 近重复组
+- [ ] 每个源照片有用途和冻结角色；数量守恒；原图不动
+- [ ] qpol_v2 + 500～1,000 张人工质量金标准入口与混淆矩阵
+
+### U4 SAM 与人工闭环
+- [ ] 100 张 point→SAM→review→final box E2E
+- [ ] 500→2,000→全 eligible 可恢复扩展与批次质量门
+- [ ] 链接派发、认领、单审、10% 盲抽、异常双审/仲裁
+- [ ] 250 条旧 pending 状态真实接入，不伪造
+
+### U5 Graph+Loop v2
+- [ ] typed edges / router / loop / convergence / per-loop budget
+- [ ] sequential v1 兼容与旧 run 可回放
+- [ ] 全照片准备训练 Loop 真实 E2E
+
+### T0/T1/T2 Apple MPS pilot
+- [ ] T0 真实 MPS G0 + 768/960/1024 batch benchmark
+- [ ] T1 1 epoch smoke（所有前置门通过后授权）
+- [ ] T2 3 epoch P0/P1 pilot（T1 全绿后授权）
+- [ ] T2 后停止；未授权 10ep/发布/生产切换
 
 ## 工作包 W0–W11
 

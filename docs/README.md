@@ -4,7 +4,7 @@
 
 > **平台最终架构入口（2026-08-04）：** 整个产品的唯一总纲是 [`Graph+Loop 智能业务操作系统最终统一架构设计`](./superpowers/specs/2026-08-04-fmcg-vision-saas-platform-design.md)。它定义一套统一底座和可插拔 Domain Pack；位置外勤规格只是从属模块文档，不是第二套系统。
 >
-> **实施 Agent 当前开工入口：** 先读 [`统一框架持续可用执行手册 V2`](./superpowers/plans/2026-08-04-continuous-usable-framework-execution-manual.md)。它以当前可用的 8091 识别和 8092 监控为第一批 Capability，先交付统一 Web 和真实 Graph，再持续补齐 Foundation、Label Studio、训练治理和后续 Domain Pack。旧 [`全项目实施总纲`](./superpowers/plans/2026-08-04-full-project-execution-program.md) 保留 Stage 0–9 完整范围，但其串行门禁不再是当前开工顺序。
+> **实施 Agent 当前唯一开工入口（2026-08-05）：** 先读 [`统一管理与全量照片训练执行手册`](./superpowers/plans/2026-08-05-unified-management-all-photo-training-execution-manual.md)。它基于 `feat/usable-platform-foundation@9db9946` 的实时复核，先纠正训练治理与文档冲突，再完成统一工作台、全照片资产化、SAM 标注、Graph+Loop v2 和 Apple MPS smoke/pilot。旧 [`统一框架持续可用执行手册 V2`](./superpowers/plans/2026-08-04-continuous-usable-framework-execution-manual.md) 与 [`全项目实施总纲`](./superpowers/plans/2026-08-04-full-project-execution-program.md) 保留为历史建设记录，不再作为当前状态判断依据。
 >
 > **现有识别/训练运行入口：** 本页前半部分保留早期系统说明；级联生产架构以 [`handbook.md`](./handbook.md) 为准，最终训练准入、Apple M3 Max/MPS 规范和最新阻断项以 [`2026-08-04-final-training-execution-gate.md`](./superpowers/plans/2026-08-04-final-training-execution-gate.md) 为准。这些文档说明当前系统如何运行，不覆盖最终平台架构。较早严格复核保留在 [`latest-handbook-reverification-2026-08-04.md`](./latest-handbook-reverification-2026-08-04.md) 作为历史证据。
 
@@ -39,7 +39,8 @@ python -m src.recognize.api --port 8091    # 识别接口
 | 文档 | 内容 |
 |---|---|
 | [`superpowers/specs/2026-08-04-fmcg-vision-saas-platform-design.md`](./superpowers/specs/2026-08-04-fmcg-vision-saas-platform-design.md) | **平台唯一架构总纲**：一套底座、Graph+Loop 内核、统一数据系统、Module SDK 和积木式 Domain Pack |
-| [`superpowers/plans/2026-08-04-continuous-usable-framework-execution-manual.md`](./superpowers/plans/2026-08-04-continuous-usable-framework-execution-manual.md) | **当前唯一实施入口**：保留现有可用能力，按 M0–M7 持续交付统一 Web、真实 Graph、标注、训练治理和平台硬化 |
+| [`superpowers/plans/2026-08-05-unified-management-all-photo-training-execution-manual.md`](./superpowers/plans/2026-08-05-unified-management-all-photo-training-execution-manual.md) | **当前唯一实施入口**：训练事实纠偏、统一易用工作台、全照片资产化、SAM 审核、Graph+Loop v2、MPS smoke/pilot 与 Agent 提示词 |
+| [`superpowers/plans/2026-08-04-continuous-usable-framework-execution-manual.md`](./superpowers/plans/2026-08-04-continuous-usable-framework-execution-manual.md) | **历史建设手册**：记录 M0–M6 的持续可用交付顺序；其 M5 勾选已被 2026-08-05 审计重新打开 |
 | [`superpowers/plans/2026-08-04-full-project-execution-program.md`](./superpowers/plans/2026-08-04-full-project-execution-program.md) | **全项目开工总纲**：Stage 0–9 依赖、交付物、门禁、需求映射、Agent 启动提示词和审查清单 |
 | [`superpowers/plans/2026-08-04-stage0-1-graph-loop-kernel.md`](./superpowers/plans/2026-08-04-stage0-1-graph-loop-kernel.md) | **详细设计参考**：26 个 TDD 任务中的 Graph、Capability、IAM、CAS、Job、Billing 设计供新纵向计划按需复用，不再机械串行执行 |
 | [`CODEX-PROJECT-HANDBOOK.md`](./CODEX-PROJECT-HANDBOOK.md) | **Codex 内部接续手册**：当前进度、上下文恢复、Bug/训练切换点和可复用方法论；只作索引，不覆盖 L0/L1 权威文件 |
@@ -91,18 +92,16 @@ python -m src.recognize.api --port 8091    # 识别接口
 python -m pytest tests/unit tests/contract -q     # 不变性/对齐/命名/别名 契约
 ```
 
-## 当前状态（2026-08-04 最终训练复核快照）
+## 当前状态（2026-08-05 独立审计快照）
 
-- ✅ recognize 当前能从 `prod_20260804_v4_r2` 加载 detector/classifier，bundle 的 16 个文件通过校验；8091 health 返回 200。
-- ✅ monitor 新进程内存约 248 MiB，仍需 2 小时长稳验证。
-- ✅ 本机为 Apple M3 Max / arm64 / 128 GB；真实终端中的 MPS 张量与当前级联 MPS 推理均已通过，硬件路线 GO。
-- ⏹️ 当前训练已停止；生产 classifier 为 208 类 ResNet18，记录 val_acc 83.67%，不含 `__unknown__`。
-- ⚠️ 复核时实际监听 8091/8092；8300 Label Studio、8301 ML backend、8304 orchestrator 均未运行。
-- ✅ Git 已初始化；2026-08-04 统一架构交付前只读 fresh 测试为 74 passed。
-- 🟥 新协议集虽已冻结，但 dev_v1 有 2 个规范化门店别名与 batch2 重叠，旧 v6 与四协议集也有大量门店重叠；不得续跑 v6 checkpoint。
-- 🟥 `.datasets/sku_v6` 和两个 crop 数据仍是旧制品；默认 builder 会命中冻结集并失败，且门店/session 隔离未进入 fail-closed。
-- 🟥 E0 的 89.0% 是 matched-conditional precision；纳入 accepted FP 后业务 precision 为 60.45%，且当前仍是 point-in-box 而非严格 IoU。
-- ⏳ 下一步先关闭最终手册 G1～G6，再运行 MPS 小规模 detector pilot；不要立即执行正式全量训练。
+- ✅ 当前分支 `feat/usable-platform-foundation@9db9946`；主机全量测试为 **310 passed, 1 skipped**。
+- ✅ 8400 统一入口可运行；8091、8092、8300、8455 healthy，8301 unavailable，因此平台如实为 degraded。
+- ✅ 本机 Apple M3 Max / arm64 / 128 GB 的 MPS 路线已通过主机测试；生产 bundle `prod_20260804_v4_r2` 未改动。
+- ⚠️ 统一 Web 目前是开发者原型：缺统一待办、真实资产中心和可执行训练 Job；页面术语与下一步让业务用户迷惑。
+- 🟥 M5 已重新打开：truebox 的所谓 FP 预算仍是逐图 TopK；dry-run 命令含真实 CLI 不支持的参数；唯一 Snapshot 是 2+1 演示数据。
+- 🟥 250 条 diagnostic 审核全部 pending；qa_v3 只覆盖 120 张且没有人工质量金标准，不能宣称全量数据训练就绪。
+- ⏹️ 当前 `training_authorized=false`，训练 NO-GO。按当前新手册修复全部 P0 后，才可执行 1ep smoke 和 3ep pilot；10ep、classifier 和发布需新授权。
+- 📘 下一步只读入口与 Agent 提示词见 [`2026-08-05-unified-management-all-photo-training-execution-manual.md`](./superpowers/plans/2026-08-05-unified-management-all-photo-training-execution-manual.md)。
 
 ## 维护约定
 

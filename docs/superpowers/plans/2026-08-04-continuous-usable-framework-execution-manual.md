@@ -1,5 +1,9 @@
 # LLM-Image 统一框架持续可用执行手册 V2
 
+> **状态变更（2026-08-05）：本文件转为历史建设记录。当前唯一实施入口已切换为**
+> `docs/superpowers/plans/2026-08-05-unified-management-all-photo-training-execution-manual.md`。
+> 新手册基于 `feat/usable-platform-foundation@9db9946` 的代码、数据库和真实浏览器复核，重新打开了 M5，并统一编排易用工作台、全照片资产化、SAM 标注、Graph+Loop v2 和 Apple MPS pilot。本文的旧勾选状态不得覆盖新审计结论。
+
 > 文档日期：2026-08-04  
 > 当前代码基线：`feat/sam-reannotation@c9998af`  
 > 文档性质：当前唯一实施编排入口，替代旧“全部 Foundation 门禁完成后再接业务”的执行顺序  
@@ -618,4 +622,3 @@ LABEL_STUDIO: DOWN
 TRAINING: STOPPED_AND_NOT_AUTHORIZED
 PRODUCTION_BUNDLE: VERIFIED_AND_UNCHANGED
 ```
-

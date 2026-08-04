@@ -146,3 +146,46 @@
 
 - PG 演练（已授权）：brew postgresql@16 本机演练集群；单次迁移 16/16 表计数+哈希一致；演练库 platform_drill；生产切换（DATABASE_URL 指向生产 + 服务重启）仍为独立授权点，未执行。
 - 8091/8092 未触碰；生产 bundle 未触碰；三冻结值不变。
+
+## 2026-08-05 独立审计纠偏（只读审查 + 文档更新）
+
+> 本节不改写 M5 历史执行记录。它记录随后发现的验收口径错误；以当前代码与实时数据证据为准。
+
+| # | 核验 | 结果摘要 |
+|---|---|---|
+| 1 | `git status --short --branch` / `git log` | `feat/usable-platform-foundation@9db9946`；未跟踪 `.quality/ .sam_checkpoints/ .sam_runs/ .superpowers/` 保留、不处理 |
+| 2 | 主机全量测试 | **310 passed, 1 skipped**；沙箱的 MPS 不可见不代表 Mac 主机回归 |
+| 3 | 主机 `GET 8400/api/v1/health` | degraded；8091/8092/8300/8455 healthy；8301 unavailable |
+| 4 | 真实浏览器逐页审查 | 7 页均可打开且无明显控制台错误；缺统一待办/业务主线；Assets 错报 CAS 未启用；Training 显示演示快照、无效命令与旧 phase |
+| 5 | truebox 代码/测试审查 | `recall_at_fp` 为逐图 top-K proposal；测试锁定 TopK；不是全局阈值真实 FP/photo；M5 REOPENED |
+| 6 | 训练命令对照 | dry-run 生成 `--dataset`、`--budget-minutes`；`train_v1.py` argparse 不支持，命令不可执行 |
+| 7 | 平台开发库只读查询 | 唯一 Snapshot 是 2 train + 1 val 演示 manifest；4 个重复 dry-run；`training_authorized=false` |
+| 8 | Graph Kernel 审查 | GraphDefinition 仅 nodes tuple，Engine 固定 for-loop；max_loops 是 attempt 上限，不是真实 feedback loop |
+| 9 | 人工/质量现状 | review queue 250/250 pending、final_box 0；qa_v3 120 张为 accept 92/manual 28/reject 0，无人工金标准混淆矩阵 |
+| 10 | 数据池清点 | batch1 2,947；batch2 6,510/174,249 点；batch3 22,664（旧 clean 22,659/bad 5）；本地 213+489+341 货架样板、240 标准图、9 field；存在已知重叠，唯一总量待 SHA+pHash 台账 |
+| 11 | E2 audit | train 2,000/50,018 框；val 300/7,975 框；manifest `35f70f0a0cfd53b8`；当前为点锚合成框，非人工 truebox |
+| 12 | 文档交付 | 新建 `2026-08-05-unified-management-all-photo-training-execution-manual.md`；更新 README/STATUS/PLAN/ISSUES/ACCEPTANCE；未改业务代码、未启动训练、未切模型、未删除文件 |
+
+### 审计结论
+
+- 平台原型可运行，不能宣布统一管理完成。
+- M5 由 DONE 改为 REOPENED；当前训练为 NO-GO。
+- 新手册授权范围：所有 P0 与数据/MPS 门通过后可执行 1ep smoke 和 3ep pilot；T2 后必须停止，10ep/发布/生产切换需新授权。
+
+## U0 事实恢复与工作台账（2026-08-05 续，分支 feat/unified-workbench-training-readiness）
+
+| # | 命令/动作 | 退出码 | 结果摘要 |
+|---|---|---|---|
+| 1 | §1 权威文件全量通读（非摘要） | — | 新手册 451 行；L0 架构 1759 行；CODEX-PROJECT-HANDBOOK 559 行；training-history-and-decisions 148 行；final-training-execution-gate 413 行；SAM 重标注计划 413 行；platform-v2 六治理文档（ISSUES PV2-001～024 已被审计更新） |
+| 2 | `git status` / `git rev-parse HEAD` / `git log` | 0 | 基点 `feat/usable-platform-foundation@9db9946`；工作树：9 个审计文档 M + 未跟踪制品 `.quality/ .sam_checkpoints/ .sam_runs/ .superpowers/`（保留不动） |
+| 3 | 服务探测（正确端点） | 0 | 8091 `/v2/health` ok=true（prod_20260804_v4_r2）；8092 `/api/live` UP；8300 `/health` UP；8455 进程在；8301 DOWN；8400 degraded（ml_backend 非关键） |
+| 4 | 平台开发库只读查询 | 0 | snapshot 唯一=072aeebebdb9（2 train+1 val 演示 manifest）；`training_authorized=false`；training_run 4 条（重复 dry-run）；audit_event 7；`.review_queue` 250 条 pending |
+| 5 | 照片池只读清点 | 0 | 照片1106=213、照片1107=489、百事&可口=341、搭建初期P1≈240 标准图、.field=9；协议文件 6 个；.datasets 4 目录；唯一总量待 U3 SHA 台账 |
+| 6 | `pytest -p no:cacheprovider -q` 全量基线 | 0 | **310 passed，1 skipped**（4.52s） |
+| 7 | `git checkout -b feat/unified-workbench-training-readiness` | 0 | 基于 9db9946；审计文档改动随分支保留 |
+| 8 | Bug 代码定位确认 | — | `src/eval/truebox_eval.py` `recall_at_fp` 逐图 `preds[:K]` TopK；`src/modules/training_gov/service.py` dry-run 生成 `--dataset`/`--budget-minutes` 且 `mps_g0=sys.platform=="darwin"`；`train_v1.py` argparse 支持 --data-yaml/--run-name 等，不支持 --dataset/--budget-minutes |
+| 9 | 治理文档交付 | — | 新建 `IMPLEMENTATION-LIST.md`（U0–U5/T0–T2 全任务）；DECISIONS 追加 PV2-D-009～017；STATUS 切新分支；本节日志追加 |
+
+### U0 提交（文档小 commit，不含业务代码）
+
+- 暂存范围：9 个审计文档 M + IMPLEMENTATION-LIST 新增；`git diff --cached --name-only` 核对后再提交；不 `git add .`。

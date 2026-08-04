@@ -66,15 +66,17 @@
 
 ## M5 验收矩阵
 
+> **2026-08-05 审计纠偏：M5 已重新打开。** 下列结果按当前代码、开发库和真实 CLI 重新核验；原 2026-08-04 的实现记录保留在 EXECUTION-LOG，不再作为通过证明。
+
 | 项 | 验收标准 | 结果 |
 |---|---|---|
-| DatasetSnapshot 契约 | split guard（train/val sha256/store/session 零交集）+ manifest hash + 人工审核来源字段 | ✅（泄漏 manifest 拒注册；hash 确定性；TDD 3+2 测试） |
-| truebox 评估修正 | 真实 FP/photo 预算扫描 + 互斥错误账本；TopK 不得用于晋级 | ✅（promotion_gate：recall@FP1/FP3 IoU0.5 + FP/photo；TDD pass/fail） |
-| 统一推理导出/评估 | E0/P0/P1 同一 GT 统一评估；导出 manifest 缺文件 fail-closed | ✅（unified_eval + export_inference_manifest TDD） |
-| dry-run | 只产计划不执行；展示命令/MPS G0/算力预算/停止线 | ✅（dry-run 3d3560b5 命令回显；授权状态不变） |
-| 训练启动授权门 | flag training_authorized + IAM admin 双校验 | ✅（无授权 start 403；operator 授权 403；admin 授权 200） |
-| 发布分离 | 训练完成仅 candidate；发布独立 admin 审批；禁 auto_switch | ✅（非 candidate 拒批；operator 拒批；TDD 全链路） |
-| 用户可见 | 训练页显示"为什么不能训练、还差什么、批准后将运行什么命令" | ✅（gates banner + reasons + command_json + stop_lines；截图 /tmp/m5_training.png） |
+| DatasetSnapshot 契约 | 真实文件/标签/数据 YAML + 五键/近重复/冻结协议零泄漏 + builder audit + manifest hash + 人工审核事实 | ❌（当前只查 sha/store/session；唯一快照为 d1,d2/e1 的 2+1 演示数据；自由文本可自证审核） |
+| truebox 评估修正 | 全局统一置信度阈值下的真实 FP/photo 扫描 + 互斥错误账本；TopK 不得用于晋级 | ❌（当前 `preds[:budget]` 是 TopK；promotion gate 只计 background FP） |
+| 统一推理导出/评估 | E0/P0/P1 同一人工 truebox GT 统一评估；导出 manifest 缺文件 fail-closed | ⏳（接口骨架和文件导出存在，但底层 evaluator 错误，250 条人工 truebox 全 pending，尚无有效统一结果） |
+| dry-run | 只产计划不执行；展示可解析命令、真实 MPS G0、算力预算、停止线 | ❌（生成真实 CLI 不支持的 `--dataset`/`--budget-minutes`；MPS 仅检查 darwin） |
+| 训练启动授权门 | 可信身份 + 独立批准 + 可恢复 Worker Job | ❌（客户端可自带 X-Role；start 仅改 authorized 状态，不启动 Job） |
+| 发布分离 | 训练完成仅 candidate；发布独立可信审批；禁 auto_switch | ⏳（状态机逻辑存在，但真实身份与真实训练 Job 尚未闭环） |
+| 用户可见 | 普通用户看到真实数据就绪度、活动 Job、历史实验、生产模型、阻断与下一步 | ❌（当前演示快照、无效命令和旧 monitor phase 同屏，容易误导） |
 | 红线 | 不启动训练（training_started=false） | ✅（平台只标记 authorized，不执行；冻结值不变） |
 
 ## M6 验收矩阵

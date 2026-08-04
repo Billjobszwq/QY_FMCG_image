@@ -1,20 +1,21 @@
-# Platform V2 — 统一框架持续可用建设 · STATUS
+# Platform V2 — 统一管理与训练准备 · STATUS
 
-> 手册：`docs/superpowers/plans/2026-08-04-continuous-usable-framework-execution-manual.md`（唯一实施编排入口）
+> 手册：`docs/superpowers/plans/2026-08-05-unified-management-all-photo-training-execution-manual.md`（当前唯一实施入口）
 > 架构：`docs/superpowers/specs/2026-08-04-fmcg-vision-saas-platform-design.md`（L0，不变）
+> 审计纠偏：2026-08-05 复核发现 M5 的 true FP/photo、训练命令和 DatasetSnapshot 均未达到验收口径，因此 M5 由 DONE 改为 **REOPENED**；历史 EXECUTION-LOG 保留原记录并追加纠偏。
 
 | 项 | 值 |
 |---|---|
-| 当前状态 | M6 完成：可恢复 Worker/CAS 加固/安全加固/PG 演练迁移（brew PG 16.14，16/16 表计数+哈希一致）；生产切换/人工标注/训练待授权 |
-| 当前 HEAD | 49172d5（M6，feat/usable-platform-foundation） |
-| 分支 | `feat/usable-platform-foundation` |
-| 基线 commit | `c9998af`（feat/sam-reannotation） |
-| 基线测试 | 170 passed；M6 后全量 **310 passed，1 skipped**（PG 门控，4.12s） |
+| 当前状态 | 平台原型可运行但尚非统一管理产品；M5 REOPENED，训练 NO-GO；U0 治理文档已建立，当前实施 U1（UMT-001～008 TDD） |
+| 当前 HEAD | 分支基点 `9db9946`；实时值以 `git rev-parse HEAD` 为准 |
+| 分支 | `feat/unified-workbench-training-readiness`（基于 `9db9946`，审计文档改动随本分支提交） |
+| 任务清单 | `docs/implementation/platform-v2/IMPLEMENTATION-LIST.md`（U0–U5/T0–T2 逐项：ID/依赖/Owner/状态/测试/证据/Commit） |
+| 基线测试 | **310 passed，1 skipped**（4.52s，主机 miniconda python3，2026-08-05 复核） |
 | 生产 bundle | `prod_20260804_v4_r2`（16 文件校验通过，不修改） |
 | production_switch | **false**（冻结） |
 | training_started | **false**（冻结） |
 | deleted_files | **false**（冻结） |
-| 统一入口目标 | http://127.0.0.1:8400（✅ 运行中，degraded） |
+| 统一入口 | http://127.0.0.1:8400（✅ 运行中，degraded；当前为开发者原型，易用性和状态真实性待整改） |
 
 ## 服务实时快照（基线时刻）
 
@@ -37,18 +38,32 @@
 | M1 统一 Web Shell | DONE（97020d6 → 54cac63 → 2d9a4ef，198 passed） |
 | M2 最小可信 Foundation | DONE（46d2f25 → 1dc4cc8，243 passed） |
 | M3 第一条真实 Graph | DONE（fb55084 → 7afa0bf → 7450d23 → b7513dc，265 passed） |
-| M4 Label Studio 闭环 | DONE（机械闭环 f42f882；人工标注待授权） |
-| M5 数据集训练治理 | DONE（cef025a，288 passed；训练启动待授权） |
+| M4 Label Studio 闭环 | PARTIAL（机械对账 f42f882；人工标注/双审/仲裁/final box 未完成） |
+| M5 数据集训练治理 | **REOPENED / NO-GO**（真实 FP/photo 仍为 TopK；命令无效；唯一 Snapshot 为演示数据） |
 | M6 PostgreSQL + 可靠 Worker | DONE（49172d5 + PG 演练；生产切换待独立授权） |
-| M7 后续 Domain Pack | PENDING |
+| U2 统一管理 MVP | PENDING（当前只有 7 页开发者 Shell，无统一待办/资产/真实训练作业） |
+| U3/U4 全照片与 SAM 审核 | PENDING（250 审核项全部 pending；qa_v3 仅 120 张） |
+| U5 Graph+Loop v2 | PENDING（当前 Kernel 是 fixed sequential for-loop） |
+| T0/T1/T2 训练 | BLOCKED（P0 修复后仅授权 1ep smoke + 3ep pilot） |
 
 ## 红线（任何阶段不得越过）
 
 - 不删除/移动/覆盖原图、数据库、模型、数据集、审核、SAM、quality、eval、日志、备份、失败制品
 - 不 `git add .` / `git add -A`；不自动 merge/push/deploy/force-push
-- 不启动任何训练（3ep/10ep/classifier）；训练与发布是两个独立审批动作
+- 在 UMT-001～008、真实 Snapshot、人工 truebox 与 MPS 门禁通过前不启动任何训练；通过后仅按新手册授权 1ep smoke + 3ep pilot，10ep/classifier/发布仍需新授权
 - 不恢复 v6；不修改/发布 production bundle；旧 /retrain 的 auto_switch=true 不进新平台
 - 8091/8092 保留，第一阶段不重写不切换生产入口
 - 平台不依赖具体 Domain Pack（Manifest + Capability 注册）
 - 不允许任意 SQL、shell、文件系统、Python import 能力
 - 未跟踪制品 `.quality/ .sam_checkpoints/ .sam_runs/ .superpowers/` 不暂存、不清理
+
+## 2026-08-05 训练阻断摘要
+
+- `src/eval/truebox_eval.py` 仍按每图 top-K proposal 计算所谓 FP 预算，不是真实固定 FP/photo。
+- 训练治理生成真实 CLI 不支持的 `--dataset`、`--budget-minutes`。
+- 平台唯一 Snapshot 只有 2 train + 1 val 演示条目，不能代表 E2 或任何真实训练集。
+- MPS dry-run 只检查 `sys.platform == darwin`，未做 torch MPS/矩阵/模型前向门禁。
+- `start_training` 只标记 authorized，不会提交训练 Job；页面术语与真实动作不一致。
+- 现有 250 条人工 truebox 审核全部 pending，不能伪造完成。
+
+上述问题关闭并有机器证据前，`training_authorized` 必须保持 false。
