@@ -12,7 +12,7 @@ from __future__ import annotations
 from .contracts import Finding, QualityVerdict, VERDICTS
 
 POLICY_VERSION = "qpol_v1"
-ANALYZER_VERSION = "qa_v1"
+ANALYZER_VERSION = "qa_v3"  # qa_v3: 无ROI blur 改 edge_sharp_p99<8（calibration_v1+合成模糊校准）
 
 
 def decide(findings: list, metrics: dict, image_sha256: str,

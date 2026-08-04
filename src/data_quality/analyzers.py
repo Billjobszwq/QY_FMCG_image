@@ -44,10 +44,13 @@ def analyze_blur(img: np.ndarray, roi=None):
     有 ROI 时以 ROI 清晰度为准：
     - ROI 糊 → 商品主体不可读 → product_blur（strong，不可恢复）
     - ROI 清晰但全图糊 → 背景虚化（景深）→ background_blur（weak，保留）
-    - 无 ROI 且全图糊 → blur（weak，交人工判断，不自动 reject）"""
+    - 无 ROI 时以边缘锐度 edge_sharp_p99 判定（校准：好图 p1=52，
+      sigma=8 合成模糊≈3，阈值 8；平滑近拍纹理低但边缘锐利不误报）"""
     g = _gray(img)
     whole = _lap_var(g)
-    metrics = {"laplacian_whole": round(whole, 3)}
+    sharp = float(np.percentile(np.abs(cv2.Laplacian(g, cv2.CV_64F)), 99))
+    metrics = {"laplacian_whole": round(whole, 3),
+               "edge_sharp_p99": round(sharp, 2)}
     findings: list = []
 
     if roi is not None:
@@ -61,9 +64,9 @@ def analyze_blur(img: np.ndarray, roi=None):
             findings.append(Finding("background_blur", "weak", recoverable=True,
                                     detail=f"roi={roi_v:.1f} whole={whole:.1f}"))
     else:
-        if whole < 30.0:
+        if sharp < 8.0:
             findings.append(Finding("blur", "weak", recoverable=None,
-                                    detail=f"whole={whole:.1f}"))
+                                    detail=f"edge_sharp={sharp:.1f}"))
     return findings, metrics
 
 
@@ -131,21 +134,24 @@ def analyze_readability(img: np.ndarray):
 
 
 def analyze_moire(img: np.ndarray):
-    """手册§八.4：翻拍屏幕的摩尔纹（中频周期性能量异常）。
-    启发式初值，误报走 manual_review（recoverable=None）。"""
+    """手册§八.4：翻拍屏幕的摩尔纹。
+
+    校准（calibration_v1 独立校准集 60 张好图）：旧均值比指标对好图
+    中位数≈2.0、无区分力；峰值比 p99.9/median 好图 p100≈23。
+    货架场景全局 FFT 本质上难分离摩尔纹，未校准前仅以极端阈值给
+    weak 信号（→warn/hard_valid，绝不 reject），指标照常留痕。"""
     g = cv2.resize(_gray(img), (512, 512))
     f = np.fft.fftshift(np.fft.fft2(g.astype(np.float32)))
     mag = np.abs(f)
     H, W = mag.shape
     yy, xx = np.mgrid[0:H, 0:W]
     r = np.hypot(yy - H / 2, xx - W / 2) / (H / 2)
-    mid = float(mag[(r > 0.12) & (r < 0.55)].mean())
-    base = float(mag[r > 0.12].mean() + 1e-6)
-    ratio = mid / base
-    metrics = {"moire_midband_ratio": round(ratio, 4)}
-    if ratio > 1.35:
-        return ([Finding("moire", "strong", recoverable=None,
-                         detail=f"ratio={ratio:.2f}")], metrics)
+    mid = mag[(r > 0.12) & (r < 0.55)]
+    ratio = float(np.percentile(mid, 99.9) / max(1e-6, np.median(mid)))
+    metrics = {"moire_peak_ratio": round(ratio, 3)}
+    if ratio > 36.0:  # 校准好图 p100(23.1)×1.5，仅极端值报警
+        return ([Finding("moire", "weak", recoverable=None,
+                         detail=f"ratio={ratio:.1f}")], metrics)
     return [], metrics
 
 
