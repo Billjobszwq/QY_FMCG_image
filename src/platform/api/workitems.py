@@ -19,6 +19,8 @@ from typing import Any
 
 from fastapi import APIRouter
 
+from src.platform.vocabulary import status_stage, status_text
+
 REPO_ROOT = Path(__file__).resolve().parents[3]
 
 _TRAIN_STATUS_CN = {
@@ -59,6 +61,9 @@ def collect_workitems(store: Any) -> dict[str, Any]:
             "id": f"review:{it.get('photo_id', '?')}",
             "kind": "human_review",
             "status": "pending",
+            "status_text": status_text("human_review", "pending"),
+            "stage": status_stage(
+                status_text("human_review", "pending")),
             "title": f"人工审核：{it.get('photo_id', '?')}",
             "owner": "标注审核员",
             "detail": {
@@ -83,6 +88,8 @@ def collect_workitems(store: Any) -> dict[str, Any]:
             "id": f"training:{r['run_id']}",
             "kind": "training",
             "status": status,
+            "status_text": status_text("training", status),
+            "stage": status_stage(status_text("training", status)),
             "title": f"训练任务：{title}",
             "owner": "admin" if status in ("approved", "queued", "running")
                      else "训练负责人",
@@ -112,7 +119,9 @@ def collect_workitems(store: Any) -> dict[str, Any]:
             "id": f"job:{j.get('job_id')}",
             "kind": "job",
             "status": st,
-            "title": f"后台任务：{j.get('kind')}（{st}）",
+            "status_text": status_text("job", st),
+            "stage": status_stage(status_text("job", st)),
+            "title": f"后台任务：{j.get('kind')}（{status_text('job', st)}）",
             "owner": "系统",
             "detail": {"job_id": j.get("job_id"), "attempt_no": j.get("attempt_no")},
         })
@@ -123,7 +132,11 @@ def collect_workitems(store: Any) -> dict[str, Any]:
             "id": f"labeling:{b.get('batch_id')}",
             "kind": "labeling",
             "status": b.get("status"),
-            "title": f"标注批次：{b.get('name')}（{b.get('status')}）",
+            "status_text": status_text("labeling", b.get("status")),
+            "stage": status_stage(
+                status_text("labeling", b.get("status"))),
+            "title": (f"标注批次：{b.get('name')}"
+                      f"（{status_text('labeling', b.get('status'))}）"),
             "owner": "标注审核员",
             "detail": {"batch_id": b.get("batch_id"),
                        "task_count": b.get("task_count")},

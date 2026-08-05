@@ -163,6 +163,8 @@ export interface WorkItem {
   id: string;
   kind: string;
   status: string;
+  status_text: string;
+  stage: string;
   title: string;
   owner: string;
   detail: Record<string, unknown>;

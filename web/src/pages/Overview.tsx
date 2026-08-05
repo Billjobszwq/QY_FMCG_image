@@ -9,6 +9,14 @@ const KIND_CN: Record<string, string> = {
   recognition: "识别",
 };
 
+// U2-4：阶段→配色（业务语言默认，技术状态进高级详情）
+const STAGE_PILL: Record<string, string> = {
+  todo: "degraded",
+  active: "healthy",
+  done: "unavailable",
+  blocked: "degraded",
+};
+
 export default function Overview({ health }: { health: HealthBody | null }) {
   const [wi, setWi] = useState<WorkItemsBody | null>(null);
   const [wiError, setWiError] = useState<string | null>(null);
@@ -74,7 +82,7 @@ export default function Overview({ health }: { health: HealthBody | null }) {
             ))}
           </ul>
 
-          <h3>任务列表（真实来源聚合）</h3>
+          <h3>任务列表（真实来源聚合，业务语言）</h3>
           {wi && wi.items.length > 0 ? (
             <table>
               <thead>
@@ -88,19 +96,22 @@ export default function Overview({ health }: { health: HealthBody | null }) {
               <tbody>
                 {wi.items.slice(0, 50).map((w) => (
                   <tr key={w.id}>
-                    <td>{w.title}</td>
+                    <td>
+                      {w.title}
+                      <details className="muted">
+                        <summary>高级详情</summary>
+                        <pre style={{ fontSize: 11 }}>
+                          {JSON.stringify({ raw_status: w.status, ...w.detail }, null, 2)}
+                        </pre>
+                      </details>
+                    </td>
                     <td>{KIND_CN[w.kind] ?? w.kind}</td>
                     <td>
                       <span
-                        className={`pill pill-${
-                          ["pending", "dry_run", "approved", "failed"].includes(w.status)
-                            ? "degraded"
-                            : ["queued", "running"].includes(w.status)
-                              ? "healthy"
-                              : "unavailable"
-                        }`}
+                        className={`pill pill-${STAGE_PILL[w.stage] ?? "unavailable"}`}
+                        title={w.status}
                       >
-                        {w.status}
+                        {w.status_text || w.status}
                       </span>
                     </td>
                     <td>{w.owner}</td>

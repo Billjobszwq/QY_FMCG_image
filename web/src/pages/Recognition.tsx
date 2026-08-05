@@ -16,6 +16,12 @@ const ENTRY_CN: Record<string, string> = {
   api: "API",
 };
 
+// U2-4：状态统一业务语言
+const STATUS_CN: Record<string, string> = {
+  completed: "已完成",
+  failed: "失败",
+};
+
 export default function Recognition() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -219,8 +225,8 @@ export default function Recognition() {
           }}
         >
           <option value="">全部状态</option>
-          <option value="completed">completed</option>
-          <option value="failed">failed</option>
+          <option value="completed">已完成</option>
+          <option value="failed">失败</option>
         </select>
         <button disabled={page === 0} onClick={() => setPage(page - 1)}>上一页</button>
         <span className="muted">
@@ -253,7 +259,7 @@ export default function Recognition() {
                 <td>{ENTRY_CN[t.entry] ?? t.entry}</td>
                 <td>
                   <span className={`pill pill-${t.status === "completed" ? "healthy" : "unavailable"}`}>
-                    {t.status}
+                    {STATUS_CN[t.status] ?? t.status}
                   </span>
                 </td>
                 <td>{t.file_count}</td>

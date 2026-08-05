@@ -16,6 +16,24 @@ import {
 type Snap = Record<string, unknown>;
 type Job = Record<string, unknown>;
 
+// U2-4：训练/Job 状态统一业务语言
+const TRAIN_STATUS_CN: Record<string, string> = {
+  dry_run: "待批准",
+  approved: "已批准",
+  queued: "等待执行",
+  running: "执行中",
+  completed: "已完成",
+  failed: "失败",
+  cancelled: "已取消",
+};
+const JOB_STATUS_CN: Record<string, string> = {
+  queued: "等待执行",
+  running: "执行中",
+  succeeded: "已完成",
+  failed: "失败",
+  cancelled: "已取消",
+};
+
 function cmdOf(r: TrainingRunRow): string {
   try {
     return JSON.stringify(JSON.parse(r.command_json), null, 1);
@@ -163,7 +181,7 @@ export default function Training() {
       <p>
         <span className="muted">{r.run_id.slice(0, 8)}…</span>{" "}
         <span className={`pill pill-${r.status === "approved" ? "healthy" : "degraded"}`}>
-          {r.kind} / {r.status}
+          {TRAIN_STATUS_CN[r.status] ?? `${r.kind} / ${r.status}`}
         </span>{" "}
         <span className="pill pill-degraded">publish: {r.publish_status}</span>{" "}
         {r.approved_by && <span className="muted">批准人：{r.approved_by}</span>}
@@ -254,14 +272,14 @@ export default function Training() {
           {activeRuns.map((r) => (
             <p key={r.run_id}>
               <span className="muted">{r.run_id.slice(0, 8)}…</span>{" "}
-              <span className="pill pill-healthy">{r.status}</span>{" "}
+              <span className="pill pill-healthy">{TRAIN_STATUS_CN[r.status] ?? r.status}</span>{" "}
               {r.job_id && <span className="muted">job: {r.job_id.slice(0, 8)}…</span>}
             </p>
           ))}
           {activeJobs.map((j) => (
             <p key={String(j.job_id)}>
               <span className="muted">job {String(j.job_id).slice(0, 8)}…</span>{" "}
-              <span className="pill pill-healthy">{String(j.status)}</span>{" "}
+              <span className="pill pill-healthy">{JOB_STATUS_CN[String(j.status)] ?? String(j.status)}</span>{" "}
               <span className="muted">attempt {String(j.attempt_no ?? "?")}</span>
             </p>
           ))}
