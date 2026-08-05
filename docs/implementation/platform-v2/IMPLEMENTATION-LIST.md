@@ -53,7 +53,7 @@
 
 | ID | 目标 | 依赖 | Owner | 状态 | 测试 | 证据 | Commit | 剩余风险 |
 |---|---|---|---|---|---|---|---|---|
-| U4-1 | 点→SAM2.1 Hiera Small→候选→tight box，完整 lineage；疑难升级 Base+ | U3 | agent | TODO | SAM 契约测试 | 100 张 E2E | — | SAM 许可证/依赖隔离 |
+| U4-1 | 点→SAM2.1 Hiera Small→候选→tight box，完整 lineage；疑难升级 Base+ | U3 | agent | DONE | `tests/platform/test_u4_sam_lineage.py`（4 项：全链路字段/无疑难不调 Base+/manual_required 无假框/不可变） | migration 013 sam_lineage_v1（point→prompt→mask→box 全字段，触发器不可变）；`src/platform/annotate/sam_pipeline.py` 复用 sam_assist（prompts/硬约束筛选/rules_v1），隔离 .venv_sam worker；真实 MPS 冒烟 2 照 8 点：2 accepted（Small 直出 tight box）/6 manual_required（升级 Base+ 仍无合格候选，拒绝原因 multi_component×8 等，无假框） | `.eval/u4/smoke_report_20260805_130608.json`（gitignore 本地） | 7cffebf | 真实照片疑难率高（货架拥挤），人工闭环（U4-2）承接 |
 | U4-2 | 链接派发/认领/单审/10% 盲抽/异常双审/仲裁/final box/不可变导出 | U4-1 | agent | TODO | 流程测试 | 状态机证据 | — | — |
 | U4-3 | 250 条旧 diagnostic pending 真实接入（不伪造） | U4-2 | agent | TODO | 计数一致 | review_queue 250 → UI | — | — |
 | U4-4 | 批次扩展 100→500→2,000→全 eligible，质量门不达标即停 | U4-3 | agent+人 | TODO | — | 每批质量报告 | — | 需真实人工 |
