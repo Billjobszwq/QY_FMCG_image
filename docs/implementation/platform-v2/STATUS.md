@@ -6,11 +6,11 @@
 
 | 项 | 值 |
 |---|---|
-| 当前状态 | U0+U1+U2 全部完成（U2-2 e2c32b2）；U3-1～U3-4 DONE（4384b71/8899d25/e44c9e1/8f40ea5）——台账 38284 守恒、SHA 唯一 30459、分流 0 泄漏；下一步 U3-5 qpol_v2 策略（U4 阶段）；训练仍 NO-GO |
+| 当前状态 | U0+U1+U2 全部完成；U3-1～U3-5 DONE（含 qpol_v2 bc97de6）；下一步 U3-6 人工质量金标准入口（需真实人工）与 U4 SAM 闭环；训练仍 NO-GO |
 | 当前 HEAD | 分支基点 `9db9946`；实时值以 `git rev-parse HEAD` 为准 |
 | 分支 | `feat/unified-workbench-training-readiness`（基于 `9db9946`，审计文档改动随本分支提交） |
 | 任务清单 | `docs/implementation/platform-v2/IMPLEMENTATION-LIST.md`（U0–U5/T0–T2 逐项：ID/依赖/Owner/状态/测试/证据/Commit） |
-| 基线测试 | **400 passed，1 skipped**（主机 miniconda python3，U2-2 后全量回归） |
+| 基线测试 | **407 passed，1 skipped**（主机 miniconda python3，U3-5 后全量回归） |
 | 生产 bundle | `prod_20260804_v4_r2`（16 文件校验通过，不修改） |
 | production_switch | **false**（冻结） |
 | training_started | **false**（冻结） |
@@ -42,7 +42,7 @@
 | M5 数据集训练治理 | **REOPENED / NO-GO**（UMT-001～008 代码修复全部落地并测试；尚缺真实 Snapshot、人工 truebox 与 G 门禁机器证据） |
 | M6 PostgreSQL + 可靠 Worker | DONE（49172d5 + PG 演练；生产切换待独立授权） |
 | U2 统一管理 MVP | **全部完成**：U2-1/U2-2/U2-3/U2-4/U2-5 DONE（角色首页/数据中心真实台账/识别四入口/业务语言/幂等分页） |
-| U3/U4 全照片与 SAM 审核 | U3-1～U3-4 DONE（台账 38284 守恒；SHA 唯一 30459；分流全覆盖 frozen 泄漏 0）；U3-5 qpol_v2 待启动；250 审核项全部 pending；qa_v3 仅 120 张 |
+| U3/U4 全照片与 SAM 审核 | U3-1～U3-5 DONE（台账 38284 守恒；SHA 唯一 30459；分流 0 泄漏；qpol_v2 11 维+不可变证据链，冒烟 5 fail/5 waiting_human）；U3-6 人工金标准入口待启动；250 审核项全部 pending；qa_v3 仅 120 张 |
 | U5 Graph+Loop v2 | PENDING（当前 Kernel 是 fixed sequential for-loop） |
 | T0/T1/T2 训练 | BLOCKED（P0 修复后仅授权 1ep smoke + 3ep pilot） |
 
