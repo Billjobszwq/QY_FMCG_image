@@ -45,7 +45,7 @@
 | U3-1 | 扫描 §5.1 全部来源（Excel/manifest/目录/URL/历史数据集） | U2-2 | agent | DONE | `tests/platform/test_u3_inventory.py`（6 项） | 来源清单+原始数：total_raw=38284（含重复，非唯一数）；batch1=2947/batch2=6510/batch3_clean=22659 精确复现 | `.eval/u3/source_scan_v1.json`（gitignore 本地证据） | 4384b71 |
 | U3-2 | 不可变 source_asset_inventory_v1（追加式，原图不动） | U3-1 | agent | DONE | `tests/platform/test_u3_ledger.py`（6 项：幂等/同 SHA 多来源保留/触发器禁 DELETE+UPDATE/筛选分页/守恒） | migration 010（表+BEFORE DELETE/UPDATE 触发器）；真实库建账 38284 条 == total_raw 守恒，38284 条全带 SHA，重跑幂等 0 新增，6.5s | `.eval/u3/ledger_build_v1.json` | 8899d25 |
 | U3-3 | SHA 精确去重 + pHash/embedding 近重复组 | U3-2 | agent | DONE | `tests/platform/test_u3_dedup.py`（5 项：唯一数/重复组保留全部 source ref/pHash 亮度扰动同组/唯一文件扫描/报告字段） | 真实库：38284 引用→**SHA 唯一 30459**，精确重复组 6560，pHash 近重复组 52（1288 本地文件，自实现 DCT-pHash 汉明≤ 8，无新增依赖），下载失败 0，耗时 89s | `.eval/u3/dedup_report_v1.json` | e44c9e1 |
-| U3-4 | 用途与冻结角色分流（detector/classifier/包装版本/质量负样本/评估冻结/待标注/拒绝证据） | U3-3 | agent | TODO | 协议泄漏测试 | 每源照片有 disposition | — | — |
+| U3-4 | 用途与冻结角色分流（detector/classifier/包装版本/质量负样本/评估冻结/待标注/拒绝证据） | U3-3 | agent | DONE | `tests/platform/test_u3_disposition.py`（7 项含协议泄漏测试） | 7 用途规则引擎；真实库 38284 行全部有用途（0 空档），frozen→training 泄漏 0；分布：detector 候选 32116/classifier 32356/包装版本 427/质量负 5/评估冻结 4684/待标注 1239/拒绝证据 5 | `.eval/u3/disposition_report_v1.json` | 8f40ea5 |
 | U3-5 | qpol_v2 策略（斜拍/反光/翻拍/屏摄/摩尔纹/模糊/大头照/裁切/遮挡/场景/价签）+ 证据链 | U3-4 | agent | TODO | 策略测试 | 全字段证据 | — | — |
 | U3-6 | 500–1,000 张分层人工质量金标准入口 + 混淆矩阵；人工未完成显示 waiting_human | U3-5 | agent+人 | TODO | — | waiting_human 截图 | — | 需真实人工 |
 
