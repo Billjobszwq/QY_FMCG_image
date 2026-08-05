@@ -391,6 +391,9 @@ class TrainingGovernanceService:
         run = self.store.get_training_run(run_id)
         if run is None:
             raise KeyError(run_id)
+        # 幂等（UMT-109）：已入队/执行中的 run 重复提交返回同一 Job
+        if run.get("status") in ("queued", "running") and run.get("job_id"):
+            return {**run, "job_id": run["job_id"]}
         if run.get("status") != "approved":
             raise TrainingGovError(
                 f"仅已批准的训练计划可入队（当前 status={run.get('status')}）")

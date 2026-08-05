@@ -262,6 +262,13 @@ CREATE TABLE IF NOT EXISTS recognition_task (
 );
 """
 
+_M009 = """
+ALTER TABLE recognition_task
+    ADD COLUMN idempotency_key TEXT;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_recognition_task_idem
+    ON recognition_task(idempotency_key);
+"""
+
 MIGRATIONS: tuple[tuple[str, str], ...] = (
     ("001_platform_init", _M001),
     ("002_labeling_inbox", _M002),
@@ -271,6 +278,7 @@ MIGRATIONS: tuple[tuple[str, str], ...] = (
     ("006_auth_sessions", _M006),
     ("007_training_run_job_id", _M007),
     ("008_recognition_task", _M008),
+    ("009_recognition_task_idem", _M009),
 )
 
 
@@ -1055,17 +1063,28 @@ class PlatformStore:
         self, *, task_id: str, entry: str, status: str,
         file_count: int, sku_count: int, created_by: str,
         result_json: str = "", error: str = "",
+        idempotency_key: str | None = None,
     ) -> dict[str, Any]:
         self._conn.execute(
             """INSERT INTO recognition_task
                (task_id, entry, status, file_count, sku_count,
-                created_by, created_at, result_json, error)
-               VALUES (?,?,?,?,?,?,?,?,?)""",
+                created_by, created_at, result_json, error,
+                idempotency_key)
+               VALUES (?,?,?,?,?,?,?,?,?,?)""",
             (task_id, entry, status, file_count, sku_count,
-             created_by, _utcnow(), result_json, error),
+             created_by, _utcnow(), result_json, error,
+             idempotency_key),
         )
         self._conn.commit()
         return self.get_recognition_task(task_id)
+
+    def find_recognition_task_by_idempotency_key(
+        self, key: str,
+    ) -> dict[str, Any] | None:
+        row = self._conn.execute(
+            "SELECT * FROM recognition_task WHERE idempotency_key=?",
+            (key,)).fetchone()
+        return dict(row) if row else None
 
     def get_recognition_task(self, task_id: str) -> dict[str, Any] | None:
         row = self._conn.execute(
@@ -1073,12 +1092,27 @@ class PlatformStore:
             (task_id,)).fetchone()
         return dict(row) if row else None
 
-    def list_recognition_tasks(self, *, limit: int = 100
+    def list_recognition_tasks(self, *, limit: int = 100,
+                               offset: int = 0,
+                               status: str | None = None,
                                ) -> list[dict[str, Any]]:
+        where, params = "", []
+        if status:
+            where, params = "WHERE status=?", [status]
         rows = self._conn.execute(
-            "SELECT * FROM recognition_task ORDER BY created_at DESC,"
-            " rowid DESC LIMIT ?", (min(limit, 500),)).fetchall()
+            "SELECT * FROM recognition_task " + where +
+            " ORDER BY created_at DESC, rowid DESC LIMIT ? OFFSET ?",
+            params + [min(limit, 500), max(offset, 0)]).fetchall()
         return [dict(r) for r in rows]
+
+    def count_recognition_tasks(self, *, status: str | None = None) -> int:
+        where, params = "", []
+        if status:
+            where, params = "WHERE status=?", [status]
+        row = self._conn.execute(
+            "SELECT COUNT(*) FROM recognition_task " + where,
+            params).fetchone()
+        return int(row[0])
 
     # ---------- backup ----------
 

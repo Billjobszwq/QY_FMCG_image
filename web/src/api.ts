@@ -310,9 +310,10 @@ export async function fetchTrainingSnapshots(): Promise<{
   return r.json();
 }
 
-async function postJson(url: string, body: unknown): Promise<Response> {
+async function postJson(url: string, body: unknown, extra?: Record<string, string>): Promise<Response> {
   const headers: Record<string, string> = { "content-type": "application/json" };
   if (_csrfToken) headers["X-CSRF-Token"] = _csrfToken;
+  if (extra) Object.assign(headers, extra);
   return fetch(url, { method: "POST", headers, body: JSON.stringify(body) });
 }
 
@@ -407,31 +408,43 @@ export interface RecognitionTaskView {
   elapsed_ms: number;
 }
 
-async function postFormWithCsrf(url: string, form: FormData): Promise<Response> {
+async function postFormWithCsrf(url: string, form: FormData, extra?: Record<string, string>): Promise<Response> {
   const headers: Record<string, string> = {};
   if (_csrfToken) headers["X-CSRF-Token"] = _csrfToken;
+  if (extra) Object.assign(headers, extra);
   return fetch(url, { method: "POST", headers, body: form });
 }
 
 export async function uploadRecognitionFiles(files: File[]): Promise<RecognitionTaskView> {
   const form = new FormData();
   for (const f of files) form.append("files", f);
-  const r = await postFormWithCsrf("/api/v1/recognition/tasks/upload", form);
+  // 幂等键（UMT-109）：同一次提交重试不会重复创建任务
+  const idem = { "Idempotency-Key": crypto.randomUUID() };
+  const r = await postFormWithCsrf("/api/v1/recognition/tasks/upload", form, idem);
   if (!r.ok) throw await parseError(r, "recognition upload");
   return r.json();
 }
 
 export async function recognizeByUrl(url: string): Promise<RecognitionTaskView> {
-  const r = await postJson("/api/v1/recognition/tasks/url", { url });
+  const idem = { "Idempotency-Key": crypto.randomUUID() };
+  const r = await postJson("/api/v1/recognition/tasks/url", { url }, idem);
   if (!r.ok) throw await parseError(r, "recognition url");
   return r.json();
 }
 
-export async function fetchRecognitionTasks(): Promise<{
+export async function fetchRecognitionTasks(opts?: {
+  limit?: number;
+  offset?: number;
+  status?: string;
+}): Promise<{
   count: number;
   tasks: RecognitionTaskRow[];
 }> {
-  const r = await fetch("/api/v1/recognition/tasks");
+  const q = new URLSearchParams();
+  q.set("limit", String(opts?.limit ?? 100));
+  if (opts?.offset) q.set("offset", String(opts.offset));
+  if (opts?.status) q.set("status", opts.status);
+  const r = await fetch(`/api/v1/recognition/tasks?${q}`);
   if (!r.ok) throw new Error(`recognition tasks HTTP ${r.status}`);
   return r.json();
 }

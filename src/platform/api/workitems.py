@@ -152,7 +152,17 @@ def create_workitems_router(store: Any) -> APIRouter:
     router = APIRouter()
 
     @router.get("/api/v1/workitems")
-    def workitems():
-        return collect_workitems(store)
+    def workitems(limit: int = 100, offset: int = 0,
+                  kind: str | None = None, status: str | None = None):
+        """分页 + 筛选（UMT-109）：count 为筛选后总数。"""
+        body = collect_workitems(store)
+        items = body["items"]
+        if kind:
+            items = [w for w in items if w["kind"] == kind]
+        if status:
+            items = [w for w in items if w["status"] == status]
+        total = len(items)
+        page = items[max(offset, 0): max(offset, 0) + min(limit, 500)]
+        return {**body, "count": total, "items": page}
 
     return router

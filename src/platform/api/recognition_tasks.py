@@ -35,11 +35,29 @@ def fetch_url_bytes(url: str, timeout: float = 10.0) -> bytes:
     return r.content
 
 
+def _replay(existing: dict[str, Any]) -> dict[str, Any]:
+    """幂等重放：同一 Idempotency-Key 重复请求返回同一任务。"""
+    results = json.loads(existing.get("result_json") or "[]")
+    errors = [e for e in (existing.get("error") or "").split("; ") if e]
+    return {
+        "task": existing,
+        "results": results,
+        "errors": errors,
+        "elapsed_ms": 0,
+        "idempotent_replay": True,
+    }
+
+
 def run_recognition_batch(
     adapter: Any, images: list[tuple[str, bytes]], *, conf: float,
     store: Any, entry: str, actor: str,
+    idempotency_key: str | None = None,
 ) -> dict[str, Any]:
     """四入口共用服务层：逐图识别 → 落任务行 → 返回 task+results。"""
+    if idempotency_key:
+        hit = store.find_recognition_task_by_idempotency_key(idempotency_key)
+        if hit is not None:
+            return _replay(hit)
     task_id = secrets.token_hex(16)
     results: list[dict[str, Any]] = []
     errors: list[str] = []
@@ -65,7 +83,7 @@ def run_recognition_batch(
         task_id=task_id, entry=entry, status=status,
         file_count=len(images), sku_count=sku_total, created_by=actor,
         result_json=json.dumps(results, ensure_ascii=False),
-        error="; ".join(errors))
+        error="; ".join(errors), idempotency_key=idempotency_key)
     return {
         "task": task,
         "results": results,
@@ -95,13 +113,19 @@ def create_recognition_tasks_router(
         images = [(f.filename or f"file_{i}", await f.read())
                   for i, f in enumerate(files)]
         entry = "single_file" if len(files) == 1 else "batch_file"
+        idem = request.headers.get("idempotency-key") if request else None
         return run_recognition_batch(
             adapter, images, conf=conf, store=store,
-            entry=entry, actor=p["actor"])
+            entry=entry, actor=p["actor"], idempotency_key=idem)
 
     @router.post("/api/v1/recognition/tasks/url")
     def by_url(body: UrlBody, request: Request):
         p = require_principal(auth, request)
+        idem = request.headers.get("idempotency-key")
+        if idem:
+            hit = store.find_recognition_task_by_idempotency_key(idem)
+            if hit is not None:
+                return _replay(hit)
         try:
             data = fetch_url_bytes(body.url)
         except Exception as e:
@@ -109,11 +133,14 @@ def create_recognition_tasks_router(
                                 detail=f"URL 下载失败：{e}")
         return run_recognition_batch(
             adapter, [(body.url, data)], conf=body.conf, store=store,
-            entry="url", actor=p["actor"])
+            entry="url", actor=p["actor"], idempotency_key=idem)
 
     @router.get("/api/v1/recognition/tasks")
-    def list_tasks(limit: int = 100):
-        tasks = store.list_recognition_tasks(limit=limit)
-        return {"count": len(tasks), "tasks": tasks}
+    def list_tasks(limit: int = 100, offset: int = 0,
+                   status: str | None = None):
+        tasks = store.list_recognition_tasks(
+            limit=limit, offset=offset, status=status)
+        total = store.count_recognition_tasks(status=status)
+        return {"count": total, "tasks": tasks}
 
     return router

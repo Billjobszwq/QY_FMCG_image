@@ -25,15 +25,24 @@ export default function Recognition() {
   const [taskView, setTaskView] = useState<RecognitionTaskView | null>(null);
   const [url, setUrl] = useState("");
   const [tasks, setTasks] = useState<RecognitionTaskRow[] | null>(null);
+  const [taskTotal, setTaskTotal] = useState(0);
+  const [statusFilter, setStatusFilter] = useState("");
+  const [page, setPage] = useState(0);
+  const PAGE_SIZE = 20;
 
   const reloadTasks = useCallback(async () => {
     try {
-      const d = await fetchRecognitionTasks();
+      const d = await fetchRecognitionTasks({
+        limit: PAGE_SIZE,
+        offset: page * PAGE_SIZE,
+        status: statusFilter || undefined,
+      });
       setTasks(d.tasks);
+      setTaskTotal(d.count);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     }
-  }, []);
+  }, [page, statusFilter]);
 
   useEffect(() => {
     reloadTasks();
@@ -200,7 +209,28 @@ export default function Recognition() {
         </div>
       )}
 
-      <h3>④ 识别任务历史（四入口统一）</h3>
+      <h3>④ 识别任务历史（四入口统一，支持筛选与分页）</h3>
+      <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 8 }}>
+        <select
+          value={statusFilter}
+          onChange={(e) => {
+            setStatusFilter(e.target.value);
+            setPage(0);
+          }}
+        >
+          <option value="">全部状态</option>
+          <option value="completed">completed</option>
+          <option value="failed">failed</option>
+        </select>
+        <button disabled={page === 0} onClick={() => setPage(page - 1)}>上一页</button>
+        <span className="muted">
+          共 {taskTotal} 条 · 第 {page + 1} 页
+        </span>
+        <button
+          disabled={!tasks || tasks.length < PAGE_SIZE}
+          onClick={() => setPage(page + 1)}
+        >下一页</button>
+      </div>
       {tasks === null ? (
         <p className="muted">加载中…</p>
       ) : tasks.length === 0 ? (
@@ -218,7 +248,7 @@ export default function Recognition() {
             </tr>
           </thead>
           <tbody>
-            {tasks.slice(0, 30).map((t) => (
+            {tasks.map((t) => (
               <tr key={t.task_id}>
                 <td>{ENTRY_CN[t.entry] ?? t.entry}</td>
                 <td>
