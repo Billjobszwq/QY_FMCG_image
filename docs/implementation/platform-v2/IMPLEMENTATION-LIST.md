@@ -63,8 +63,8 @@
 | ID | 目标 | 依赖 | Owner | 状态 | 测试 | 证据 | Commit | 剩余风险 |
 |---|---|---|---|---|---|---|---|---|
 | U5-1 | NodeSpec/EdgeSpec/LoopSpec/RunState/HumanGate/GraphVersion 内核对象；sequential v1 兼容适配 | U1 | agent | DONE | kernel 测试 6/6 | typed edge/条件路由/收敛/预算 | tests/platform/test_u5_loop_kernel.py + src/platform/kernel/loop.py | ef1b4e1 |
-| U5-2 | 第一条真实 Loop：照片→质量→SAM/识别→人工→数据集→评估→误差回流 | U5-1 | agent | TODO | Loop E2E | 条件分支/人工暂停恢复/回流/预算停止各一次 | — | — |
-| U5-3 | UI：轮次/决策原因/等待项/成本/证据/下一节点/停止原因 | U5-2 | agent | TODO | tsc+截图 | 浏览器 E2E | — | — |
+| U5-2 | 第一条真实 Loop：照片→质量→SAM/识别→人工→数据集→评估→误差回流 | U5-1 | agent | DONE | Loop E2E 4/4 | 条件分支/人工暂停恢复/回流/预算停止各一次 | src/platform/loops/pipeline_v2.py + scripts/run_u5_real_loop.py + .eval/u5/ | b32fd2c | 生产库 run 历史保留 |
+| U5-3 | UI：轮次/决策原因/等待项/成本/证据/下一节点/停止原因 | U5-2 | agent | DONE | tsc+浏览器 E2E | 浏览器 E2E：UI 批准人工门→run 完成，console 无错 | web/src/pages/GraphRuns.tsx + src/platform/api/loops.py + .eval/u5/u53_browser_evidence.json | 53e4b4b | — |
 
 ## T0–T2 MPS 预检与受控训练（门控授权）
 

@@ -6,11 +6,11 @@
 
 | 项 | 值 |
 |---|---|
-| 当前状态 | U0+U1+U2+U3 全部完成；U4-1/U4-2/U4-3 DONE + U4-4 机制 DONE（6baa389）；U4 剩余为真实人工审核 250 诊断批（waiting_human）；U5-1 Loop 内核 DONE（ef1b4e1）；下一步 U5-2 第一条真实 Loop E2E；训练仍 NO-GO |
+| 当前状态 | U0+U1+U2+U3 全部完成；U4-1/U4-2/U4-3 DONE + U4-4 机制 DONE（6baa389）；U4 剩余为真实人工审核 250 诊断批（waiting_human）；U5 全部完成（U5-1 ef1b4e1/U5-2 b32fd2c/U5-3 53e4b4b，4 类 E2E 事件均有真实机器证据）；下一步 T0 MPS 预检；训练仍 NO-GO |
 | 当前 HEAD | 分支基点 `9db9946`；实时值以 `git rev-parse HEAD` 为准 |
 | 分支 | `feat/unified-workbench-training-readiness`（基于 `9db9946`，审计文档改动随本分支提交） |
 | 任务清单 | `docs/implementation/platform-v2/IMPLEMENTATION-LIST.md`（U0–U5/T0–T2 逐项：ID/依赖/Owner/状态/测试/证据/Commit） |
-| 基线测试 | **448 passed，1 skipped**（主机 miniconda python3，U5-1 后全量回归） |
+| 基线测试 | **452 passed，1 skipped**（主机 miniconda python3，U5-3 后全量回归） |
 | 生产 bundle | `prod_20260804_v4_r2`（16 文件校验通过，不修改） |
 | production_switch | **false**（冻结） |
 | training_started | **false**（冻结） |
@@ -43,7 +43,7 @@
 | M6 PostgreSQL + 可靠 Worker | DONE（49172d5 + PG 演练；生产切换待独立授权） |
 | U2 统一管理 MVP | **全部完成**：U2-1/U2-2/U2-3/U2-4/U2-5 DONE（角色首页/数据中心真实台账/识别四入口/业务语言/幂等分页） |
 | U3/U4 全照片与 SAM 审核 | U3-1～U3-6 DONE；U4-1 DONE（SAM lineage 不可变）；U4-2/U4-3 DONE（审核状态机 migration 014，250 条 pending 真实接入）；U4-4 机制 DONE（阶梯+质量门 6baa389，诊断批 0/250 诚实 waiting_human）；实际分批与标注推进需真实人工；qa_v3 仅 120 张 |
-| U5 Graph+Loop v2 | 进行中：U5-1 Loop 内核 DONE（ef1b4e1，typed edges/条件路由/feedback/轮次预算/人工门/跨实例恢复，6/6 测试）；sequential v1（GraphEngine）保留不动；U5-2/U5-3 TODO |
+| U5 Graph+Loop v2 | **全部完成**：U5-1 内核（ef1b4e1）+ U5-2 第一条真实 Loop（b32fd2c，生产库 4 run：条件分支/人工暂停恢复（脚本+UI 各一次）/质量 fail 回流×5/预算停止×2）+ U5-3 UI（53e4b4b，轮次/决策原因/等待项/成本/下一节点/停止原因）；sequential v1 保留不动 |
 | T0/T1/T2 训练 | BLOCKED（P0 修复后仅授权 1ep smoke + 3ep pilot） |
 
 ## 红线（任何阶段不得越过）
