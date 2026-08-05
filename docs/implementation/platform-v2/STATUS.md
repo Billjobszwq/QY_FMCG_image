@@ -6,11 +6,11 @@
 
 | 项 | 值 |
 |---|---|
-| 当前状态 | U0+U1+U2+U3 全部完成；U4-1/U4-2/U4-3 DONE + U4-4 机制 DONE（6baa389）；U4 剩余为真实人工审核 250 诊断批（waiting_human）；U5 全部完成（U5-1 ef1b4e1/U5-2 b32fd2c/U5-3 53e4b4b，4 类 E2E 事件均有真实机器证据）；下一步 T0 MPS 预检；训练仍 NO-GO |
+| 当前状态 | U0+U1+U2+U3 全部完成；U4-1/U4-2/U4-3 DONE + U4-4 机制 DONE（6baa389）；U4 剩余为真实人工审核 250 诊断批（waiting_human）；U5 全部完成（U5-1 ef1b4e1/U5-2 b32fd2c/U5-3 53e4b4b）；**T0 MPS 预检完成（d58d554：G0 证据✓、三档 benchmark 选 768、预算/停止线✓、无训练污染）**；下一步 T1 需 G 门禁全证据（当前 swap 10.6GB 超 8GB 停止线须处置；人工 truebox/G 系列证据待齐）；训练仍 NO-GO |
 | 当前 HEAD | 分支基点 `9db9946`；实时值以 `git rev-parse HEAD` 为准 |
 | 分支 | `feat/unified-workbench-training-readiness`（基于 `9db9946`，审计文档改动随本分支提交） |
 | 任务清单 | `docs/implementation/platform-v2/IMPLEMENTATION-LIST.md`（U0–U5/T0–T2 逐项：ID/依赖/Owner/状态/测试/证据/Commit） |
-| 基线测试 | **452 passed，1 skipped**（主机 miniconda python3，U5-3 后全量回归） |
+| 基线测试 | **469 passed，1 skipped**（主机 miniconda python3，T0 后全量回归） |
 | 生产 bundle | `prod_20260804_v4_r2`（16 文件校验通过，不修改） |
 | production_switch | **false**（冻结） |
 | training_started | **false**（冻结） |

@@ -70,9 +70,9 @@
 
 | ID | 目标 | 依赖 | Owner | 状态 | 测试 | 证据 | Commit | 剩余风险 |
 |---|---|---|---|---|---|---|---|---|
-| T0-1 | G0 主机证据：miniconda python、arm64、MPS built/available、矩阵+前向、无 fallback、AC+caffeinate、磁盘/内存/swap | U1-006 | agent | TODO | — | G0 证据文件 | — | — |
-| T0-2 | 768/960/1024 三档 batch benchmark（images/s/峰值内存/swap/热状态），不默认 1280 | T0-1 | agent | TODO | — | benchmark 报告 | — | — |
-| T0-3 | run 目录存在拒绝覆盖 + 服务 8091/8092/8400 训练期间健康 | T0-2 | agent | TODO | 防覆盖测试 | 健康快照 | — | — |
+| T0-1 | G0 主机证据：miniconda python、arm64、MPS built/available、矩阵+前向、无 fallback、AC+caffeinate、磁盘/内存/swap | U1-006 | agent | DONE | test_umt005 11/11 | G0 ok=true 两跑：.eval/t0/t0_preflight_evidence_20260805_150704.json、..._151618.json | d58d554 | — |
+| T0-2 | 768/960/1024 三档 batch benchmark（images/s/峰值内存/swap/热状态），不默认 1280 | T0-1 | agent | DONE | test_t0_preflight 13/13 | 两跑均选 768（8.19 img/s，peak 0.306 GB）；thermal 无 warning；swap 10867MB>8192 停止线如实报告 | d58d554 | swap 超限训练启动前须处置 |
+| T0-3 | run 目录存在拒绝覆盖 + 服务 8091/8092/8400 训练期间健康 | T0-2 | agent | DONE | test_run_overwrite_guard | 健康快照：8091 /v2/health、8092 /api/live、8400 /api/v1/health 前后均 200（证据内 services_before/after） | d58d554 | — |
 | T1 | 1 epoch smoke（全部 P0 门禁+G-EVAL/G-SNAPSHOT/G-ASSET/G-LABEL/G-MPS 机器证据通过后） | T0 | agent | BLOCKED | — | — | — | 门未过禁止 |
 | T2 | 3 epoch P0/P1 pilot（T1 全绿后）；完成后立即停止报告，不发布 | T1 | agent | BLOCKED | — | — | — | 10ep/发布需新授权 |
 

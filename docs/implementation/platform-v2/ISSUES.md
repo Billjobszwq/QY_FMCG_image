@@ -14,7 +14,7 @@
 | PV2-008 | FIXED（待 T0 真实执行证据关闭） | 高 | 训练 dry-run 生成 `--dataset`、`--budget-minutes`，真实 `train_v1.py` 不接受 | U1-003 已改：dry-run 只生成 train_v1 真实参数并入库前 `--parse-check` 子进程预检（433f995） |
 | PV2-009 | PARTIAL | 高 | 唯一 DatasetSnapshot 是 2 train + 1 val 演示 manifest，却命名 `e2_product_pilot@v1` | 已标 trainable=0 不可训练（c5fcca2）；builder 已就绪（50e39ff）；真实 Snapshot 待 U2/U3 真实照片接入 |
 | PV2-010 | FIXED | 高 | Snapshot API 接受自由 JSON 和自由文本人工结论，只检查 sha/store/session | U1-005 服务端 builder：POST /snapshots → 410；逐文件存在/SHA/标签/data.yaml/五键守卫/近重复/协议/质量/审核校验（50e39ff） |
-| PV2-011 | FIXED（待 G-MPS/T0 门禁证据关闭） | 高 | MPS G0 仅以 `sys.platform == darwin` 判定 | U1-006 `mps_gate.run_mps_g0` 十项实测（arm64/MPS built+available/矩阵/模型前向/无 fallback/AC/内存/swap/磁盘），证据写 run，fail-closed（7cd3c81） |
+| PV2-011 | FIXED | 高 | MPS G0 仅以 `sys.platform == darwin` 判定 | U1-006 `mps_gate.run_mps_g0` 十项实测（7cd3c81）；T0 两跑 G0 ok=true 机器证据（d58d554，.eval/t0/t0_preflight_evidence_*.json） |
 | PV2-012 | PARTIAL | 高 | API 角色依赖客户端 `X-Role`/`X-Actor`；Run 上传、执行和人工批准缺少真实身份边界 | U1-007 本机 session + CSRF + 服务端 role 已落地（4085023）；前端登录 UI 已上线（87f16d5）；API/Agent token scope 待 U2 |
 | PV2-013 | FIXED | 高 | `start_training` 只把记录改为 authorized，不提交 Worker Job，接口与 UI 名称误导 | U1-008 approve_plan 与 enqueue_training_job 拆分；Worker training.run 真实子进程留 PID/日志（5c13177）；UI 分区 + idle 显式（87f16d5） |
 | PV2-014 | OPEN | 高 | 当前 Graph 是固定节点列表和 `for` 循环，max_loops 仅为同节点 attempt 上限 | 作为 sequential v1 保留；实现 typed edges、条件路由、反馈 loop、收敛、每轮预算和回放 |
@@ -27,4 +27,5 @@
 | PV2-021 | OPEN | 中 | 识别只支持单文件；缺 URL、批量、API、Agent 的统一 RecognitionTask、计费档位和证据 | 四入口共用服务层与任务/证据/Usage 口径 |
 | PV2-022 | FIXED（待 G-EVAL 机器证据关闭） | 中 | truebox 错误账本不互斥；晋级 FP 只计 background，忽略重复/定位等 FP | U1-002 互斥分类 + FP 守恒式 + 门禁用 total FP/photo（0908127） |
 | PV2-023 | OPEN | 中 | 100 个轻量 job 测试不足以证明每日 10 万照片能力 | 用真实照片按 pipeline 阶段做 sustained/burst/p95/p99/失败恢复 benchmark |
-| PV2-024 | OPEN | 低 | 根 README 仅有标题、STATUS/服务和 HEAD 曾漂移 | 根入口已在本轮文档修正；后续建立只读状态生成与一致性检查 |
+| PV2-024 | OPEN | 低 | 根 README 仅有标题，STATUS/服务和 HEAD 曾漂移 | 根入口已在本轮文档修正；后续建立只读状态生成与一致性检查 |
+| PV2-025 | OPEN | 高 | T0 实测系统 swap used=10867MB 超 8192MB 停止线（含其他进程），训练启动前必须处置（重启释放/关无关进程/降 batch）；另 mps_gate swap 解析曾被 macOS 15 格式掩盖（已修，d58d554） | 证据如实 exceeds_stop_line=true；T1 授权前需复测 swap 降至停止线下 |
