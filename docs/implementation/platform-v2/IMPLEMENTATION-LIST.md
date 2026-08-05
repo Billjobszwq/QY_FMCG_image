@@ -36,7 +36,7 @@
 | U2-2 | 数据中心接真实 Asset/CAS/质量/血缘/审核/冻结；移除"CAS 未启用"假状态 | U3-台账可用 | agent | TODO | 截图 | 真实 CAS blob 数 | — | — |
 | U2-3 | 识别统一：单文件/批量/URL/API/Agent 共用 RecognitionTask 服务层 | U2-1 | agent | DONE | `tests/platform/test_u2_recognition_tasks.py`（6 红→绿）+ tsc | migration 008 recognition_task；run_recognition_batch 四入口共享服务层（upload/url/API/Agent，身份来自服务端 session）；Recognition.tsx 四分区；真实照片批量识别 E2E 截图 .eval/recognition_unified_batch_verify.png；全量 362 passed | fc4ddfe | — |
 | U2-4 | 标注/审核/训练/识别/Graph Run 统一任务状态词汇；业务语言默认、技术字段折叠 | U2-1 | agent | TODO | 截图 | 普通用户 E2E | — | — |
-| U2-5 | 写操作幂等键 + 分页筛选（UMT-109） | U2-1 | agent | TODO | 幂等测试 | 重复请求返回同任务 | — | — |
+| U2-5 | 写操作幂等键 + 分页筛选（UMT-109） | U2-1 | agent | DONE | `tests/platform/test_u2_idempotency_paging.py`（7 红→绿）+ tsc/build | migration 009（recognition_task.idempotency_key + 唯一索引）；upload/url 读 Idempotency-Key 重复返回同一任务；任务列表 limit/offset/status + 全量 count；workitems limit/offset/kind/status；重复 enqueue 返回同一 Job；前端随机 UUID 幂等键 + 历史筛选分页；浏览器 E2E 截图 .eval/u25_recognition_paging_verify.png（请求头含 Idempotency-Key，真实照片批量识别成功）；全量 369 passed | f0e87c1 | — |
 
 ## U3 全部照片资产化
 
