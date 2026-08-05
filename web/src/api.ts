@@ -511,6 +511,68 @@ export async function exportReview(): Promise<{
   return r.json();
 }
 
+// ---------- Loop v2（U5-2/U5-3） ----------
+
+export interface LoopTrailItem {
+  round: number;
+  node: string;
+  decision: string;
+  reason: string;
+  next: string | null;
+}
+
+export interface LoopRunRow {
+  run_id: string;
+  status: string;
+  error: string | null;
+  stop_reason?: string | null;
+  rounds_used?: number;
+  waiting_for?: string | null;
+  next_node?: string | null;
+  cost_nodes?: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface LoopRunView extends LoopRunRow {
+  trail: LoopTrailItem[];
+  cost_detail?: { node_executions: number; quality_evals: number };
+}
+
+export async function fetchLoopRuns(): Promise<{
+  n_runs: number;
+  runs: LoopRunRow[];
+}> {
+  const r = await fetch("/api/v1/loops/runs");
+  if (!r.ok) throw await parseError(r, "loop runs");
+  return r.json();
+}
+
+export async function fetchLoopRun(runId: string): Promise<LoopRunView> {
+  const r = await fetch(`/api/v1/loops/runs/${runId}`);
+  if (!r.ok) throw await parseError(r, "loop run");
+  return r.json();
+}
+
+export async function startLoop(body: {
+  source_id: string;
+  batch_size: number;
+  max_rounds: number;
+}): Promise<LoopRunView> {
+  const r = await postJson("/api/v1/loops/start", body);
+  if (!r.ok) throw await parseError(r, "loop start");
+  return r.json();
+}
+
+export async function gateLoop(
+  runId: string,
+  approved: boolean,
+): Promise<LoopRunView> {
+  const r = await postJson(`/api/v1/loops/runs/${runId}/gate`, { approved });
+  if (!r.ok) throw await parseError(r, "loop gate");
+  return r.json();
+}
+
 // ---------- auth (UMT-006) ----------
 
 export interface AuthMe {

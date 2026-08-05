@@ -56,6 +56,14 @@ def _run_view(store, eng: LoopEngine, run: dict[str, Any]) -> dict[str, Any]:
     view["next_node"] = (
         (store.load_checkpoint(run["run_id"], "__loop_state__") or {})
         .get("node"))
+    nodes = store.list_nodes(run["run_id"])
+    view["cost_nodes"] = len(nodes)
+    view["cost_detail"] = {
+        "node_executions": len(nodes),
+        "quality_evals": sum(
+            1 for n in nodes if n["node_name"] == "quality"
+            and n["status"] == "completed"),
+    }
     return view
 
 
@@ -73,7 +81,8 @@ def create_loops_router(store, auth: AuthService | None) -> APIRouter:
             v = _run_view(store, eng, r)
             items.append({k: v.get(k) for k in (
                 "run_id", "status", "error", "stop_reason", "rounds_used",
-                "waiting_for", "next_node", "created_at", "updated_at")})
+                "waiting_for", "next_node", "cost_nodes", "created_at",
+                "updated_at")})
         return {"n_runs": len(items), "runs": items}
 
     @router.get("/api/v1/loops/runs/{run_id}")
