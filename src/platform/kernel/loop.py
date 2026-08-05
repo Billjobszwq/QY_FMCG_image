@@ -24,8 +24,31 @@ from .engine import HumanGateRequested, NodeContext
 _STATE = "__loop_state__"
 _GRAPH = "__loop_graph__"
 _GATE = "__gate__"
+_SHARED = "__loop_shared__"
 
 EDGE_TYPES = ("next", "on_fail", "feedback")
+
+
+class LoopNodeContext(NodeContext):
+    """v2 节点上下文：在 v1 基础上增加轮次、跨节点共享状态与门状态查询。"""
+
+    def __init__(self, store: PlatformStore, run_id: str, node_name: str,
+                 run_input: dict, round_no: int) -> None:
+        super().__init__(store, run_id, node_name, run_input)
+        self.round = round_no
+
+    def shared_get(self, key: str, default: Any = None) -> Any:
+        cp = self._store.load_checkpoint(self.run_id, _SHARED) or {}
+        return cp.get(key, default)
+
+    def shared_set(self, key: str, value: Any) -> None:
+        cp = self._store.load_checkpoint(self.run_id, _SHARED) or {}
+        cp[key] = value
+        self._store.save_checkpoint(self.run_id, node_name=_SHARED, payload=cp)
+
+    def gate_approved(self) -> bool:
+        m = self._store.load_checkpoint(self.run_id, _GATE) or {}
+        return bool(m.get("approved")) and not m.get("rejected")
 
 
 @dataclass(frozen=True)
@@ -148,7 +171,8 @@ class LoopEngine:
                 return self._fail(run_id, state, f"handler_missing: {node}")
 
             self._store.start_node(run_id, node_name=node, seq=seq, attempt=rnd)
-            ctx = NodeContext(self._store, run_id, f"{node}#r{rnd}", run_input)
+            ctx = LoopNodeContext(self._store, run_id, f"{node}#r{rnd}",
+                                  run_input, rnd)
             try:
                 output = dict(handler(ctx))
             except HumanGateRequested as e:

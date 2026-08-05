@@ -104,6 +104,11 @@ def create_app(
         from src.platform.api.review import create_review_router
         app.include_router(create_review_router(
             bundle.store, auth=AuthService(bundle.store)))
+        # U5-2/U5-3：Graph+Loop v2 运行（runs/trail 登录只读；
+        # start/gate 需 session+CSRF 且仅限 admin）
+        from src.platform.api.loops import create_loops_router
+        app.include_router(create_loops_router(
+            bundle.store, auth=AuthService(bundle.store)))
         # U2-3：识别统一（单文件/批量/URL/API 共用 RecognitionTask）
         from src.platform.api.recognition_tasks import (
             create_recognition_tasks_router)
