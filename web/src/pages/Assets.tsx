@@ -127,6 +127,14 @@ function ReviewSection() {
   const [status, setStatus] = useState<{
     n_tasks: number;
     status_distribution: Record<string, number>;
+    batch_plan?: {
+      stage?: string;
+      status: string;
+      n_total?: number;
+      n_finalized?: number;
+      next_size?: number | null;
+      note?: string;
+    };
   } | null>(null);
   const [tasks, setTasks] = useState<ReviewTaskRow[] | null>(null);
   const [msg, setMsg] = useState("");
@@ -185,6 +193,14 @@ function ReviewSection() {
 
   if (!status) return <p className="muted">审核队列加载中…</p>;
   const d = status.status_distribution;
+  const bp = status.batch_plan;
+  const BP_CN: Record<string, string> = {
+    waiting_human: "等待人工（禁止伪造通过）",
+    gate_failed: "批次质量不达标，已停止扩展",
+    ready: "可扩展现有阶梯",
+    done: "全部阶梯完成",
+    empty: "队列为空",
+  };
   return (
     <>
       <h3>标注审核闭环（链接派发/认领/单审/双审/仲裁）</h3>
@@ -199,6 +215,16 @@ function ReviewSection() {
         SAM 预测永远不是最终标注；未完成任务不得伪造完成；
         队列与事件追加式不可变。
       </p>
+      {bp && (
+        <p className="muted">
+          分批扩展（100→500→2000→全 eligible）：
+          当前批次 {bp.stage ?? "—"}，状态 {BP_CN[bp.status] ?? bp.status}
+          {typeof bp.n_total === "number" &&
+            `，进度 ${bp.n_finalized ?? 0}/${bp.n_total}`}
+          {bp.next_size != null && `，下一批 ${bp.next_size === -1 ? "全 eligible" : bp.next_size}`}
+          。任何批次质量不达标立即停止。
+        </p>
+      )}
       {msg && <p className="muted">{msg}</p>}
       {!csrfToken() && (
         <p className="muted">任务明细需登录；登录后显示认领链接与提交入口。</p>

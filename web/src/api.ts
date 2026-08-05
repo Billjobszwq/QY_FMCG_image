@@ -456,6 +456,15 @@ export interface ReviewTaskRow {
 export async function fetchReviewStatus(): Promise<{
   n_tasks: number;
   status_distribution: Record<string, number>;
+  batch_plan: {
+    stage?: string;
+    status: string;
+    n_total?: number;
+    n_finalized?: number;
+    agreement_rate?: number | null;
+    next_size?: number | null;
+    note?: string;
+  };
   note: string;
 }> {
   const r = await fetch("/api/v1/review/status");

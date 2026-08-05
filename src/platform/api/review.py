@@ -15,6 +15,7 @@ from pathlib import Path
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 
+from ..annotate.batches import next_batch_plan
 from ..annotate.review import (claim_task, export_review, final_box,
                                submit_review, task_view, _derive_status)
 from ..auth import AuthService, require_principal
@@ -43,9 +44,14 @@ def create_review_router(store, auth: AuthService | None) -> APIRouter:
         for t in tasks:
             st = _derive_status(store, t)["status"]
             dist[st] = dist.get(st, 0) + 1
+        try:
+            plan = next_batch_plan(store)
+        except ValueError:
+            plan = {"status": "empty", "note": "审核队列为空"}
         return {
             "n_tasks": len(tasks),
             "status_distribution": dist,
+            "batch_plan": plan,
             "note": "final_box 只来自人工终态；未完成任务不得伪造完成",
         }
 
