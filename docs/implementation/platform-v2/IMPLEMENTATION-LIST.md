@@ -42,8 +42,8 @@
 
 | ID | 目标 | 依赖 | Owner | 状态 | 测试 | 证据 | Commit | 剩余风险 |
 |---|---|---|---|---|---|---|---|---|
-| U3-1 | 扫描 §5.1 全部来源（Excel/manifest/目录/URL/历史数据集） | U2-2 | agent | TODO | `tests/platform/test_u3_inventory.py` | 来源清单+原始数 | — | — |
-| U3-2 | 不可变 source_asset_inventory_v1（追加式，原图不动） | U3-1 | agent | TODO | 不可变测试 | 数量守恒 | — | — |
+| U3-1 | 扫描 §5.1 全部来源（Excel/manifest/目录/URL/历史数据集） | U2-2 | agent | DONE | `tests/platform/test_u3_inventory.py`（6 项） | 来源清单+原始数：total_raw=38284（含重复，非唯一数）；batch1=2947/batch2=6510/batch3_clean=22659 精确复现 | `.eval/u3/source_scan_v1.json`（gitignore 本地证据） | 4384b71 |
+| U3-2 | 不可变 source_asset_inventory_v1（追加式，原图不动） | U3-1 | agent | DONE | `tests/platform/test_u3_ledger.py`（6 项：幂等/同 SHA 多来源保留/触发器禁 DELETE+UPDATE/筛选分页/守恒） | migration 010（表+BEFORE DELETE/UPDATE 触发器）；真实库建账 38284 条 == total_raw 守恒，38284 条全带 SHA，重跑幂等 0 新增，6.5s | `.eval/u3/ledger_build_v1.json` | 8899d25 |
 | U3-3 | SHA 精确去重 + pHash/embedding 近重复组 | U3-2 | agent | TODO | 去重测试 | SHA 唯一数/近重复组数 | — | 22,664 张 batch3 哈希耗时需分段 |
 | U3-4 | 用途与冻结角色分流（detector/classifier/包装版本/质量负样本/评估冻结/待标注/拒绝证据） | U3-3 | agent | TODO | 协议泄漏测试 | 每源照片有 disposition | — | — |
 | U3-5 | qpol_v2 策略（斜拍/反光/翻拍/屏摄/摩尔纹/模糊/大头照/裁切/遮挡/场景/价签）+ 证据链 | U3-4 | agent | TODO | 策略测试 | 全字段证据 | — | — |
