@@ -235,9 +235,12 @@ def read_live_yolo() -> dict:
         last = rd["epochs"][-1]
         live["last_map50"] = last["map50"]
         live["last_recall"] = last["recall"]
+        live["last_precision"] = last["precision"]
         live["last_done_epoch"] = last["epoch"]
         live["best_map50"] = rd["best"]["map50"]
         live["best_epoch"] = rd["best"]["epoch"]
+        # 早停判断辅助：距最佳轮已过多少轮（patience=10 口径）
+        live["epochs_since_best"] = last["epoch"] - rd["best"]["epoch"]
     return live
 
 
@@ -313,13 +316,17 @@ _YOLO_PROG_RE = re.compile(
 
 
 def _find_yolo_logs() -> list:
-    """找所有 YOLO 训练日志（.models/*_train.log），按更新时间降序。"""
+    """找所有 YOLO 训练日志，按更新时间降序。
+
+    覆盖两处：.models/*_train.log（历史约定）与 /tmp/train_*.log
+    （nohup 重定向日志，如 sku_v7_sam 轮）。"""
     logs = []
-    for lf in MODELS_DIR.glob("*_train.log"):
-        try:
-            logs.append((lf.stat().st_mtime, lf))
-        except Exception:
-            pass
+    for pattern, base in (("*_train.log", MODELS_DIR), ("train_*.log", Path("/tmp"))):
+        for lf in base.glob(pattern):
+            try:
+                logs.append((lf.stat().st_mtime, lf))
+            except Exception:
+                pass
     logs.sort(reverse=True)
     return [lf for _, lf in logs]
 
@@ -352,8 +359,11 @@ def _parse_yolo_log(log_path: Path) -> dict | None:
     except Exception:
         mtime = time.time()
     run_name = log_path.stem
+    # 兼容 sku_v6_train.log 与 train_sku_v7_sam.log 两种命名 → 统一为 run 目录名
     if run_name.endswith("_train"):
         run_name = run_name[:-6]
+    elif run_name.startswith("train_"):
+        run_name = run_name[6:]
     return {
         "type": "yolo",
         "name": run_name,

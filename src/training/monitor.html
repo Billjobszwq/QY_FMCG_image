@@ -142,6 +142,8 @@ canvas{width:100%!important;height:230px!important}
   <section class="tab" id="tab-yolo">
     <div class="card" style="margin-bottom:16px"><h3><span class="dot" style="background:var(--a1)"></span>实时训练进度</h3><div id="yoloLive"></div></div>
     <div class="grid g2">
+      <div class="card"><h3><span class="dot" style="background:var(--a1)"></span>本轮逐轮数值（早停判断）</h3><div id="yoloEpochHint" style="font-size:11px;color:var(--dim);margin-bottom:8px"></div>
+        <div style="max-height:340px;overflow:auto"><table><thead><tr><th>epoch</th><th>mAP@50</th><th>P</th><th>R</th><th>val box</th><th>val cls</th></tr></thead><tbody id="yoloEpochTable"></tbody></table></div></div>
       <div class="card"><h3><span class="dot" style="background:var(--a1)"></span>指标曲线（最佳轮）</h3><canvas id="yoloChart"></canvas>
         <div class="legend"><span><i style="background:#34D399"></i>mAP@50</span><span><i style="background:#60A5FA"></i>Precision</span><span><i style="background:#FBBF24"></i>Recall</span></div></div>
       <div class="card"><h3><span class="dot" style="background:var(--a1)"></span>训练轮次记录</h3>
@@ -233,7 +235,9 @@ function liveHTML(lv,kind){
     ? `<div class="mt"><div class="k">Box Loss</div><div class="v">${lv.box_loss!=null?lv.box_loss.toFixed(3):'—'}</div></div>
        <div class="mt"><div class="k">Cls Loss</div><div class="v">${lv.cls_loss!=null?lv.cls_loss.toFixed(3):'—'}</div></div>
        <div class="mt"><div class="k">已完成轮 mAP@50</div><div class="v">${lv.last_map50!=null?lv.last_map50.toFixed(3):'—'}</div></div>
-       <div class="mt"><div class="k">已完成轮 Recall</div><div class="v">${lv.last_recall!=null?lv.last_recall.toFixed(3):'—'}</div></div>`
+       <div class="mt"><div class="k">已完成轮 Recall</div><div class="v">${lv.last_recall!=null?lv.last_recall.toFixed(3):'—'}</div></div>
+       <div class="mt"><div class="k">最佳 mAP@50</div><div class="v">${lv.best_map50!=null?lv.best_map50.toFixed(4)+' @ ep'+lv.best_epoch:'—'}</div></div>
+       <div class="mt"><div class="k">距最佳已过轮数</div><div class="v">${lv.epochs_since_best!=null?lv.epochs_since_best+' / patience 10':'—'}</div></div>`
     : `<div class="mt"><div class="k">Train Acc</div><div class="v">${lv.running_acc!=null?(lv.running_acc*100).toFixed(1)+'%':'—'}</div></div>
        <div class="mt"><div class="k">Val Loss</div><div class="v">${lv.running_loss!=null?lv.running_loss.toFixed(3):'—'}</div></div>
        <div class="mt"><div class="k">学习率</div><div class="v">${lv.lr!=null?lv.lr.toExponential(1):'—'}</div></div>
@@ -253,7 +257,7 @@ async function refresh(){
   if(ov)renderOverview(ov,ly,lc);
   if(ly)$('yoloLive').innerHTML=liveHTML(ly,'yolo');
   if(lc)$('clfLive').innerHTML=liveHTML(lc,'clf');
-  if(ov){renderYoloTable(ov);renderYoloChart(ov);renderClfChart(ov);renderModelsChart(ov);}
+  if(ov){renderYoloTable(ov,ly);renderYoloChart(ov,ly);renderYoloEpochs(ov,ly);renderClfChart(ov);renderModelsChart(ov);}
   if(ds)renderData(ds);
   if(md)renderModels(md);
   if(sv)renderSvc(sv);
@@ -275,13 +279,30 @@ function renderOverview(ov,ly,lc){
     <div class="card stat">${t(C.blue,I.server)}<div class="lb">在线服务</div><div class="vl" style="color:var(--a1)">${Object.values(ov.services).filter(s=>s==='up').length}</div><div class="sb">/ ${Object.keys(ov.services).length} 个</div></div>`;
   $('ovLive').innerHTML=(ly&&ly.active)?liveHTML(ly,'yolo'):(lc&&lc.active)?liveHTML(lc,'clf'):liveHTML(lc,'clf');
 }
-function renderYoloTable(ov){
+function renderYoloTable(ov,ly){
+  const active=ly&&ly.active?ly.name:null;
   $('yoloTable').innerHTML=ov.yolo_runs.map(r=>{
-    const st=r.run==='sku_v4'?'<span class="pill b">冻结</span>':r.run==='sku_v6'?'<span class="pill g">训练中</span>':'<span class="pill n">历史</span>';
+    const st=r.run===active?'<span class="pill g">训练中</span>':r.run==='sku_v4'?'<span class="pill b">冻结</span>':'<span class="pill n">历史</span>';
     return `<tr><td><b>${r.run}</b></td><td>${r.n_epochs}</td><td>${r.best.map50.toFixed(4)}</td><td>ep${r.best.epoch}</td><td>${st}</td></tr>`;}).join('');
 }
-function renderYoloChart(ov){
-  const best=ov.yolo_runs.find(r=>r.run==='sku_v6')||ov.yolo_runs[ov.yolo_runs.length-1];
+function renderYoloEpochs(ov,ly){
+  // 本轮逐轮数值表：优先当前活跃 run；活跃 run 尚无完成轮时明确提示，
+  // 绝不回退展示旧轮数据（避免误导早停判断）；仅无活跃训练时才展示最新 run
+  const name=(ly&&ly.active&&ly.name)?ly.name:null;
+  const run=ov.yolo_runs.find(r=>r.run===name)||(name?null:ov.yolo_runs[ov.yolo_runs.length-1]);
+  const hint=$('yoloEpochHint'), tb=$('yoloEpochTable');
+  if(name&&(!run||!run.epochs||!run.epochs.length)){hint.textContent=`${name} 尚无已完成轮次（每轮 val 结束后此处逐轮更新）`;tb.innerHTML='';return;}
+  if(!run||!run.epochs||!run.epochs.length){hint.textContent='暂无已完成轮次（每轮 val 结束后更新）';tb.innerHTML='';return;}
+  const bestEp=run.best.epoch, lastEp=run.epochs[run.epochs.length-1].epoch, gap=lastEp-bestEp;
+  hint.innerHTML=`${run.run} · 最佳 <b style="color:#34D399">mAP@50=${run.best.map50.toFixed(4)} @ ep${bestEp}</b> · 距最佳已过 <b style="color:${gap>=8?C.red:gap>=5?C.gold:C.green}">${gap}</b>/patience 10 轮`+(gap>=10?' · <b style="color:'+C.red+'">已达早停线，将自动停止</b>':'');
+  tb.innerHTML=run.epochs.slice().reverse().map(e=>{
+    const isBest=e.epoch===bestEp;
+    return `<tr${isBest?' style="background:rgba(52,211,153,.08)"':''}><td>${isBest?'★ ':''}${e.epoch}</td><td><b>${e.map50.toFixed(4)}</b></td><td>${e.precision.toFixed(3)}</td><td>${e.recall.toFixed(3)}</td><td>${e.val_box.toFixed(3)}</td><td>${e.val_cls.toFixed(3)}</td></tr>`;}).join('');
+}
+function renderYoloChart(ov,ly){
+  // 曲线优先展示当前活跃 run，其次 sku_v7_sam/sku_v6，最后兼容旧逻辑
+  const name=(ly&&ly.active&&ly.name)?ly.name:null;
+  const best=ov.yolo_runs.find(r=>r.run===name)||ov.yolo_runs.find(r=>r.run==='sku_v7_sam')||ov.yolo_runs.find(r=>r.run==='sku_v6')||ov.yolo_runs[ov.yolo_runs.length-1];
   if(!best)return;
   mkChart('yoloChart',best.epochs.map(e=>e.epoch),[
     {label:'mAP50',data:best.epochs.map(e=>e.map50),borderColor:C.green},
