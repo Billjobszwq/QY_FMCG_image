@@ -115,3 +115,29 @@ class TestDryRunWiring:
         svc.set_training_authorized(True, actor="adm", role="admin")
         with pytest.raises(TrainingGovError, match="MPS G0"):
             svc.start_training(run["run_id"], actor="adm", role="admin")
+
+
+class TestParseSwapUsage:
+    """vm.swapusage 解析（真实格式 = 两侧有空格 + M/G 单位 + 尾注）。"""
+
+    def test_real_macos_15_format(self):
+        txt = ("total = 12288.00M  used = 10867.44M  free = 1420.56M  "
+               "(encrypted)")
+        swap = mps_gate.parse_swap_usage(txt)
+        assert swap["total_mb"] == pytest.approx(12288.0)
+        assert swap["used_mb"] == pytest.approx(10867.44)
+        assert swap["free_mb"] == pytest.approx(1420.56)
+
+    def test_compact_format(self):
+        txt = "total=2048.00M used=100.00M free=1948.00M"
+        swap = mps_gate.parse_swap_usage(txt)
+        assert swap["used_mb"] == pytest.approx(100.0)
+
+    def test_gigabyte_unit(self):
+        txt = "total = 12.00G  used = 2.50G  free = 9.50G"
+        swap = mps_gate.parse_swap_usage(txt)
+        assert swap["total_mb"] == pytest.approx(12288.0)
+
+    def test_garbage_returns_nones(self):
+        swap = mps_gate.parse_swap_usage("")
+        assert swap == {"total_mb": None, "used_mb": None, "free_mb": None}

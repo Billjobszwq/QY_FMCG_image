@@ -36,6 +36,26 @@ def power_source() -> str:
         return "unknown"
 
 
+def parse_swap_usage(text: str) -> dict[str, float | None]:
+    """解析 vm.swapusage 输出（兼容 `total = 1.00M`/`total=1.00M` 与 M/G 单位）。
+
+    真实 macOS 15 格式：
+    "total = 12288.00M  used = 10867.44M  free = 1420.56M  (encrypted)"
+    不可解析时返回全 None（fail-closed，不得伪造 0）。
+    """
+    import re
+    out: dict[str, float | None] = {"total_mb": None, "used_mb": None,
+                                    "free_mb": None}
+    for key in ("total", "used", "free"):
+        m = re.search(rf"{key}\s*=\s*([\d.]+)\s*([MmGg])", text or "")
+        if m:
+            val = float(m.group(1))
+            if m.group(2).upper() == "G":
+                val *= 1024.0
+            out[f"{key}_mb"] = round(val, 2)
+    return out
+
+
 def memory_info() -> dict[str, Any]:
     """hw.memsize 与 vm.swapusage（macOS sysctl，绝对路径防 PATH 缺失）。"""
     mem_gb: float | None = None
@@ -49,13 +69,7 @@ def memory_info() -> dict[str, Any]:
     try:
         out = subprocess.run(["/usr/sbin/sysctl", "-n", "vm.swapusage"],
                              capture_output=True, text=True, timeout=5)
-        parts = dict(kv.split("=", 1) for kv in out.stdout.split()
-                     if "=" in kv)
-        def _mb(k: str) -> float | None:
-            v = parts.get(k, "").strip()
-            return float(v.rstrip("M")) if v.endswith("M") else None
-        swap = {"total_mb": _mb("total"), "used_mb": _mb("used"),
-                "free_mb": _mb("free")}
+        swap = parse_swap_usage(out.stdout)
     except Exception:
         pass
     return {"mem_gb": mem_gb, "swap": swap}
