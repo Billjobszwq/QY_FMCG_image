@@ -269,6 +269,35 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_recognition_task_idem
     ON recognition_task(idempotency_key);
 """
 
+# U3-2：不可变 source_asset_inventory_v1（追加式；原图不动，只登记引用）。
+# 触发器禁止 DELETE/UPDATE；唯一键为 (source_id, source_uri)，同 SHA 不同来源各自保留。
+_M010 = """
+CREATE TABLE IF NOT EXISTS source_asset_inventory_v1 (
+    asset_id TEXT PRIMARY KEY,
+    source_id TEXT NOT NULL,
+    source_type TEXT NOT NULL,
+    source_uri TEXT NOT NULL,
+    photo_id TEXT NOT NULL DEFAULT '',
+    sha256 TEXT NOT NULL DEFAULT '',
+    registered_at TEXT NOT NULL,
+    UNIQUE(source_id, source_uri)
+);
+CREATE INDEX IF NOT EXISTS idx_inventory_v1_sha
+    ON source_asset_inventory_v1(sha256);
+CREATE INDEX IF NOT EXISTS idx_inventory_v1_source
+    ON source_asset_inventory_v1(source_id);
+CREATE TRIGGER inventory_v1_no_delete
+    BEFORE DELETE ON source_asset_inventory_v1
+BEGIN
+    SELECT RAISE(ABORT, 'source_asset_inventory_v1 不可变：禁止 DELETE');
+END;
+CREATE TRIGGER inventory_v1_no_update
+    BEFORE UPDATE ON source_asset_inventory_v1
+BEGIN
+    SELECT RAISE(ABORT, 'source_asset_inventory_v1 不可变：禁止 UPDATE');
+END;
+"""
+
 MIGRATIONS: tuple[tuple[str, str], ...] = (
     ("001_platform_init", _M001),
     ("002_labeling_inbox", _M002),
@@ -279,6 +308,7 @@ MIGRATIONS: tuple[tuple[str, str], ...] = (
     ("007_training_run_job_id", _M007),
     ("008_recognition_task", _M008),
     ("009_recognition_task_idem", _M009),
+    ("010_source_asset_inventory_v1", _M010),
 )
 
 
@@ -1113,6 +1143,72 @@ class PlatformStore:
             "SELECT COUNT(*) FROM recognition_task " + where,
             params).fetchone()
         return int(row[0])
+
+    # ---------- source_asset_inventory_v1（U3-2，不可变台账） ----------
+
+    def register_inventory_asset(
+        self,
+        *,
+        source_id: str,
+        source_type: str,
+        source_uri: str,
+        photo_id: str = "",
+        sha256: str = "",
+    ) -> dict[str, Any]:
+        """追加式登记一条来源引用；(source_id, source_uri) 幂等。
+
+        同 SHA 不同来源各自保留（去重在 U3-3）；禁止 UPDATE/DELETE（触发器）。
+        """
+        conn = self._conn
+        row = conn.execute(
+            "SELECT * FROM source_asset_inventory_v1"
+            " WHERE source_id=? AND source_uri=?",
+            (source_id, source_uri),
+        ).fetchone()
+        if row is not None:
+            return dict(row)
+        asset_id = hashlib.sha256(
+            f"{source_id}\x00{source_uri}".encode("utf-8")
+        ).hexdigest()
+        now = _utcnow()
+        conn.execute(
+            "INSERT INTO source_asset_inventory_v1"
+            "(asset_id, source_id, source_type, source_uri, photo_id,"
+            " sha256, registered_at) VALUES (?,?,?,?,?,?,?)",
+            (asset_id, source_id, source_type, source_uri, photo_id,
+             sha256, now),
+        )
+        return {
+            "asset_id": asset_id, "source_id": source_id,
+            "source_type": source_type, "source_uri": source_uri,
+            "photo_id": photo_id, "sha256": sha256,
+            "registered_at": now,
+        }
+
+    def count_inventory_assets(self, *, source_id: str | None = None) -> int:
+        where, params = "", []
+        if source_id:
+            where, params = "WHERE source_id=?", [source_id]
+        row = self._conn.execute(
+            "SELECT COUNT(*) FROM source_asset_inventory_v1 " + where,
+            params).fetchone()
+        return int(row[0])
+
+    def list_inventory_assets(
+        self,
+        *,
+        source_id: str | None = None,
+        limit: int = 100,
+        offset: int = 0,
+    ) -> list[dict[str, Any]]:
+        where, params = "", []
+        if source_id:
+            where, params = "WHERE source_id=?", [source_id]
+        rows = self._conn.execute(
+            "SELECT * FROM source_asset_inventory_v1 " + where
+            + " ORDER BY asset_id LIMIT ? OFFSET ?",
+            [*params, limit, offset]).fetchall()
+        return [dict(r) for r in rows]
 
     # ---------- backup ----------
 
