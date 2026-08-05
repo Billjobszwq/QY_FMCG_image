@@ -94,6 +94,11 @@ def create_app(
         # U2-2：数据中心 Asset API（真实台账 source_asset_inventory_v1）
         from src.platform.api.assets import create_assets_router
         app.include_router(create_assets_router(bundle.store))
+        # U3-6：人工质量金标准入口（status/confusion 只读；
+        # build/verdict 需服务端 session+CSRF，reviewer 取登录身份）
+        from src.platform.api.gold import create_gold_router
+        app.include_router(create_gold_router(
+            bundle.store, auth=AuthService(bundle.store)))
         # U2-3：识别统一（单文件/批量/URL/API 共用 RecognitionTask）
         from src.platform.api.recognition_tasks import (
             create_recognition_tasks_router)

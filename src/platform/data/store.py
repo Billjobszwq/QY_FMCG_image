@@ -327,6 +327,48 @@ BEGIN
 END;
 """
 
+# U3-6：人工质量金标准队列 quality_gold_v1 + 人工结论 quality_human_v1
+#（均追加式不可变；人工未完成时状态只能推导为 waiting_human）。
+_M012 = """
+CREATE TABLE IF NOT EXISTS quality_gold_v1 (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    sha256 TEXT NOT NULL UNIQUE,
+    source_uri TEXT NOT NULL DEFAULT '',
+    stratum TEXT NOT NULL,
+    created_at TEXT NOT NULL
+);
+CREATE TRIGGER quality_gold_v1_no_delete
+    BEFORE DELETE ON quality_gold_v1
+BEGIN
+    SELECT RAISE(ABORT, 'quality_gold_v1 不可变：禁止 DELETE');
+END;
+CREATE TRIGGER quality_gold_v1_no_update
+    BEFORE UPDATE ON quality_gold_v1
+BEGIN
+    SELECT RAISE(ABORT, 'quality_gold_v1 不可变：禁止 UPDATE');
+END;
+CREATE TABLE IF NOT EXISTS quality_human_v1 (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    sha256 TEXT NOT NULL UNIQUE,
+    verdict TEXT NOT NULL,
+    dims_json TEXT NOT NULL DEFAULT '{}',
+    reviewer TEXT NOT NULL,
+    created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_quality_human_sha
+    ON quality_human_v1(sha256);
+CREATE TRIGGER quality_human_v1_no_delete
+    BEFORE DELETE ON quality_human_v1
+BEGIN
+    SELECT RAISE(ABORT, 'quality_human_v1 不可变：禁止 DELETE');
+END;
+CREATE TRIGGER quality_human_v1_no_update
+    BEFORE UPDATE ON quality_human_v1
+BEGIN
+    SELECT RAISE(ABORT, 'quality_human_v1 不可变：禁止 UPDATE');
+END;
+"""
+
 MIGRATIONS: tuple[tuple[str, str], ...] = (
     ("001_platform_init", _M001),
     ("002_labeling_inbox", _M002),
@@ -339,6 +381,7 @@ MIGRATIONS: tuple[tuple[str, str], ...] = (
     ("009_recognition_task_idem", _M009),
     ("010_source_asset_inventory_v1", _M010),
     ("011_quality_decision_v1", _M011),
+    ("012_quality_gold_v1", _M012),
 )
 
 
@@ -1286,6 +1329,63 @@ class PlatformStore:
             d["score"] = json.loads(d.pop("score_json"))
             d["threshold"] = json.loads(d.pop("threshold_json"))
             d["evidence"] = json.loads(d.pop("evidence_json"))
+            out.append(d)
+        return out
+
+    # ---------- quality_gold_v1 / quality_human_v1（U3-6，不可变） ----------
+
+    def add_gold_item(self, *, sha256: str, source_uri: str,
+                      stratum: str) -> bool:
+        """追加一条金标准队列项；sha256 幂等，返回是否新增。"""
+        try:
+            self._conn.execute(
+                "INSERT INTO quality_gold_v1"
+                "(sha256, source_uri, stratum, created_at)"
+                " VALUES (?,?,?,?)",
+                (sha256, source_uri, stratum, _utcnow()))
+            return True
+        except sqlite3.IntegrityError:
+            return False
+
+    def list_gold_queue(self) -> list[dict[str, Any]]:
+        rows = self._conn.execute(
+            "SELECT * FROM quality_gold_v1 ORDER BY id").fetchall()
+        return [dict(r) for r in rows]
+
+    def add_human_verdict(self, *, sha256: str, verdict: str,
+                          reviewer: str,
+                          dims: dict[str, Any] | None = None) -> bool:
+        """追加一条人工结论；同一 sha256 只允许一次（UNIQUE），
+        之后任何 UPDATE/DELETE 由触发器 RAISE。"""
+        try:
+            self._conn.execute(
+                "INSERT INTO quality_human_v1"
+                "(sha256, verdict, dims_json, reviewer, created_at)"
+                " VALUES (?,?,?,?,?)",
+                (sha256, verdict,
+                 json.dumps(dims or {}, ensure_ascii=False),
+                 reviewer, _utcnow()))
+            return True
+        except sqlite3.IntegrityError:
+            return False
+
+    def find_human_verdict(self, sha256: str) -> dict[str, Any] | None:
+        row = self._conn.execute(
+            "SELECT * FROM quality_human_v1 WHERE sha256=?",
+            (sha256,)).fetchone()
+        if row is None:
+            return None
+        d = dict(row)
+        d["dims"] = json.loads(d.pop("dims_json"))
+        return d
+
+    def list_human_verdicts(self) -> list[dict[str, Any]]:
+        rows = self._conn.execute(
+            "SELECT * FROM quality_human_v1 ORDER BY id").fetchall()
+        out = []
+        for r in rows:
+            d = dict(r)
+            d["dims"] = json.loads(d.pop("dims_json"))
             out.append(d)
         return out
 

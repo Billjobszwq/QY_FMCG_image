@@ -232,6 +232,35 @@ export async function fetchAssetsList(opts?: {
   return r.json();
 }
 
+// ---------- quality gold 人工金标准（U3-6） ----------
+
+export interface GoldItem {
+  sha256: string;
+  source_uri: string;
+  stratum: string;
+  status: string;
+  human_verdict: string | null;
+}
+
+export interface GoldStatusBody {
+  waiting_human: number;
+  done: number;
+  items: GoldItem[];
+  note?: string;
+}
+
+export async function fetchGoldStatus(): Promise<GoldStatusBody> {
+  const r = await fetch("/api/v1/quality/gold/status");
+  if (!r.ok) throw new Error(`gold status HTTP ${r.status}`);
+  return r.json();
+}
+
+export async function fetchGoldConfusion(): Promise<Record<string, number>> {
+  const r = await fetch("/api/v1/quality/gold/confusion");
+  if (!r.ok) throw new Error(`gold confusion HTTP ${r.status}`);
+  return r.json();
+}
+
 // ---------- labeling (M4) ----------
 
 export interface LabelingBatch {
@@ -393,6 +422,20 @@ export async function fetchJobs(): Promise<{
 }> {
   const r = await fetch("/api/v1/jobs");
   if (!r.ok) throw new Error(`jobs HTTP ${r.status}`);
+  return r.json();
+}
+
+export async function buildGoldQueue(size = 500): Promise<{ added: number; total_queue: number }> {
+  const r = await postJson("/api/v1/quality/gold/build", { size });
+  if (!r.ok) throw await parseError(r, "gold build");
+  return r.json();
+}
+
+export async function submitGoldVerdict(
+  sha256: string, verdict: "pass" | "fail",
+): Promise<{ accepted: boolean }> {
+  const r = await postJson("/api/v1/quality/gold/verdict", { sha256, verdict });
+  if (!r.ok) throw await parseError(r, "gold verdict");
   return r.json();
 }
 

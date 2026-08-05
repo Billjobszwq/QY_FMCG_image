@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
 import {
-  AssetRow, AssetsSummary, fetchAssetsList, fetchAssetsSummary,
+  AssetRow, AssetsSummary, buildGoldQueue, csrfToken, fetchAssetsList,
+  fetchAssetsSummary, fetchGoldConfusion, fetchGoldStatus, GoldStatusBody,
+  submitGoldVerdict,
 } from "../api";
 
 const PURPOSE_CN: Record<string, string> = {
@@ -14,6 +16,103 @@ const PURPOSE_CN: Record<string, string> = {
 };
 
 const PAGE = 50;
+
+const STRATUM_CN: Record<string, string> = {
+  fail: "自动判 fail 层",
+  pass: "自动判 pass 层",
+  waiting_human: "无自动结论层",
+};
+
+function GoldSection() {
+  const [gold, setGold] = useState<GoldStatusBody | null>(null);
+  const [confusion, setConfusion] = useState<Record<string, number> | null>(null);
+  const [msg, setMsg] = useState("");
+
+  const reload = useCallback(async () => {
+    const [st, cm] = await Promise.all([fetchGoldStatus(), fetchGoldConfusion()]);
+    setGold(st);
+    setConfusion(cm);
+  }, []);
+
+  useEffect(() => {
+    reload().catch((e) => setMsg(String(e)));
+  }, [reload]);
+
+  const onBuild = async () => {
+    try {
+      const r = await buildGoldQueue(500);
+      setMsg(`建队完成：新增 ${r.added}，队列共 ${r.total_queue}`);
+      await reload();
+    } catch (e) {
+      setMsg(`建队失败：${e}`);
+    }
+  };
+
+  const onVerdict = async (sha256: string, v: "pass" | "fail") => {
+    try {
+      await submitGoldVerdict(sha256, v);
+      await reload();
+    } catch (e) {
+      setMsg(`提交失败：${e}`);
+    }
+  };
+
+  if (!gold) return <p className="muted">金标准加载中…</p>;
+  return (
+    <>
+      <h3>人工质量金标准（分层抽样，不可变）</h3>
+      <div className="cards">
+        <div className="card"><div className="num">{gold.waiting_human}</div><div className="muted">等待人工（waiting_human）</div></div>
+        <div className="card"><div className="num">{gold.done}</div><div className="muted">人工已完成</div></div>
+      </div>
+      <div className="row" style={{ gap: 8 }}>
+        <button onClick={() => void onBuild()}>分层建队（500）</button>
+        <span className="muted">需登录；人工结论以服务端 session 身份落库，追加式不可变</span>
+      </div>
+      {msg && <p className="muted">{msg}</p>}
+      <table className="table">
+        <thead><tr><th>SHA</th><th>引用</th><th>层</th><th>状态</th><th>人工结论</th><th>操作</th></tr></thead>
+        <tbody>
+          {gold.items.slice(0, 100).map((it) => (
+            <tr key={it.sha256}>
+              <td className="muted">{it.sha256.slice(0, 12)}…</td>
+              <td className="muted" style={{ maxWidth: 280, overflowWrap: "anywhere" }}>{it.source_uri}</td>
+              <td>{STRATUM_CN[it.stratum] ?? it.stratum}</td>
+              <td>{it.status === "waiting_human" ? "等待人工" : "已完成"}</td>
+              <td>{it.human_verdict ?? "—"}</td>
+              <td>
+                {it.status === "waiting_human" && csrfToken() ? (
+                  <span className="row" style={{ gap: 4 }}>
+                    <button onClick={() => void onVerdict(it.sha256, "pass")}>通过</button>
+                    <button onClick={() => void onVerdict(it.sha256, "fail")}>不通过</button>
+                  </span>
+                ) : (
+                  <span className="muted">{it.status === "waiting_human" ? "登录后审核" : "不可改"}</span>
+                )}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      {gold.items.length === 0 && (
+        <p className="muted">队列为空；点击「分层建队」从本地真实照片抽样（manifest-only 不入队）。</p>
+      )}
+      {confusion && confusion.pairs > 0 && (
+        <details>
+          <summary>混淆矩阵（仅对有人工结论的 {confusion.pairs} 对）</summary>
+          <table className="table">
+            <thead><tr><th>自动 \ 人工</th><th>fail</th><th>pass</th></tr></thead>
+            <tbody>
+              <tr><td>fail</td><td>{confusion.auto_fail_human_fail}</td><td>{confusion.auto_fail_human_pass}</td></tr>
+              <tr><td>pass</td><td>{confusion.auto_pass_human_fail}</td><td>{confusion.auto_pass_human_pass}</td></tr>
+              <tr><td>无结论</td><td>{confusion.auto_none_human_fail}</td><td>{confusion.auto_none_human_pass}</td></tr>
+            </tbody>
+          </table>
+        </details>
+      )}
+    </>
+  );
+}
 
 export default function Assets() {
   const [summary, setSummary] = useState<AssetsSummary | null>(null);
@@ -121,6 +220,8 @@ export default function Assets() {
         <button disabled={offset + PAGE >= count}
           onClick={() => setOffset(offset + PAGE)}>下一页</button>
       </div>
+
+      <GoldSection />
     </section>
   );
 }
