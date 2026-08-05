@@ -369,6 +369,49 @@ BEGIN
 END;
 """
 
+# U4-1：SAM 辅助标注 lineage sam_lineage_v1（point→prompt→mask→box
+# 全链路，追加式不可变；manual_required 时 tight_box 恒为 NULL）。
+_M013 = """
+CREATE TABLE IF NOT EXISTS sam_lineage_v1 (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    instance_id TEXT NOT NULL,
+    photo_id TEXT NOT NULL DEFAULT '',
+    image_sha256 TEXT NOT NULL,
+    point_x REAL NOT NULL,
+    point_y REAL NOT NULL,
+    prompt_config_version TEXT NOT NULL,
+    positive_point_json TEXT NOT NULL,
+    negative_points_json TEXT NOT NULL DEFAULT '[]',
+    coarse_box_json TEXT,
+    model TEXT NOT NULL,
+    checkpoint_sha256 TEXT NOT NULL DEFAULT '',
+    decision TEXT NOT NULL,
+    escalated_to TEXT,
+    tight_box_json TEXT,
+    mask_sha256 TEXT,
+    mask_path TEXT,
+    selection_reason TEXT NOT NULL DEFAULT '',
+    rules_version TEXT NOT NULL DEFAULT '',
+    reject_reasons_json TEXT NOT NULL DEFAULT '[]',
+    run_dir TEXT,
+    created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_sam_lineage_sha
+    ON sam_lineage_v1(image_sha256);
+CREATE INDEX IF NOT EXISTS idx_sam_lineage_instance
+    ON sam_lineage_v1(instance_id);
+CREATE TRIGGER sam_lineage_v1_no_delete
+    BEFORE DELETE ON sam_lineage_v1
+BEGIN
+    SELECT RAISE(ABORT, 'sam_lineage_v1 不可变：禁止 DELETE');
+END;
+CREATE TRIGGER sam_lineage_v1_no_update
+    BEFORE UPDATE ON sam_lineage_v1
+BEGIN
+    SELECT RAISE(ABORT, 'sam_lineage_v1 不可变：禁止 UPDATE');
+END;
+"""
+
 MIGRATIONS: tuple[tuple[str, str], ...] = (
     ("001_platform_init", _M001),
     ("002_labeling_inbox", _M002),
@@ -382,6 +425,7 @@ MIGRATIONS: tuple[tuple[str, str], ...] = (
     ("010_source_asset_inventory_v1", _M010),
     ("011_quality_decision_v1", _M011),
     ("012_quality_gold_v1", _M012),
+    ("013_sam_lineage_v1", _M013),
 )
 
 
@@ -1388,6 +1432,56 @@ class PlatformStore:
             d["dims"] = json.loads(d.pop("dims_json"))
             out.append(d)
         return out
+
+    # ---------- sam_lineage_v1（U4-1，不可变 lineage） ----------
+
+    def record_sam_lineage(self, *, instance_id: str, image_sha256: str,
+                           point_x: float, point_y: float,
+                           prompt_config_version: str,
+                           positive_point: tuple, model: str,
+                           decision: str, selection_reason: str = "",
+                           rules_version: str = "",
+                           photo_id: str = "",
+                           negative_points: list | None = None,
+                           coarse_box: tuple | None = None,
+                           checkpoint_sha256: str = "",
+                           escalated_to: str | None = None,
+                           tight_box: tuple | None = None,
+                           mask_sha256: str | None = None,
+                           mask_path: str | None = None,
+                           reject_reasons: list | None = None,
+                           run_dir: str | None = None) -> int:
+        cur = self._conn.execute(
+            "INSERT INTO sam_lineage_v1"
+            "(instance_id, photo_id, image_sha256, point_x, point_y,"
+            " prompt_config_version, positive_point_json,"
+            " negative_points_json, coarse_box_json, model,"
+            " checkpoint_sha256, decision, escalated_to, tight_box_json,"
+            " mask_sha256, mask_path, selection_reason, rules_version,"
+            " reject_reasons_json, run_dir, created_at)"
+            " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            (instance_id, photo_id, image_sha256, float(point_x),
+             float(point_y), prompt_config_version,
+             json.dumps(list(positive_point)),
+             json.dumps([list(p) for p in (negative_points or [])]),
+             json.dumps(list(coarse_box)) if coarse_box else None,
+             model, checkpoint_sha256, decision, escalated_to,
+             json.dumps(list(tight_box)) if tight_box else None,
+             mask_sha256, mask_path, selection_reason, rules_version,
+             json.dumps(reject_reasons or []), run_dir, _utcnow()))
+        return int(cur.lastrowid)
+
+    def list_sam_lineage(self, *, image_sha: str | None = None,
+                         limit: int = 500,
+                         offset: int = 0) -> list[dict[str, Any]]:
+        where, params = "", []
+        if image_sha:
+            where, params = "WHERE image_sha256=?", [image_sha]
+        rows = self._conn.execute(
+            "SELECT * FROM sam_lineage_v1 " + where
+            + " ORDER BY id LIMIT ? OFFSET ?",
+            [*params, min(limit, 2000), max(offset, 0)]).fetchall()
+        return [dict(r) for r in rows]
 
     # ---------- backup ----------
 
