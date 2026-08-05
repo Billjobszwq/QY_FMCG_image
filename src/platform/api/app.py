@@ -99,6 +99,11 @@ def create_app(
         from src.platform.api.gold import create_gold_router
         app.include_router(create_gold_router(
             bundle.store, auth=AuthService(bundle.store)))
+        # U4-2：标注审核闭环（status 只读；认领/提交/导出需
+        # 服务端 session+CSRF，actor 取登录身份，仲裁仅限 admin）
+        from src.platform.api.review import create_review_router
+        app.include_router(create_review_router(
+            bundle.store, auth=AuthService(bundle.store)))
         # U2-3：识别统一（单文件/批量/URL/API 共用 RecognitionTask）
         from src.platform.api.recognition_tasks import (
             create_recognition_tasks_router)

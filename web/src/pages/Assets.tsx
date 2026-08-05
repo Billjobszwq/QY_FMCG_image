@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useState } from "react";
 import {
-  AssetRow, AssetsSummary, buildGoldQueue, csrfToken, fetchAssetsList,
-  fetchAssetsSummary, fetchGoldConfusion, fetchGoldStatus, GoldStatusBody,
-  submitGoldVerdict,
+  AssetRow, AssetsSummary, buildGoldQueue, claimReviewTask, csrfToken,
+  exportReview, fetchAssetsList, fetchAssetsSummary, fetchGoldConfusion,
+  fetchGoldStatus, fetchReviewStatus, fetchReviewTasks, GoldStatusBody,
+  ReviewTaskRow, submitGoldVerdict, submitReview,
 } from "../api";
 
 const PURPOSE_CN: Record<string, string> = {
@@ -109,6 +110,151 @@ function GoldSection() {
             </tbody>
           </table>
         </details>
+      )}
+    </>
+  );
+}
+
+const REVIEW_STATUS_CN: Record<string, string> = {
+  pending: "待认领",
+  claimed: "已认领待审",
+  awaiting_second: "等待第二审",
+  awaiting_arbitration: "分歧待仲裁",
+  finalized: "已终态",
+};
+
+function ReviewSection() {
+  const [status, setStatus] = useState<{
+    n_tasks: number;
+    status_distribution: Record<string, number>;
+  } | null>(null);
+  const [tasks, setTasks] = useState<ReviewTaskRow[] | null>(null);
+  const [msg, setMsg] = useState("");
+  const [boxInputs, setBoxInputs] = useState<Record<string, string>>({});
+
+  const reload = useCallback(async () => {
+    setStatus(await fetchReviewStatus());
+    if (csrfToken()) {
+      try {
+        setTasks((await fetchReviewTasks()).tasks);
+      } catch {
+        setTasks(null);
+      }
+    }
+  }, []);
+
+  useEffect(() => {
+    reload().catch((e) => setMsg(String(e)));
+  }, [reload]);
+
+  const onClaim = async (t: ReviewTaskRow) => {
+    try {
+      const r = await claimReviewTask(t.claim_token);
+      setMsg(r.claimed ? `已认领 ${t.task_id}` : "该任务已被认领");
+      await reload();
+    } catch (e) {
+      setMsg(`认领失败：${e}`);
+    }
+  };
+
+  const onSubmit = async (t: ReviewTaskRow, verdict: string,
+                          role = "annotator") => {
+    const raw = boxInputs[t.task_id] ?? "";
+    const box = raw.split(/[,，\s]+/).map(Number);
+    if (box.length !== 4 || box.some((v) => !Number.isFinite(v))) {
+      setMsg("请先填写合法框：x1,y1,x2,y2");
+      return;
+    }
+    try {
+      const r = await submitReview(t.task_id, verdict, box, role);
+      setMsg(r.finalized ? `${t.task_id} 已终态` : `${t.task_id}：${r.status}`);
+      await reload();
+    } catch (e) {
+      setMsg(`提交失败：${e}`);
+    }
+  };
+
+  const onExport = async () => {
+    try {
+      const r = await exportReview();
+      setMsg(`导出完成：${r.n_finalized}/${r.n_tasks} 终态，SHA ${r.sha256.slice(0, 12)}…`);
+    } catch (e) {
+      setMsg(`导出失败：${e}`);
+    }
+  };
+
+  if (!status) return <p className="muted">审核队列加载中…</p>;
+  const d = status.status_distribution;
+  return (
+    <>
+      <h3>标注审核闭环（链接派发/认领/单审/双审/仲裁）</h3>
+      <div className="cards">
+        <div className="card"><div className="num">{status.n_tasks}</div><div className="muted">队列总数</div></div>
+        <div className="card"><div className="num">{d.pending ?? 0}</div><div className="muted">待认领</div></div>
+        <div className="card"><div className="num">{(d.claimed ?? 0) + (d.awaiting_second ?? 0)}</div><div className="muted">审核中</div></div>
+        <div className="card"><div className="num">{d.awaiting_arbitration ?? 0}</div><div className="muted">待仲裁</div></div>
+        <div className="card"><div className="num">{d.finalized ?? 0}</div><div className="muted">已终态（final_box 只来自人工）</div></div>
+      </div>
+      <p className="muted">
+        SAM 预测永远不是最终标注；未完成任务不得伪造完成；
+        队列与事件追加式不可变。
+      </p>
+      {msg && <p className="muted">{msg}</p>}
+      {!csrfToken() && (
+        <p className="muted">任务明细需登录；登录后显示认领链接与提交入口。</p>
+      )}
+      {csrfToken() && (
+        <div className="row" style={{ gap: 8 }}>
+          <button onClick={() => void onExport()}>不可变导出（admin）</button>
+        </div>
+      )}
+      {tasks && tasks.length > 0 && (
+        <table className="table">
+          <thead>
+            <tr>
+              <th>photo</th><th>模式</th><th>状态</th><th>认领人</th>
+              <th>final box</th><th>审核框 (x1,y1,x2,y2)</th><th>操作</th>
+            </tr>
+          </thead>
+          <tbody>
+            {tasks.slice(0, 100).map((t) => (
+              <tr key={t.task_id}>
+                <td>{t.photo_id}</td>
+                <td>{t.review_mode === "blind_review" ? "单审（盲抽）" : "双审"}</td>
+                <td>{REVIEW_STATUS_CN[t.status] ?? t.status}</td>
+                <td>{t.claimed_by ?? "—"}</td>
+                <td className="muted">{t.final_box ? t.final_box.join(",") : "—"}</td>
+                <td>
+                  <input
+                    style={{ width: 140 }}
+                    placeholder="x1,y1,x2,y2"
+                    value={boxInputs[t.task_id] ?? ""}
+                    onChange={(e) => setBoxInputs({
+                      ...boxInputs, [t.task_id]: e.target.value,
+                    })}
+                  />
+                </td>
+                <td>
+                  <span className="row" style={{ gap: 4 }}>
+                    {t.status === "pending" && (
+                      <button onClick={() => void onClaim(t)}>认领</button>
+                    )}
+                    {t.status !== "finalized" && (
+                      <button onClick={() => void onSubmit(t, "accepted")}>提交框</button>
+                    )}
+                    {t.status === "awaiting_arbitration" && (
+                      <button onClick={() => void onSubmit(t, "adjudicated", "arbiter")}>仲裁</button>
+                    )}
+                    {t.status === "finalized" && <span className="muted">不可改</span>}
+                  </span>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+      {tasks && tasks.length === 0 && (
+        <p className="muted">审核队列为空；.review_queue 真实队列接入见 U4-3。</p>
       )}
     </>
   );
@@ -222,6 +368,7 @@ export default function Assets() {
       </div>
 
       <GoldSection />
+      <ReviewSection />
     </section>
   );
 }

@@ -439,6 +439,69 @@ export async function submitGoldVerdict(
   return r.json();
 }
 
+// ---------- review flow (U4-2) ----------
+
+export interface ReviewTaskRow {
+  task_id: string;
+  photo_id: string;
+  sha256: string;
+  review_mode: string;
+  status: string;
+  claimed_by: string | null;
+  n_reviews: number;
+  final_box: number[] | null;
+  claim_token: string;
+}
+
+export async function fetchReviewStatus(): Promise<{
+  n_tasks: number;
+  status_distribution: Record<string, number>;
+  note: string;
+}> {
+  const r = await fetch("/api/v1/review/status");
+  if (!r.ok) throw new Error(`review status HTTP ${r.status}`);
+  return r.json();
+}
+
+export async function fetchReviewTasks(): Promise<{
+  n_tasks: number;
+  tasks: ReviewTaskRow[];
+}> {
+  const r = await fetch("/api/v1/review/tasks");
+  if (!r.ok) throw await parseError(r, "review tasks");
+  return r.json();
+}
+
+export async function claimReviewTask(claim_token: string): Promise<{
+  claimed: boolean;
+  task_id: string;
+}> {
+  const r = await postJson("/api/v1/review/claim", { claim_token });
+  if (!r.ok) throw await parseError(r, "review claim");
+  return r.json();
+}
+
+export async function submitReview(
+  taskId: string, verdict: string, box: number[], role = "annotator",
+): Promise<Record<string, unknown>> {
+  const r = await postJson("/api/v1/review/submit", {
+    task_id: taskId, verdict, box, role,
+  });
+  if (!r.ok) throw await parseError(r, "review submit");
+  return r.json();
+}
+
+export async function exportReview(): Promise<{
+  path: string;
+  sha256: string;
+  n_tasks: number;
+  n_finalized: number;
+}> {
+  const r = await postJson("/api/v1/review/export", {});
+  if (!r.ok) throw await parseError(r, "review export");
+  return r.json();
+}
+
 // ---------- auth (UMT-006) ----------
 
 export interface AuthMe {

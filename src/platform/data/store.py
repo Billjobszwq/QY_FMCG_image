@@ -412,6 +412,57 @@ BEGIN
 END;
 """
 
+_M014 = """
+CREATE TABLE IF NOT EXISTS review_task_v1 (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    task_id TEXT NOT NULL UNIQUE,
+    claim_token TEXT NOT NULL UNIQUE,
+    photo_id TEXT NOT NULL,
+    sha256 TEXT NOT NULL,
+    review_mode TEXT NOT NULL,
+    requires_second_review INTEGER NOT NULL DEFAULT 0,
+    status TEXT NOT NULL DEFAULT 'pending',
+    claimed_by TEXT,
+    queue_version TEXT NOT NULL DEFAULT 'rq_v1',
+    protocol TEXT NOT NULL DEFAULT '',
+    import_seed INTEGER,
+    created_at TEXT NOT NULL,
+    UNIQUE(photo_id, sha256, review_mode)
+);
+CREATE TABLE IF NOT EXISTS review_event_v1 (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    task_id TEXT NOT NULL,
+    kind TEXT NOT NULL,
+    actor TEXT NOT NULL,
+    role TEXT NOT NULL DEFAULT 'annotator',
+    verdict TEXT,
+    box_json TEXT,
+    created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_review_event_task
+    ON review_event_v1(task_id);
+CREATE TRIGGER review_task_v1_no_delete
+    BEFORE DELETE ON review_task_v1
+BEGIN
+    SELECT RAISE(ABORT, 'review_task_v1 不可变：禁止 DELETE');
+END;
+CREATE TRIGGER review_task_v1_no_update
+    BEFORE UPDATE ON review_task_v1
+BEGIN
+    SELECT RAISE(ABORT, 'review_task_v1 不可变：禁止 UPDATE');
+END;
+CREATE TRIGGER review_event_v1_no_delete
+    BEFORE DELETE ON review_event_v1
+BEGIN
+    SELECT RAISE(ABORT, 'review_event_v1 不可变：禁止 DELETE');
+END;
+CREATE TRIGGER review_event_v1_no_update
+    BEFORE UPDATE ON review_event_v1
+BEGIN
+    SELECT RAISE(ABORT, 'review_event_v1 不可变：禁止 UPDATE');
+END;
+"""
+
 MIGRATIONS: tuple[tuple[str, str], ...] = (
     ("001_platform_init", _M001),
     ("002_labeling_inbox", _M002),
@@ -426,6 +477,7 @@ MIGRATIONS: tuple[tuple[str, str], ...] = (
     ("011_quality_decision_v1", _M011),
     ("012_quality_gold_v1", _M012),
     ("013_sam_lineage_v1", _M013),
+    ("014_review_task_v1", _M014),
 )
 
 
@@ -1482,6 +1534,94 @@ class PlatformStore:
             + " ORDER BY id LIMIT ? OFFSET ?",
             [*params, min(limit, 2000), max(offset, 0)]).fetchall()
         return [dict(r) for r in rows]
+
+    # ---------- review_task_v1 / review_event_v1（U4-2，不可变+追加式） ----------
+
+    def add_review_task(self, *, task_id: str, claim_token: str,
+                        photo_id: str, sha256: str, review_mode: str,
+                        requires_second_review: bool,
+                        queue_version: str = "rq_v1",
+                        protocol: str = "",
+                        import_seed: int | None = None) -> bool:
+        """幂等写入审核任务；(photo_id, sha256, review_mode) 已存在则跳过
+        （真实队列中盲抽项可能与双审项同照片，故幂等键含 review_mode）。"""
+        try:
+            self._conn.execute(
+                "INSERT INTO review_task_v1"
+                "(task_id, claim_token, photo_id, sha256, review_mode,"
+                " requires_second_review, status, claimed_by,"
+                " queue_version, protocol, import_seed, created_at)"
+                " VALUES (?,?,?,?,?,?,'pending',NULL,?,?,?,?)",
+                (task_id, claim_token, photo_id, sha256, review_mode,
+                 1 if requires_second_review else 0, queue_version,
+                 protocol, import_seed, _utcnow()))
+            return True
+        except sqlite3.IntegrityError:
+            return False
+
+    def list_review_tasks(self, *, limit: int = 5000,
+                          status: str | None = None
+                          ) -> list[dict[str, Any]]:
+        # 单审任务优先派发（requires_second_review 升序），确定性排序
+        rows = self._conn.execute(
+            "SELECT * FROM review_task_v1"
+            " ORDER BY requires_second_review, id LIMIT ?",
+            (min(limit, 20000),)).fetchall()
+        return [dict(r) for r in rows]
+
+    def find_review_task(self, *, photo_id: str, sha256: str,
+                         review_mode: str = ""
+                         ) -> dict[str, Any] | None:
+        if review_mode:
+            r = self._conn.execute(
+                "SELECT * FROM review_task_v1"
+                " WHERE photo_id=? AND sha256=? AND review_mode=?",
+                (photo_id, sha256, review_mode)).fetchone()
+        else:
+            r = self._conn.execute(
+                "SELECT * FROM review_task_v1"
+                " WHERE photo_id=? AND sha256=?",
+                (photo_id, sha256)).fetchone()
+        return dict(r) if r else None
+
+    def find_review_task_by_token(self,
+                                  claim_token: str
+                                  ) -> dict[str, Any] | None:
+        r = self._conn.execute(
+            "SELECT * FROM review_task_v1 WHERE claim_token=?",
+            (claim_token,)).fetchone()
+        return dict(r) if r else None
+
+    def find_review_task_by_id(self,
+                               task_id: str) -> dict[str, Any] | None:
+        r = self._conn.execute(
+            "SELECT * FROM review_task_v1 WHERE task_id=?",
+            (task_id,)).fetchone()
+        return dict(r) if r else None
+
+    def add_review_event(self, *, task_id: str, kind: str, actor: str,
+                         role: str = "annotator",
+                         verdict: str | None = None,
+                         box: tuple | list | None = None) -> int:
+        cur = self._conn.execute(
+            "INSERT INTO review_event_v1"
+            "(task_id, kind, actor, role, verdict, box_json, created_at)"
+            " VALUES (?,?,?,?,?,?,?)",
+            (task_id, kind, actor, role, verdict,
+             json.dumps([float(v) for v in box]) if box is not None
+             else None, _utcnow()))
+        return int(cur.lastrowid)
+
+    def list_review_events(self, task_id: str) -> list[dict[str, Any]]:
+        rows = self._conn.execute(
+            "SELECT * FROM review_event_v1 WHERE task_id=? ORDER BY id",
+            (task_id,)).fetchall()
+        out = []
+        for r in rows:
+            d = dict(r)
+            d["box"] = json.loads(d["box_json"]) if d["box_json"] else None
+            out.append(d)
+        return out
 
     # ---------- backup ----------
 
