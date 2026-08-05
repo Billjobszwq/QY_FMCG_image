@@ -188,6 +188,50 @@ export async function fetchWorkItems(): Promise<WorkItemsBody> {
   return r.json();
 }
 
+// ---------- assets 数据中心（U2-2，真实台账） ----------
+
+export interface AssetsSummary {
+  total_refs: number;
+  unique_sha: number;
+  exact_dup_groups: number;
+  rows_without_sha: number;
+  purposes: Record<string, number>;
+  rows_without_purpose: number;
+  leak_frozen_into_training: number;
+  sources: string[];
+  immutable: boolean;
+  note: string;
+}
+
+export interface AssetRow {
+  asset_id: string;
+  source_id: string;
+  source_type: string;
+  source_uri: string;
+  photo_id: string;
+  sha256: string;
+  registered_at: string;
+  purposes: string[];
+}
+
+export async function fetchAssetsSummary(): Promise<AssetsSummary> {
+  const r = await fetch("/api/v1/assets/summary");
+  if (!r.ok) throw new Error(`assets summary HTTP ${r.status}`);
+  return r.json();
+}
+
+export async function fetchAssetsList(opts?: {
+  source_id?: string; limit?: number; offset?: number;
+}): Promise<{ count: number; items: AssetRow[]; purposes_vocab: string[] }> {
+  const p = new URLSearchParams();
+  if (opts?.source_id) p.set("source_id", opts.source_id);
+  p.set("limit", String(opts?.limit ?? 50));
+  p.set("offset", String(opts?.offset ?? 0));
+  const r = await fetch(`/api/v1/assets?${p.toString()}`);
+  if (!r.ok) throw new Error(`assets list HTTP ${r.status}`);
+  return r.json();
+}
+
 // ---------- labeling (M4) ----------
 
 export interface LabelingBatch {
