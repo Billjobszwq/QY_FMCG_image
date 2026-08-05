@@ -298,6 +298,35 @@ BEGIN
 END;
 """
 
+# U3-5：质量结论台账 quality_decision_v1（追加式不可变）。
+# 全字段：原图 SHA、策略版本、分数、阈值、自动结论、人工结论、模型版本、证据。
+_M011 = """
+CREATE TABLE IF NOT EXISTS quality_decision_v1 (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    sha256 TEXT NOT NULL,
+    policy_version TEXT NOT NULL,
+    score_json TEXT NOT NULL,
+    threshold_json TEXT NOT NULL,
+    auto_decision TEXT NOT NULL,
+    human_decision TEXT,
+    model_version TEXT NOT NULL DEFAULT '',
+    evidence_json TEXT NOT NULL DEFAULT '{}',
+    created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_quality_decision_sha
+    ON quality_decision_v1(sha256);
+CREATE TRIGGER quality_decision_v1_no_delete
+    BEFORE DELETE ON quality_decision_v1
+BEGIN
+    SELECT RAISE(ABORT, 'quality_decision_v1 不可变：禁止 DELETE');
+END;
+CREATE TRIGGER quality_decision_v1_no_update
+    BEFORE UPDATE ON quality_decision_v1
+BEGIN
+    SELECT RAISE(ABORT, 'quality_decision_v1 不可变：禁止 UPDATE');
+END;
+"""
+
 MIGRATIONS: tuple[tuple[str, str], ...] = (
     ("001_platform_init", _M001),
     ("002_labeling_inbox", _M002),
@@ -309,6 +338,7 @@ MIGRATIONS: tuple[tuple[str, str], ...] = (
     ("008_recognition_task", _M008),
     ("009_recognition_task_idem", _M009),
     ("010_source_asset_inventory_v1", _M010),
+    ("011_quality_decision_v1", _M011),
 )
 
 
@@ -1209,6 +1239,55 @@ class PlatformStore:
             + " ORDER BY asset_id LIMIT ? OFFSET ?",
             [*params, limit, offset]).fetchall()
         return [dict(r) for r in rows]
+
+    # ---------- quality_decision_v1（U3-5，不可变质量结论） ----------
+
+    def record_quality_decision(
+        self,
+        *,
+        sha256: str,
+        policy_version: str,
+        score: dict[str, Any],
+        threshold: dict[str, Any],
+        auto_decision: str,
+        human_decision: str | None,
+        model_version: str = "",
+        evidence: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        now = _utcnow()
+        cur = self._conn.execute(
+            "INSERT INTO quality_decision_v1"
+            "(sha256, policy_version, score_json, threshold_json,"
+            " auto_decision, human_decision, model_version, evidence_json,"
+            " created_at) VALUES (?,?,?,?,?,?,?,?,?)",
+            (sha256, policy_version, json.dumps(score, ensure_ascii=False),
+             json.dumps(threshold, ensure_ascii=False), auto_decision,
+             human_decision, model_version,
+             json.dumps(evidence or {}, ensure_ascii=False), now))
+        return {"id": cur.lastrowid, "sha256": sha256,
+                "policy_version": policy_version,
+                "auto_decision": auto_decision,
+                "human_decision": human_decision, "created_at": now}
+
+    def list_quality_decisions(
+        self, *, sha256: str | None = None, limit: int = 100,
+        offset: int = 0,
+    ) -> list[dict[str, Any]]:
+        where, params = "", []
+        if sha256:
+            where, params = "WHERE sha256=?", [sha256]
+        rows = self._conn.execute(
+            "SELECT * FROM quality_decision_v1 " + where
+            + " ORDER BY id DESC LIMIT ? OFFSET ?",
+            [*params, limit, offset]).fetchall()
+        out = []
+        for r in rows:
+            d = dict(r)
+            d["score"] = json.loads(d.pop("score_json"))
+            d["threshold"] = json.loads(d.pop("threshold_json"))
+            d["evidence"] = json.loads(d.pop("evidence_json"))
+            out.append(d)
+        return out
 
     # ---------- backup ----------
 
