@@ -281,4 +281,5 @@
 | # | 事项 | 退出码 | 结果摘要 |
 |---|---|---|---|
 | 1 | VLM-001：红测试 `tests/platform/test_vlm_contracts.py` 13 项 RED（模块不存在）→ 实现 → 全绿 | 0 | 新建 `src/modules/fmcg/cascade/{__init__,contracts}.py`：Candidate/RegionRef/PredictionEnvelope/CandidateSet/RiskDecision/CascadePolicy/QwenSkuDecision 全部 extra=forbid+frozen；accepted 需 sku_id+evidence_ids；calibrated_risk∈[0,1]；stage 限 S1–S5；RiskDecision NaN/Inf/缺校准版本 fail-closed；QwenSkuDecision 冻结 qwen-sku-decision.v1，`assert_sku_within_candidates` 闭集守卫（候选外 sku 不得 accepted）；全量 **518 passed + 1 skipped**（基线 505+13） |
+| 2 | VLM-002：红测试 `tests/platform/test_vlm_registry.py` 12 项 RED（manifest 不存在）→ 实现 → 全绿 | 0 | `src/platform/registry.py` CapabilitySpec 新增 resource_class/residency/meter_units（有默认值，旧 manifest 兼容）；`capabilities()` 返回新字段；新建 `src/modules/fmcg/adapters/__init__.py` 与 `src/modules/fmcg/cascade/manifest.py`（8 能力 ID 冻结：quality=cpu/hot、scene=warm、detect/fast_sku=hot、sam/retrieve=warm、qwen=cold+mlx_vlm+token 计量、human=hot）；`register_fmcg_cascade` adapter 缺失 fail-closed；组合根 `build.py` 增可选 `cascade_adapters` 注入（默认不注入，行为不变）；依赖方向守卫健在（platform 未 import src.modules）；全量 **530 passed + 1 skipped**（518+12） |
 

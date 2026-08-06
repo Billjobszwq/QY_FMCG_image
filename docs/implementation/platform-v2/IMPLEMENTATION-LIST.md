@@ -84,8 +84,8 @@
 | ID | 目标 | 依赖 | Owner | 状态 | 测试 | 证据 | Commit | 剩余风险 |
 |---|---|---|---|---|---|---|---|---|
 | VLM-000 | 运行事实对账：训练 PID/epoch/指标解析、治理偏差登记、STATUS 如实化 | — | agent | DONE | — | results.csv 解析（只读）、ISSUES 登记 | f29cbc7 | 训练未结束不做最终评估文档 |
-| VLM-001 | 冻结级联契约 contracts.py（PredictionEnvelope/RegionRef/CandidateSet/RiskDecision/CascadePolicy/QwenSkuDecision） | VLM-000 | agent | DONE | `tests/platform/test_vlm_contracts.py`（13 红→绿） | extra=forbid+frozen；accepted 需 sku_id+evidence；NaN/Inf fail-closed；闭集守卫 | 见 commit | 全量 518 passed |
-| VLM-002 | Capability Registry 扩展（resource_class/residency/meter_units）+ FMCG manifest 8 能力 + 组合根注入 | VLM-001 | agent | PENDING | registry/manifest 测试 | — | — | 旧 manifest 不得破坏 |
+| VLM-001 | 冻结级联契约 contracts.py（PredictionEnvelope/RegionRef/CandidateSet/RiskDecision/CascadePolicy/QwenSkuDecision） | VLM-000 | agent | DONE | `tests/platform/test_vlm_contracts.py`（13 红→绿） | extra=forbid+frozen；accepted 需 sku_id+evidence；NaN/Inf fail-closed；闭集守卫 | 6fe2a76 | 全量 518 passed |
+| VLM-002 | Capability Registry 扩展（resource_class/residency/meter_units）+ FMCG manifest 8 能力 + 组合根注入 | VLM-001 | agent | DONE | `tests/platform/test_vlm_registry.py`（12 红→绿） | 8 能力 ID 冻结；qwen=cold/mlx_vlm/token 计量；旧 manifest 默认值兼容；守卫测试不 import 领域包 | 见 commit | 全量 530 passed |
 | VLM-003 | ModelResidencyManager（hot/warm/cold、租约、TTL 卸载、熔断、审计） | VLM-002 | agent | PENDING | `tests/platform/test_model_runtime.py` | — | — | Qwen max_concurrency=1 |
 | VLM-004 | CascadePolicy 四档位（fast/standard/deep/expert）+ 策略入 checkpoint | VLM-001 | agent | PENDING | policy 测试 | — | — | — |
 | VLM-005 | risk.py 校准路由（calibrated_risk、硬冲突强制 S4、NaN fail-closed） | VLM-001 | agent | PENDING | risk 测试 | — | — | 校准器冻结 JSON+SHA |

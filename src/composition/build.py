@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
-from typing import Any
+from typing import Any, Mapping
 
 from fastapi import FastAPI
 
@@ -29,6 +29,7 @@ def build_production_bundle(
     recognition_adapter: Any | None = None,
     monitor_adapter: Any | None = None,
     label_studio_adapter: Any | None = None,
+    cascade_adapters: Mapping[str, Any] | None = None,
     services=DEFAULT_SERVICES,
     probe=probe_service,
     engine_kwargs: dict | None = None,
@@ -40,6 +41,11 @@ def build_production_bundle(
     capabilities = bootstrap_default_registry(
         recognition_adapter, monitor_adapter, label_studio_adapter
     )
+    if cascade_adapters is not None:
+        # VLM-002：FMCG 级联能力由组合根注入；adapter 缺失时 fail-closed。
+        from src.modules.fmcg.cascade.manifest import register_fmcg_cascade
+
+        register_fmcg_cascade(capabilities, cascade_adapters)
 
     graphs = GraphRegistry()
     graphs.register(fmcg_pack.DEFINITION)

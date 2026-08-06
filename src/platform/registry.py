@@ -6,7 +6,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Mapping
+from typing import Any, Literal, Mapping
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -21,6 +21,11 @@ class CapabilitySpec(BaseModel):
     capability_id: str
     kind: str
     description: str = ""
+    # VLM-002：通用运行元数据（有默认值，旧 manifest 无需修改）。
+    # 只描述运行特征；平台内不得出现具体领域模型名称。
+    resource_class: str = "cpu"
+    residency: Literal["hot", "warm", "cold"] = "hot"
+    meter_units: tuple[str, ...] = ("call",)
 
 
 class ModuleManifest(BaseModel):
@@ -70,6 +75,9 @@ class CapabilityRegistry:
                         "module_version": manifest.version,
                         "kind": cap.kind,
                         "description": cap.description,
+                        "resource_class": cap.resource_class,
+                        "residency": cap.residency,
+                        "meter_units": cap.meter_units,
                     }
                 )
         return out
