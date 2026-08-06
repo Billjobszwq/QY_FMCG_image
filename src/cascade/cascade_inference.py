@@ -92,6 +92,9 @@ class CascadeRecognizer:
             transforms.Resize(int(224 * 1.14)), transforms.CenterCrop(224),
             transforms.ToTensor(), transforms.Normalize(IMAGENET_MEAN, IMAGENET_STD),
         ])
+        # VLM-006：模型版本标识（只读方法输出用，供审计/证据链）
+        self._detector_version = str(yolo_weight or YOLO_WEIGHT)
+        self._clf_version = str(clf_weight or CLF_WEIGHT)
 
     def _validate_class_alignment(self, reg: dict) -> None:
         """RA-006：类别一致性校验 —— classifier classes / detector names 必须与 registry 对齐。
@@ -179,6 +182,75 @@ class CascadeRecognizer:
                     "source": source,
                 })
         return results
+
+    # ---------- VLM-006：只读分阶段方法（recognize() 兼容行为不变） ----------
+
+    def detect_regions(self, image_bytes, conf=0.25):
+        """只读检测：只输出 region，不输出 final SKU 决策（S1 detector 职责）。
+
+        detector 类别仅作为下游线索，不拥有最终 SKU 决策权（RA-004）。"""
+        img = Image.open(io.BytesIO(image_bytes)).convert("RGB")
+        W, H = img.size
+        arr = np.array(img)
+        rs = self.yolo.predict(arr, conf=conf, imgsz=960, verbose=False,
+                               device=self.device)
+        regions = []
+        idx = 0
+        for r in rs:
+            if r.boxes is None:
+                continue
+            for box, cls, sc in zip(r.boxes.xyxy.tolist(), r.boxes.cls.tolist(),
+                                    r.boxes.conf.tolist()):
+                cls_id = int(cls)
+                regions.append({
+                    "region_id": f"region-{idx:03d}",
+                    "box_px": [float(v) for v in box],
+                    "image_width": int(W),
+                    "image_height": int(H),
+                    "detector_class_id": cls_id,
+                    "detector_name": self.clsid_to_name.get(
+                        cls_id, f"unknown_{cls_id}"),
+                    "detector_conf": float(sc),
+                })
+                idx += 1
+        return regions
+
+    def classify_region(self, image_bytes, box, topk=5):
+        """只读分类：单 region 输出 Top-K/margin/entropy/模型版本（S1 分类职责）。
+
+        输出为原始信号，不得直接当最终决策；路由必须经校准（VLM-005）。"""
+        img = Image.open(io.BytesIO(image_bytes)).convert("RGB")
+        crop = self._crop_resize(img, box)
+        if crop is None:
+            raise ValueError(f"region 框退化，无法分类: {box}")
+        inp = self.tf(crop).unsqueeze(0).to(self.device)
+        with torch.no_grad():
+            probs = torch.softmax(self.clf(inp), dim=1)[0]
+        k = max(1, min(int(topk), self.n_classes))
+        vals, idxs = probs.topk(k)
+        topk_out = [
+            {"sku_id": self.classes[i], "score": float(p)}
+            for p, i in zip(vals.tolist(), idxs.tolist())
+        ]
+        top1 = float(probs.max())
+        top2 = float(probs.topk(2).values[-1]) if self.n_classes > 1 else 0.0
+        p_all = probs.clamp(min=1e-12)
+        entropy = float(-(p_all * p_all.log()).sum())
+        return {
+            "top1": topk_out[0]["sku_id"] if topk_out else "",
+            "topk": topk_out,
+            "margin": top1 - top2,
+            "entropy": entropy,
+            "model_id": self.backbone,
+            "model_version": self._clf_version,
+        }
+
+    def model_versions(self) -> dict:
+        """模型版本标识（审计/证据链用）。"""
+        return {
+            "detector": getattr(self, "_detector_version", str(YOLO_WEIGHT)),
+            "classifier": getattr(self, "_clf_version", str(CLF_WEIGHT)),
+        }
 
 
 def _match_one_to_one(preds: list, gts: list) -> dict:

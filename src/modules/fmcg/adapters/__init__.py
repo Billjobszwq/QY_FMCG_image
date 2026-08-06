@@ -7,3 +7,9 @@
 from __future__ import annotations
 
 ADAPTERS_PACKAGE_VERSION = "0.1.0"
+
+
+class CapabilityAdapterError(Exception):
+    """受控 capability 错误：legacy/后端异常统一映射为此类型。
+
+    Graph 层据此决定回落或转人工，不得吞掉异常后伪造成功。"""
