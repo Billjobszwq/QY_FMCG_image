@@ -1,4 +1,5 @@
 import { ReactNode, useCallback, useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import {
   TrainingGates,
   TrainingRunRow,
@@ -198,6 +199,12 @@ export default function Training() {
   return (
     <section>
       <h2>训练模型（M5 治理 · UMT 修正版）</h2>
+      <p className="muted">
+        模型 hot/warm/cold 驻留与 VLM 加载门禁请看
+        <Link to="/models-runtime">模型驻留</Link>；Qwen3-VL
+        训练在当前 YOLO 训练运行期间全部保持
+        BLOCKED_BY_ACTIVE_TRAINING，仅允许 mock/parse-only 测试。
+      </p>
       {error && <div className="banner banner-unavailable">错误：{error}</div>}
       {gates && (
         <div className={`banner ${gates.can_train ? "banner-healthy" : "banner-degraded"}`}>

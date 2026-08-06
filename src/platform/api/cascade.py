@@ -1,20 +1,26 @@
-"""Task 14（VLM-014）：统一 cascade API（shadow 默认，旧 8091/recognition 不变）。
+"""Task 14/16（VLM-014/VLM-016）：统一 cascade API（shadow 默认，旧 8091/recognition 不变）。
 
-端点（7 个）：
+端点：
 - POST /api/v1/cascade/tasks          提交级联任务（session+CSRF）
 - GET  /api/v1/cascade/tasks          任务列表（登录只读）
-- GET  /api/v1/cascade/tasks/{id}     任务详情 + 终局结果（登录只读）
+- GET  /api/v1/cascade/tasks/{id}     任务详情 + 终局结果 + 成本 + 剩余 SLA（登录只读）
 - GET  /api/v1/cascade/tasks/{id}/regions   检测区域（登录只读）
 - GET  /api/v1/cascade/tasks/{id}/trail     决策轨迹（登录只读）
 - POST /api/v1/cascade/tasks/{id}/cancel    取消（session+CSRF）
 - GET  /api/v1/models/runtime         模型驻留状态（登录只读）
+- GET  /api/v1/packaging/decisions            新包装候选列表（登录只读）
+- GET  /api/v1/packaging/decisions/{id}       新包装候选详情（登录只读）
+- POST /api/v1/packaging/decisions/{id}/finalize  人工裁决（session+CSRF，source 固定 human）
+- POST /api/v1/packaging/supersede            追加取代关系（session+CSRF）
 
 红线：
 - 请求只接受 customer tier、source 与已批准选项；任意 file path/model/
   prompt/graph 定义字段一律拒绝（pydantic extra=forbid → 422）；
 - 单文件/批量/URL/API/内部 Agent 共用同一 RecognitionTask 台账（entry 区分）；
 - URL SSRF 防护沿用现有规则：仅 http/https，拒绝 localhost/私网/链路本地；
-- 默认 shadow：不改变 /api/v1/recognition/recognize 与 8091 行为。
+- 默认 shadow：不改变 /api/v1/recognition/recognize 与 8091 行为；
+- packaging facade 由组合根注入（平台不反向 import Domain Pack）；
+  Qwen 只能建 candidate，API 裁决来源固定 human，终结校验由域模块 fail-closed。
 """
 
 from __future__ import annotations
@@ -22,6 +28,7 @@ from __future__ import annotations
 import ipaddress
 import json
 import secrets
+from datetime import datetime, timezone
 from typing import Any
 from urllib.parse import urlparse
 
@@ -45,6 +52,25 @@ class CascadeTaskBody(BaseModel):
     source: str
     asset: dict[str, Any] | None = None
     url: str | None = None
+
+
+class PackagingFinalizeBody(BaseModel):
+    """新包装人工裁决：只接受已终结状态与名称选择；来源固定 human。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    status: str
+    name_choice: str | None = None
+    new_sku_id: str | None = None
+    display_name: str | None = None
+
+
+class PackagingSupersedeBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    older_id: str
+    newer_id: str
+    reason: str = ""
 
 
 def validate_cascade_url(url: str) -> None:
@@ -82,12 +108,43 @@ def _run_id_of(task: dict[str, Any]) -> str | None:
         return None
 
 
+def _result_meta(task: dict[str, Any]) -> dict[str, Any]:
+    try:
+        return json.loads(task.get("result_json") or "{}") or {}
+    except (TypeError, ValueError):
+        return {}
+
+
+def _remaining_sla(service: Any, task: dict[str, Any]) -> dict[str, Any] | None:
+    """剩余 SLA（业务语言）：按档位 queue_sla_hours 与任务创建时间计算。"""
+    meta = _result_meta(task)
+    tier = meta.get("tier")
+    fn = getattr(service, "sla_hours", None)
+    if tier is None or fn is None:
+        return None
+    try:
+        sla_hours = float(fn(tier))
+        created = datetime.fromisoformat(str(task.get("created_at")))
+    except (TypeError, ValueError):
+        return None
+    if created.tzinfo is None:
+        created = created.replace(tzinfo=timezone.utc)
+    elapsed_h = (datetime.now(timezone.utc) - created).total_seconds() / 3600.0
+    remaining_h = sla_hours - elapsed_h
+    return {
+        "sla_hours": sla_hours,
+        "remaining_hours": round(max(remaining_h, 0.0), 2),
+        "expired": remaining_h <= 0,
+    }
+
+
 def create_cascade_router(
     store: Any,
     service: Any,
     *,
     auth: AuthService | None,
     residency: Any = None,
+    packaging: Any = None,
 ) -> APIRouter:
     router = APIRouter(tags=["cascade"])
 
@@ -158,7 +215,10 @@ def create_cascade_router(
         task = _cascade_task(store, task_id)
         run_id = _run_id_of(task)
         final = service.result(run_id) if run_id else None
-        return {"task": task, "run_id": run_id, "result": final}
+        billing = service.billing(run_id) if run_id else []
+        return {"task": task, "run_id": run_id, "result": final,
+                "billing": billing,
+                "remaining_sla": _remaining_sla(service, task)}
 
     @router.get("/api/v1/cascade/tasks/{task_id}/regions")
     def task_regions(task_id: str, request: Request):
@@ -207,5 +267,60 @@ def create_cascade_router(
         require_principal(auth, request, csrf=False)
         models = residency.models() if residency is not None else []
         return {"count": len(models), "models": models}
+
+    # ---------- 新包装裁决（VLM-016；facade 由组合根注入） ----------
+
+    if packaging is not None:
+
+        @router.get("/api/v1/packaging/decisions")
+        def list_packaging(request: Request, sku_id: str | None = None,
+                           status: str | None = None, limit: int = 200):
+            require_principal(auth, request, csrf=False)
+            rows = packaging.list_decisions(sku_id=sku_id, status=status,
+                                            limit=max(1, min(limit, 500)))
+            return {"count": len(rows), "decisions": rows}
+
+        @router.get("/api/v1/packaging/decisions/{decision_id}")
+        def packaging_detail(decision_id: str, request: Request):
+            require_principal(auth, request, csrf=False)
+            try:
+                decision = packaging.get_decision(decision_id)
+                history = packaging.supersede_history(decision_id)
+            except Exception as e:
+                raise HTTPException(status_code=404, detail=str(e))
+            return {"decision": decision, "supersede_history": history}
+
+        @router.post("/api/v1/packaging/decisions/{decision_id}/finalize")
+        def finalize_packaging(decision_id: str, body: PackagingFinalizeBody,
+                               request: Request):
+            p = require_principal(auth, request)
+            try:
+                decision = packaging.finalize_decision(
+                    decision_id, status=body.status, actor=p["actor"],
+                    source="human",  # API 裁决来源固定 human（Qwen 不得终结）
+                    name_choice=body.name_choice,
+                    new_sku_id=body.new_sku_id,
+                    display_name=body.display_name)
+            except Exception as e:
+                raise HTTPException(status_code=400, detail=str(e))
+            store.append_audit(actor=p["actor"],
+                               action="packaging.finalized_via_api",
+                               subject_type="package_decision",
+                               subject_id=decision_id,
+                               detail={"status": body.status})
+            return {"decision": decision}
+
+        @router.post("/api/v1/packaging/supersede")
+        def supersede_packaging(body: PackagingSupersedeBody,
+                                request: Request):
+            p = require_principal(auth, request)
+            try:
+                packaging.supersede(older_id=body.older_id,
+                                    newer_id=body.newer_id,
+                                    reason=body.reason, actor=p["actor"])
+            except Exception as e:
+                raise HTTPException(status_code=400, detail=str(e))
+            return {"superseded": True, "older_id": body.older_id,
+                    "newer_id": body.newer_id}
 
     return router

@@ -151,6 +151,10 @@ class CascadeService:
         shared = self.store.load_checkpoint(run_id, SHARED_KEY) or {}
         return list(shared.get("billing", []))
 
+    def sla_hours(self, tier: str) -> float:
+        """队列业务 SLA（12/48h）：供 Web/API 展示剩余 SLA，非推理 timeout。"""
+        return policy_for(tier).queue_sla_hours
+
     # ---------- handlers ----------
 
     def _handlers(self, policy: Any) -> dict[str, Any]:

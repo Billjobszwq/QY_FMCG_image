@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import {
   RecognitionResult,
   RecognitionTaskRow,
@@ -107,6 +108,10 @@ export default function Recognition() {
       <p className="muted">
         单文件 / 批量文件 / URL 共用同一识别服务层（8091 级联识别，bundle
         prod_20260804_v4_r2），任务写入统一历史。写操作需登录。
+      </p>
+      <p className="note">
+        新版多模型级联（S0–S5，shadow 默认）请看
+        <Link to="/cascade">级联任务</Link>；本页仍为当前生产链路，不受影响。
       </p>
       {busy && <p className="muted">识别中…</p>}
       {error && <div className="banner banner-unavailable">识别失败：{error}</div>}

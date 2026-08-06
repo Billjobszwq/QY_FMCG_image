@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { Link } from "react-router-dom";
 import {
   LoopRunRow,
   LoopRunView,
@@ -114,6 +115,11 @@ export default function GraphRuns() {
   return (
     <section>
       <h2>Graph Runs</h2>
+      <p className="muted">
+        FMCG 多模型级联（S0–S5）任务请看
+        <Link to="/cascade">级联任务</Link>；模型 hot/warm/cold 驻留请看
+        <Link to="/models-runtime">模型驻留</Link>。本页为底层 GraphRun 视图。
+      </p>
       <div className="row-actions" style={{ display: "flex", gap: 8, marginBottom: 12 }}>
         <input
           ref={fileRef}

@@ -8,6 +8,9 @@ import Annotation from "./pages/Annotation";
 import Assets from "./pages/Assets";
 import Training from "./pages/Training";
 import SystemStatus from "./pages/SystemStatus";
+import CascadeTasks from "./pages/CascadeTasks";
+import ModelRuntime from "./pages/ModelRuntime";
+import NewPackaging from "./pages/NewPackaging";
 
 const NAV = [
   { to: "/", label: "系统总览" },
@@ -16,6 +19,9 @@ const NAV = [
   { to: "/annotation", label: "标注审核" },
   { to: "/assets", label: "数据资产" },
   { to: "/training", label: "训练模型" },
+  { to: "/cascade", label: "级联任务" },
+  { to: "/models-runtime", label: "模型驻留" },
+  { to: "/packaging", label: "新包装" },
   { to: "/status", label: "系统状态" },
 ];
 
@@ -145,6 +151,9 @@ export default function App() {
             <Route path="/annotation" element={<Annotation health={health} />} />
             <Route path="/assets" element={<Assets />} />
             <Route path="/training" element={<Training />} />
+            <Route path="/cascade" element={<CascadeTasks />} />
+            <Route path="/models-runtime" element={<ModelRuntime />} />
+            <Route path="/packaging" element={<NewPackaging />} />
             <Route path="/status" element={<SystemStatus health={health} />} />
           </Routes>
         </main>

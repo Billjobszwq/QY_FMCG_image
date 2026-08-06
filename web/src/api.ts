@@ -394,7 +394,7 @@ async function postJson(url: string, body: unknown, extra?: Record<string, strin
 
 async function parseError(r: Response, fallback: string): Promise<Error> {
   const d = await r.json().catch(() => ({}));
-  return new Error(d.detail ?? `${fallback} HTTP ${r.status}`);
+  return new Error(`${d.detail ?? fallback}（HTTP ${r.status}）`);
 }
 
 export async function dryRunTraining(snapshotId: string): Promise<{ run: TrainingRunRow }> {
@@ -689,5 +689,154 @@ export async function recognizeFile(file: File, conf = 0.25): Promise<Recognitio
     }
     throw new Error(detail);
   }
+  return r.json();
+}
+
+// ---------- cascade 统一级联任务（VLM-016，shadow 默认） ----------
+
+export interface CascadeTaskRow {
+  task_id: string;
+  entry: string;
+  status: string;
+  file_count: number;
+  sku_count: number;
+  created_by: string;
+  created_at: string;
+  result_json: string | null;
+}
+
+export interface CascadeSla {
+  sla_hours: number;
+  remaining_hours: number;
+  expired: boolean;
+}
+
+export interface CascadeTaskDetail {
+  task: CascadeTaskRow;
+  run_id: string | null;
+  result: Record<string, unknown> | null;
+  billing: Array<Record<string, unknown>>;
+  remaining_sla: CascadeSla | null;
+}
+
+export interface CascadeTrailItem {
+  round?: number;
+  node: string;
+  decision: string;
+  reason: string;
+  detail?: Record<string, unknown>;
+}
+
+export async function fetchCascadeTasks(): Promise<{
+  count: number;
+  tasks: CascadeTaskRow[];
+}> {
+  const r = await fetch("/api/v1/cascade/tasks");
+  if (!r.ok) throw await parseError(r, "cascade tasks");
+  return r.json();
+}
+
+export async function fetchCascadeTask(taskId: string): Promise<CascadeTaskDetail> {
+  const r = await fetch(`/api/v1/cascade/tasks/${taskId}`);
+  if (!r.ok) throw await parseError(r, "cascade task");
+  return r.json();
+}
+
+export async function fetchCascadeRegions(taskId: string): Promise<{
+  regions: Array<Record<string, unknown>>;
+}> {
+  const r = await fetch(`/api/v1/cascade/tasks/${taskId}/regions`);
+  if (!r.ok) throw await parseError(r, "cascade regions");
+  return r.json();
+}
+
+export async function fetchCascadeTrail(taskId: string): Promise<{
+  trail: CascadeTrailItem[];
+}> {
+  const r = await fetch(`/api/v1/cascade/tasks/${taskId}/trail`);
+  if (!r.ok) throw await parseError(r, "cascade trail");
+  return r.json();
+}
+
+export async function cancelCascadeTask(taskId: string): Promise<{ status: string }> {
+  const r = await postJson(`/api/v1/cascade/tasks/${taskId}/cancel`, {});
+  if (!r.ok) throw await parseError(r, "cascade cancel");
+  return r.json();
+}
+
+// ---------- models/runtime 模型驻留（VLM-016） ----------
+
+export interface ModelRuntimeRow {
+  model_id: string;
+  residency: string;
+  state: string;
+  max_concurrency: number;
+  idle_ttl_s: number;
+  last_used_at: string | null;
+  active_leases: number;
+  leases: Array<Record<string, unknown>>;
+}
+
+export async function fetchModelsRuntime(): Promise<{
+  count: number;
+  models: ModelRuntimeRow[];
+}> {
+  const r = await fetch("/api/v1/models/runtime");
+  if (!r.ok) throw await parseError(r, "models runtime");
+  return r.json();
+}
+
+// ---------- packaging 新包装裁决（VLM-016） ----------
+
+export interface PackageDecisionRow {
+  decision_id: string;
+  sku_id: string;
+  display_name: string;
+  package_version_id: string;
+  status: string;
+  source: string;
+  run_id: string | null;
+  evidence_json: string | null;
+  name_choice: string | null;
+  created_by: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export async function fetchPackageDecisions(opts?: {
+  status?: string;
+  sku_id?: string;
+}): Promise<{ count: number; decisions: PackageDecisionRow[] }> {
+  const q = new URLSearchParams();
+  if (opts?.status) q.set("status", opts.status);
+  if (opts?.sku_id) q.set("sku_id", opts.sku_id);
+  const r = await fetch(`/api/v1/packaging/decisions?${q}`);
+  if (!r.ok) throw await parseError(r, "packaging decisions");
+  return r.json();
+}
+
+export async function finalizePackageDecision(
+  decisionId: string,
+  body: {
+    status: string;
+    name_choice?: string | null;
+    new_sku_id?: string | null;
+    display_name?: string | null;
+  },
+): Promise<{ decision: PackageDecisionRow }> {
+  const r = await postJson(
+    `/api/v1/packaging/decisions/${decisionId}/finalize`, body,
+  );
+  if (!r.ok) throw await parseError(r, "packaging finalize");
+  return r.json();
+}
+
+export async function supersedePackageDecision(body: {
+  older_id: string;
+  newer_id: string;
+  reason?: string;
+}): Promise<{ superseded: boolean }> {
+  const r = await postJson("/api/v1/packaging/supersede", body);
+  if (!r.ok) throw await parseError(r, "packaging supersede");
   return r.json();
 }
