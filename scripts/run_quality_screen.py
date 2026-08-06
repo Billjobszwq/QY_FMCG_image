@@ -2,8 +2,10 @@
 
 口径（用户指令：全照片集不抽样，可适当提高门槛）：
 - 池 = batch2_v4(6510) ∪ sku_v6(9976)，208 类对齐；内容 SHA 去重；
-- 三维分数（src.training.quality_gate）任一超阈 → reject；
-- 证据落盘 .eval/sam_refine/quality_screen_<ts>.json（分数+阈值+决策）。
+- V2 处置（VLM-008）：缺水平线→manual_review（tilt_unobservable），
+  单一弱启发式→warn，≥2 维 fail 才自动 reject；
+- 每条判定保留原图 SHA、规则版本、分数、阈值与证据；
+- 旧 tilt reject 历史 JSON 不改写；本脚本只新建带时间戳证据文件。
 
 用法：
   /Users/zhangweiqi/miniconda3/bin/python3 -m scripts.run_quality_screen
@@ -26,7 +28,7 @@ import sys  # noqa: E402
 sys.path.insert(0, str(ROOT))
 
 from src.training.quality_gate import (  # noqa: E402
-    THRESHOLDS, blur_score, gate_decision, reflection_score, tilt_score,
+    QUALITY_GATE_VERSION, THRESHOLDS, assess_quality,
 )
 
 SOURCES = [".datasets/batch2_v4", ".datasets/sku_v6"]
@@ -68,18 +70,21 @@ def main():
             continue
         seen_sha[sha] = p.name
         try:
-            gray = np.asarray(Image.open(p).convert("L"), dtype=np.float64)
-            scores = {"blur": round(blur_score(gray), 6),
-                      "reflection": round(reflection_score(gray), 6),
-                      "tilt": round(tilt_score(gray), 6)}
-            ok, reasons = gate_decision(scores)
+            gray = np.asarray(Image.open(p).convert("L"))
+            verdict = assess_quality(gray)
+            decision = {"pass": "accept", "warn": "accept_warn",
+                        "manual_review": "manual_review",
+                        "reject": "reject"}[verdict.disposition]
             records.append({"file": p.name, "source": src, "sha256": sha,
-                            "scores": scores,
-                            "decision": "accept" if ok else "reject",
-                            "reasons": reasons})
-        except Exception as e:  # 解码失败等：fail-closed
+                            "scores": verdict.scores,
+                            "thresholds": verdict.thresholds,
+                            "policy_version": verdict.policy_version,
+                            "decision": decision,
+                            "reasons": list(verdict.reason_codes)})
+        except Exception as e:  # 解码失败等：fail-closed 进人工复核
             records.append({"file": p.name, "source": src, "sha256": sha,
-                            "decision": "reject", "reasons": [f"error:{e}"]})
+                            "decision": "manual_review",
+                            "reasons": [f"error:{e}"]})
         if (i + 1) % 500 == 0:
             elapsed = time.time() - t0
             eta = elapsed / (i + 1) * (len(files) - i - 1)
@@ -87,6 +92,8 @@ def main():
                   flush=True)
 
     accept = sum(1 for r in records if r["decision"] == "accept")
+    accept_warn = sum(1 for r in records if r["decision"] == "accept_warn")
+    review = sum(1 for r in records if r["decision"] == "manual_review")
     reject = sum(1 for r in records if r["decision"] == "reject")
     reason_hist: dict[str, int] = {}
     for r in records:
@@ -99,18 +106,23 @@ def main():
     ev_path.write_text(json.dumps({
         "created_at": datetime.now().isoformat(),
         "sources": SOURCES,
+        "policy_version": QUALITY_GATE_VERSION,
         "thresholds": THRESHOLDS,
         "total_files": len(files),
         "unique_sha": len(seen_sha),
         "duplicates": dup,
         "accepted": accept,
+        "accepted_warn": accept_warn,
+        "manual_review": review,
         "rejected": reject,
         "reason_histogram": reason_hist,
         "wall_sec": round(time.time() - t0, 1),
         "records": records,
     }, ensure_ascii=False, indent=1), encoding="utf-8")
     print(json.dumps({"total": len(files), "unique": len(seen_sha),
-                      "duplicate": dup, "accepted": accept, "rejected": reject,
+                      "duplicate": dup, "accepted": accept,
+                      "accept_warn": accept_warn, "manual_review": review,
+                      "rejected": reject,
                       "reasons": reason_hist, "evidence": str(ev_path)},
                      ensure_ascii=False, indent=1))
 

@@ -10,7 +10,9 @@ import pytest
 from PIL import Image, ImageFilter
 
 from src.training.quality_gate import (
+    assess_quality,
     blur_score,
+    decide_quality,
     gate_decision,
     reflection_score,
     tilt_score,
@@ -120,3 +122,40 @@ class TestGateDecision:
         # 口径：score > threshold 才 fail；等于阈值不 fail
         ok, _ = gate_decision(self._scores(blur=THRESHOLDS["blur"]))
         assert ok is True
+
+
+class TestDispositionPolicyV2:
+    """VLM-008：缺水平线→manual_review；单一弱启发式不得自动 reject。"""
+
+    def test_missing_horizontal_lines_requires_review_not_auto_reject(self):
+        out = assess_quality(np.zeros((64, 64), dtype=np.uint8))
+        assert out.disposition == "manual_review"
+        assert "tilt_unobservable" in out.reason_codes
+
+    def test_single_weak_heuristic_cannot_auto_reject(self):
+        out = decide_quality({"blur": 0.46, "reflection": 0.0, "tilt": None})
+        assert out.disposition in {"warn", "manual_review"}
+
+    def test_single_fail_all_observable_is_warn(self):
+        out = decide_quality({"blur": 0.5, "reflection": 0.0, "tilt": 0.1})
+        assert out.disposition == "warn"
+
+    def test_multi_strong_signals_reject(self):
+        out = decide_quality({"blur": 0.9, "reflection": 0.8, "tilt": 0.9})
+        assert out.disposition == "reject"
+
+    def test_all_observable_pass(self):
+        out = decide_quality({"blur": 0.1, "reflection": 0.0, "tilt": 0.1})
+        assert out.disposition == "pass" and out.reason_codes == ()
+
+    def test_sharp_shelf_not_auto_rejected(self):
+        gray = np.asarray(_sharp_shelf().convert("L"))
+        out = assess_quality(gray)
+        assert "tilt_unobservable" not in out.reason_codes
+        assert out.disposition != "reject"
+
+    def test_verdict_keeps_evidence(self):
+        out = decide_quality({"blur": 0.46, "reflection": 0.0, "tilt": None})
+        assert out.policy_version
+        assert out.scores["tilt"] is None
+        assert out.thresholds == THRESHOLDS
