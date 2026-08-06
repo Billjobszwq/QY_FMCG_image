@@ -27,6 +27,15 @@ training = [
 platform = [
     "label-studio>=1.23,<2",
 ]
+# vlm-train：Qwen3-VL 4B MLX 训练链路（VLM-009）。
+# 仅声明，不随主环境安装；真实安装必须使用独立环境（.venv_mlx_vlm），
+# 版本以安装当日 pip freeze lock 与官方兼容性探针为准，
+# 且必须先通过 scripts.run_qwen3vl_preflight 硬门禁（G-CURRENT/G-APPLE）。
+vlm-train = [
+    "mlx-vlm[train]",
+    "datasets",
+    "Pillow",
+]
 # dev：测试与质量门
 dev = [
     "pytest>=8.0",
