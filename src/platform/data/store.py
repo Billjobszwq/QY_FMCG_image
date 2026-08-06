@@ -546,6 +546,49 @@ CREATE TABLE IF NOT EXISTS cascade_usage (
 CREATE INDEX IF NOT EXISTS idx_cascade_usage_run ON cascade_usage(run_id);
 """
 
+_M017 = """
+-- 新包装工作流（VLM-015）：受审包装演进台账。
+-- 决定行一经终结（same_sku_new_package/new_sku/unknown/rejected）即不可变；
+-- 历史修正只追加 package_supersede 关系，不改写旧行；禁止 DELETE。
+CREATE TABLE IF NOT EXISTS package_decision (
+    decision_id TEXT PRIMARY KEY,
+    sku_id TEXT NOT NULL DEFAULT '',
+    display_name TEXT NOT NULL,
+    package_version_id TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'candidate'
+        CHECK (status IN ('candidate','reviewing','same_sku_new_package',
+                          'new_sku','unknown','rejected')),
+    source TEXT NOT NULL CHECK (source IN ('qwen','human','customer_policy')),
+    run_id TEXT,
+    evidence_json TEXT NOT NULL DEFAULT '[]',
+    name_choice TEXT,
+    created_by TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_package_decision_sku ON package_decision(sku_id);
+CREATE TABLE IF NOT EXISTS package_supersede (
+    supersede_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    older_decision_id TEXT NOT NULL REFERENCES package_decision(decision_id),
+    newer_decision_id TEXT NOT NULL REFERENCES package_decision(decision_id),
+    reason TEXT NOT NULL DEFAULT '',
+    created_by TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    UNIQUE (older_decision_id, newer_decision_id)
+);
+CREATE TRIGGER package_decision_no_delete
+    BEFORE DELETE ON package_decision
+BEGIN
+    SELECT RAISE(ABORT, 'package_decision 不可变：禁止 DELETE');
+END;
+CREATE TRIGGER package_decision_no_update_final
+    BEFORE UPDATE ON package_decision
+    WHEN OLD.status IN ('same_sku_new_package','new_sku','unknown','rejected')
+BEGIN
+    SELECT RAISE(ABORT, '已终结包装决定不可变：禁止 UPDATE');
+END;
+"""
+
 MIGRATIONS: tuple[tuple[str, str], ...] = (
     ("001_platform_init", _M001),
     ("002_labeling_inbox", _M002),
@@ -563,6 +606,7 @@ MIGRATIONS: tuple[tuple[str, str], ...] = (
     ("014_review_task_v1", _M014),
     ("015_model_residency", _M015),
     ("016_job_sla_and_cascade_usage", _M016),
+    ("017_package_decision_v1", _M017),
 )
 
 
@@ -1089,6 +1133,115 @@ class PlatformStore:
             rows = self._conn.execute(
                 "SELECT * FROM usage_event ORDER BY usage_id LIMIT ?", (limit,)
             ).fetchall()
+        return [dict(r) for r in rows]
+
+    # ---------- package_decision / supersede（VLM-015） ----------
+
+    def create_package_decision(
+        self,
+        *,
+        decision_id: str,
+        sku_id: str,
+        display_name: str,
+        package_version_id: str,
+        status: str,
+        source: str,
+        run_id: str | None = None,
+        evidence: list[Any] | None = None,
+        name_choice: str | None = None,
+        created_by: str,
+    ) -> dict[str, Any]:
+        now = _utcnow()
+        try:
+            self._conn.execute(
+                "INSERT INTO package_decision(decision_id, sku_id, display_name,"
+                " package_version_id, status, source, run_id, evidence_json,"
+                " name_choice, created_by, created_at, updated_at)"
+                " VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+                (decision_id, sku_id, display_name, package_version_id,
+                 status, source, run_id,
+                 json.dumps(evidence or [], ensure_ascii=False),
+                 name_choice, created_by, now, now),
+            )
+        except sqlite3.IntegrityError as e:
+            raise StoreError(f"package_decision 已存在或字段非法: {decision_id}") from e
+        self._conn.commit()
+        return self.get_package_decision(decision_id)
+
+    def get_package_decision(self, decision_id: str) -> dict[str, Any]:
+        row = self._conn.execute(
+            "SELECT * FROM package_decision WHERE decision_id=?",
+            (decision_id,),
+        ).fetchone()
+        if row is None:
+            raise StoreError(f"package_decision 不存在: {decision_id}")
+        return dict(row)
+
+    def update_package_decision(
+        self, decision_id: str, *, fields: dict[str, Any]
+    ) -> dict[str, Any]:
+        allowed = {"sku_id", "display_name", "package_version_id",
+                   "status", "name_choice"}
+        bad = set(fields) - allowed
+        if bad:
+            raise StoreError(f"非法更新字段: {sorted(bad)}")
+        if not fields:
+            return self.get_package_decision(decision_id)
+        sets = ", ".join(f"{k}=?" for k in fields)
+        params = list(fields.values()) + [_utcnow(), decision_id]
+        try:
+            cur = self._conn.execute(
+                f"UPDATE package_decision SET {sets}, updated_at=?"
+                " WHERE decision_id=?",
+                params,
+            )
+        except sqlite3.IntegrityError as e:
+            raise StoreError(f"package_decision 更新被拒绝: {decision_id}") from e
+        if cur.rowcount == 0:
+            raise StoreError(f"package_decision 不存在: {decision_id}")
+        self._conn.commit()
+        return self.get_package_decision(decision_id)
+
+    def list_package_decisions(
+        self, *, sku_id: str | None = None, status: str | None = None,
+        limit: int = 200,
+    ) -> list[dict[str, Any]]:
+        sql = "SELECT * FROM package_decision"
+        conds, params = [], []
+        if sku_id is not None:
+            conds.append("sku_id=?"); params.append(sku_id)
+        if status is not None:
+            conds.append("status=?"); params.append(status)
+        if conds:
+            sql += " WHERE " + " AND ".join(conds)
+        sql += " ORDER BY created_at DESC, rowid DESC LIMIT ?"
+        params.append(limit)
+        return [dict(r) for r in self._conn.execute(sql, params).fetchall()]
+
+    def add_package_supersede(
+        self, *, older_decision_id: str, newer_decision_id: str,
+        reason: str, created_by: str,
+    ) -> None:
+        try:
+            self._conn.execute(
+                "INSERT INTO package_supersede(older_decision_id,"
+                " newer_decision_id, reason, created_by, created_at)"
+                " VALUES (?,?,?,?,?)",
+                (older_decision_id, newer_decision_id, reason,
+                 created_by, _utcnow()),
+            )
+        except sqlite3.IntegrityError as e:
+            raise StoreError(
+                f"supersede 重复或引用缺失: {older_decision_id} -> {newer_decision_id}"
+            ) from e
+        self._conn.commit()
+
+    def list_package_supersedes(self, decision_id: str) -> list[dict[str, Any]]:
+        rows = self._conn.execute(
+            "SELECT * FROM package_supersede WHERE older_decision_id=?"
+            " ORDER BY supersede_id",
+            (decision_id,),
+        ).fetchall()
         return [dict(r) for r in rows]
 
     # ---------- evidence / asset ----------
