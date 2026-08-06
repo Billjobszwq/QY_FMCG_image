@@ -17,6 +17,12 @@ from typing import Any, Callable
 
 from src.eval.truebox_eval import evaluate_truebox
 from src.platform.iam import can as iam_can
+from src.training.vlm.train import (
+    AUTH_CODES,
+    DEFAULT_BASE_MODEL,
+    VlmPlanError,
+    plan_vlm,
+)
 
 from .mps_gate import run_mps_g0
 
@@ -440,6 +446,152 @@ class TrainingGovernanceService:
                 "仅 completed_candidate 可发布；训练完成只产生 candidate，不自动发布")
         return self.store.update_training_run(
             run_id, publish_status="approved", publish_approved_by=actor)
+
+    # ----- VLM-011：Qwen3-VL QLoRA 受治理 launcher -----
+
+    # 完成制品必须全部注册，缺一即 fail-closed
+    REQUIRED_VLM_ARTIFACTS = (
+        "adapter", "config", "loss", "tokens_per_second", "env_lock",
+        "data_hash", "model_revision", "error_ledger",
+    )
+
+    def set_vlm_vision_authorized(self, value: bool, *, actor: str,
+                                  role: str) -> None:
+        """train_vision 需独立授权动作（不得与 training_authorized 合并）。"""
+        if not iam_can(role, "training.approve"):
+            raise AuthorizationRequired(
+                f"角色 {role} 无 training.approve 权限")
+        self.store.set_flag("vlm_train_vision_authorized",
+                            "true" if value else "false", actor)
+
+    def plan_vlm_training(
+        self,
+        *,
+        actor: str,
+        role: str,
+        dataset_path: str,
+        output_dir: str,
+        snapshot: dict[str, Any] | None = None,
+        preflight_report: dict[str, Any] | None = None,
+        zero_shot_report: dict[str, Any] | None = None,
+        benchmark_report: dict[str, Any] | None = None,
+        epochs: int = 1,
+        batch_size: int = 1,
+        learning_rate: float = 1e-5,
+        lora_rank: int = 16,
+        lora_alpha: int = 32,
+        gradient_accumulation_steps: int = 1,
+        train_vision: bool = False,
+        model_path: str = DEFAULT_BASE_MODEL,
+    ) -> dict[str, Any]:
+        """VLM QLoRA 计划：证据链门禁全绿才产出冻结命令（不执行训练）。
+
+        门禁：snapshot/preflight/zero-shot/benchmark 证据、输出目录占用、
+        训练冲突（存在 queued/running run）、授权（flag+IAM）、第一轮
+        参数上限、train_vision 独立授权。真实执行仍被资源门禁阻断。
+        kind 复用 dry_run（schema 枚举不变），以 status=vlm_dry_run 区分。
+        """
+        authorized = (
+            self.store.get_flag("training_authorized") == "true"
+            and iam_can(role, "training.approve"))
+        vision_authorized = (
+            self.store.get_flag("vlm_train_vision_authorized") == "true"
+            and iam_can(role, "training.approve"))
+        active_training = any(
+            r.get("status") in ("queued", "running")
+            for r in self.store.list_training_runs())
+        spec = {
+            "model_path": model_path, "dataset_path": dataset_path,
+            "output_dir": output_dir, "epochs": epochs,
+            "batch_size": batch_size, "learning_rate": learning_rate,
+            "lora_rank": lora_rank, "lora_alpha": lora_alpha,
+            "gradient_accumulation_steps": gradient_accumulation_steps,
+            "train_vision": train_vision,
+        }
+        evidence = {
+            "snapshot": snapshot, "preflight_report": preflight_report,
+            "zero_shot_report": zero_shot_report,
+            "benchmark_report": benchmark_report,
+            "active_training": active_training,
+            "authorized": authorized,
+            "vision_authorized": vision_authorized,
+        }
+        try:
+            plan = plan_vlm(spec, evidence)
+        except VlmPlanError as e:
+            if set(e.blockers) & AUTH_CODES:
+                raise AuthorizationRequired(str(e)) from e
+            raise TrainingGovError(str(e)) from e
+        run = {
+            "run_id": uuid.uuid4().hex,
+            "snapshot_id": None,
+            "kind": "dry_run",
+            "plan_json": json.dumps({
+                **plan,
+                "evidence": {
+                    "snapshot_manifest_sha256": snapshot.get(
+                        "manifest_sha256"),
+                    "train_instances": snapshot.get("train_instances"),
+                    "zero_shot_coverage": zero_shot_report.get("coverage"),
+                    "recommended_batch_size": benchmark_report.get(
+                        "recommended_batch_size"),
+                },
+            }, ensure_ascii=False),
+            "command_json": json.dumps(plan["command"], ensure_ascii=False),
+            "budget_json": json.dumps(
+                {"minutes": 0,
+                 "note": "真实预算由隔离环境 benchmark 实测确定"},
+                ensure_ascii=False),
+            "stop_lines_json": json.dumps([
+                "loss 发散即停",
+                "训练冲突/温度/swap 超阈即停",
+            ], ensure_ascii=False),
+            "status": "vlm_dry_run",
+            "publish_status": "none",
+            "requested_by": actor,
+            "created_at": _utcnow(),
+            "updated_at": _utcnow(),
+        }
+        self.store.create_training_run(run)
+        self.store.append_audit(
+            actor=actor, action="vlm.plan_training",
+            subject_type="training_run", subject_id=run["run_id"],
+            detail={"model_id": plan["model_id"],
+                    "base_model": plan["base_model"],
+                    "limits": plan["limits"]})
+        return run
+
+    def complete_vlm_training(self, run_id: str, *, actor: str,
+                              artifacts: dict[str, Any]) -> dict[str, Any]:
+        """登记 VLM 训练结果：只产生 completed_candidate，不自动发布。
+
+        adapter/config/loss/tokens/s/env_lock/数据 hash/模型 revision/
+        错误样本账本必须全部注册；发布仍需独立 admin 审批且生产切换
+        默认 false。
+        """
+        run = self.store.get_training_run(run_id)
+        if run is None:
+            raise KeyError(run_id)
+        if run["status"] != "vlm_dry_run":
+            raise TrainingGovError(
+                f"仅 vlm_dry_run 计划可登记为 completed_candidate"
+                f"（当前 status={run.get('status')}）")
+        missing = [k for k in self.REQUIRED_VLM_ARTIFACTS
+                   if k not in artifacts]
+        if missing:
+            raise TrainingGovError(f"VLM 完成制品缺失: {missing}")
+        plan = json.loads(run.get("plan_json") or "{}")
+        plan["artifacts"] = artifacts
+        out = self.store.update_training_run(
+            run_id, kind="completed_candidate",
+            status="completed_candidate",
+            plan_json=json.dumps(plan, ensure_ascii=False))
+        self.store.append_audit(
+            actor=actor, action="vlm.complete_training",
+            subject_type="training_run", subject_id=run_id,
+            detail={"artifacts": sorted(artifacts),
+                    "note": "candidate 不自动发布"})
+        return out
 
     # ----- 视图 -----
 

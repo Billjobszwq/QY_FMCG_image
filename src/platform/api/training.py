@@ -58,6 +58,23 @@ class AuthorizeBody(BaseModel):
     value: bool
 
 
+class VlmPlanBody(BaseModel):
+    """VLM-011：QLoRA 计划证据链（均由服务端门禁校验，不执行训练）。"""
+    dataset_path: str
+    output_dir: str
+    snapshot: dict[str, Any] | None = None
+    preflight_report: dict[str, Any] | None = None
+    zero_shot_report: dict[str, Any] | None = None
+    benchmark_report: dict[str, Any] | None = None
+    epochs: int = 1
+    batch_size: int = 1
+    learning_rate: float = 1e-5
+    lora_rank: int = 16
+    lora_alpha: int = 32
+    gradient_accumulation_steps: int = 1
+    train_vision: bool = False
+
+
 def create_training_router(service: Any,
                            auth: AuthService | None = None,
                            worker: Any = None) -> APIRouter:
@@ -168,6 +185,18 @@ def create_training_router(service: Any,
         except Exception as e:
             raise HTTPException(status_code=403, detail=str(e))
         return {"run": out}
+
+    @router.post("/api/v1/training/runs/vlm/plan")
+    def plan_vlm(body: VlmPlanBody, request: Request):
+        """VLM-011：受治理 QLoRA 计划（证据链门禁，不执行真实训练）。"""
+        p = require_principal(auth, request)
+        try:
+            run = service.plan_vlm_training(
+                actor=p["actor"], role=p["role"], **body.model_dump())
+        except Exception as e:
+            code = 403 if type(e).__name__ == "AuthorizationRequired" else 400
+            raise HTTPException(status_code=code, detail=str(e))
+        return {"run": run}
 
     @router.post("/api/v1/training/runs/{run_id}/publish/request")
     def publish_request(run_id: str, request: Request):
