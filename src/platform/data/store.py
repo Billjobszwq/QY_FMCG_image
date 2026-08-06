@@ -19,7 +19,7 @@ from typing import Any
 
 RUN_STATUSES = ("pending", "running", "waiting_human", "completed", "failed", "cancelled")
 NODE_STATUSES = ("pending", "running", "completed", "failed", "skipped")
-JOB_STATUSES = ("queued", "running", "succeeded", "failed", "cancelled")
+JOB_STATUSES = ("queued", "running", "succeeded", "failed", "cancelled", "expired")
 
 
 class StoreError(Exception):
@@ -487,6 +487,65 @@ CREATE TABLE IF NOT EXISTS model_lease (
 CREATE INDEX IF NOT EXISTS idx_model_lease_model ON model_lease(model_id);
 """
 
+_M016 = """
+-- 队列 SLA 与计费账本（追加式：只增列/表/索引，保留 usage_event，不 rename 历史表名）。
+-- job 表重建以扩展 status CHECK（新增 expired）并增加 attempt_timeout_at/queue_deadline_at。
+-- attempt_timeout_at = 单次尝试超时（超时仅影响当次 attempt，重试/降级）；
+-- queue_deadline_at = 队列业务 SLA（12h/48h），到期必须 expired/转人工并写审计。
+PRAGMA foreign_keys=OFF;
+CREATE TABLE IF NOT EXISTS job_m016 (
+    job_id TEXT PRIMARY KEY,
+    kind TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'queued'
+        CHECK (status IN ('queued','running','succeeded','failed','cancelled','expired')),
+    payload_json TEXT NOT NULL DEFAULT '{}',
+    result_json TEXT,
+    error TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    lease_until TEXT,
+    worker_id TEXT,
+    attempt_count INTEGER NOT NULL DEFAULT 0,
+    max_attempts INTEGER NOT NULL DEFAULT 3,
+    attempt_timeout_at TEXT,
+    queue_deadline_at TEXT
+);
+INSERT INTO job_m016 (job_id, kind, status, payload_json, result_json, error,
+        created_at, updated_at, lease_until, worker_id, attempt_count, max_attempts)
+    SELECT job_id, kind, status, payload_json, result_json, error,
+        created_at, updated_at, lease_until, worker_id,
+        COALESCE(attempt_count, 0), COALESCE(max_attempts, 3)
+    FROM job;
+DROP TABLE job;
+ALTER TABLE job_m016 RENAME TO job;
+PRAGMA foreign_keys=ON;
+CREATE INDEX IF NOT EXISTS idx_job_status ON job(status);
+CREATE INDEX IF NOT EXISTS idx_job_queue_deadline ON job(queue_deadline_at);
+
+CREATE TABLE IF NOT EXISTS cascade_usage (
+    usage_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    ts TEXT NOT NULL,
+    run_id TEXT NOT NULL REFERENCES graph_run(run_id),
+    billing_key TEXT NOT NULL,
+    capability TEXT NOT NULL,
+    model TEXT NOT NULL DEFAULT '',
+    model_version TEXT NOT NULL DEFAULT '',
+    tier TEXT NOT NULL,
+    photos INTEGER NOT NULL DEFAULT 0,
+    regions INTEGER NOT NULL DEFAULT 0,
+    tokens INTEGER NOT NULL DEFAULT 0,
+    compute_ms REAL NOT NULL DEFAULT 0,
+    cold_start INTEGER NOT NULL DEFAULT 0,
+    cache_hit INTEGER NOT NULL DEFAULT 0,
+    rate_card_version TEXT NOT NULL,
+    resource_cost REAL NOT NULL DEFAULT 0,
+    billed_cost REAL NOT NULL DEFAULT 0,
+    detail_json TEXT NOT NULL DEFAULT '{}',
+    UNIQUE (run_id, billing_key)
+);
+CREATE INDEX IF NOT EXISTS idx_cascade_usage_run ON cascade_usage(run_id);
+"""
+
 MIGRATIONS: tuple[tuple[str, str], ...] = (
     ("001_platform_init", _M001),
     ("002_labeling_inbox", _M002),
@@ -503,6 +562,7 @@ MIGRATIONS: tuple[tuple[str, str], ...] = (
     ("013_sam_lineage_v1", _M013),
     ("014_review_task_v1", _M014),
     ("015_model_residency", _M015),
+    ("016_job_sla_and_cascade_usage", _M016),
 )
 
 
@@ -746,16 +806,19 @@ class PlatformStore:
         kind: str,
         payload: dict[str, Any] | None = None,
         max_attempts: int = 3,
+        attempt_timeout_at: str | None = None,
+        queue_deadline_at: str | None = None,
     ) -> dict[str, Any]:
         now = _utcnow()
         try:
             self._conn.execute(
                 "INSERT INTO job(job_id, kind, status, payload_json, max_attempts,"
-                " created_at, updated_at) VALUES (?,?,?,?,?,?,?)",
+                " attempt_timeout_at, queue_deadline_at, created_at, updated_at)"
+                " VALUES (?,?,?,?,?,?,?,?,?)",
                 (
                     job_id, kind, "queued",
                     json.dumps(payload or {}, ensure_ascii=False),
-                    max_attempts, now, now,
+                    max_attempts, attempt_timeout_at, queue_deadline_at, now, now,
                 ),
             )
         except sqlite3.IntegrityError as e:
