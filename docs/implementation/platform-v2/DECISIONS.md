@@ -21,3 +21,7 @@
 | PV2-D-015 | 2026-08-05 | 训练授权拆为两个动作：approve_plan（批准训练计划）与 enqueue_training_job（提交可恢复 Worker Job）；可信本机 login session/CSRF 取代客户端 X-Role/X-Actor 自证 | 手册 §3.1 UMT-006/007 | ACTIVE |
 | PV2-D-016 | 2026-08-05 | 训练授权范围仅 T1（1ep smoke）→T2（3ep P0/P1 pilot），且需 UMT-001~008、G-EVAL、G-SNAPSHOT、G-ASSET、G-LABEL、G-MPS 全部有机器证据；T2 后立即停止报告；10ep/多 seed/classifier 重训/开封 gold/发布/PG 生产切换/删除制品均需新授权 | 用户指令、手册 §7 | ACTIVE |
 | PV2-D-017 | 2026-08-05 | 照片总量只能以 source_asset_inventory_v1 的 SHA 唯一数表述；禁止目录数量相加；原图只读不动，全部 source reference 保留 | 手册 §5.1、U3 | ACTIVE |
+| PV2-D-018 | 2026-08-01 | Qwen3-VL 职责限于闭集：CandidateSet 重排/相似 SKU 裁决/属性冲突/新包装判断/unknown-abstain；不得自由生成商品名称直接 accepted，不得自动写商品主数据；新包装只建 candidate，终结仅限 human/customer_policy | 方案 B 设计规格、VLM-006/015 | ACTIVE |
+| PV2-D-019 | 2026-08-01 | 客户档位（fast/standard/deep/expert）与内部阶段（S0–S5）分离；12/48h 是队列业务 SLA，不是单次推理 timeout；新级联 shadow 默认 production_switch=false，晋级需 G-SHADOW 全指标同时通过 + 独立 G-PUBLISH 审批 | 方案 B 设计规格、VLM-004/013/014 | ACTIVE |
+| PV2-D-020 | 2026-08-01 | 状态只写事实：implemented/tested 与 benchmarked/trained/shadow_passed/publish_approved/production_active 严格区分；无足够人工真值时 shadow 报 not_evaluable，不得造 pass；训练基础模型 mlx-community/Qwen3-VL-4B-Instruct-4bit，Ollama Q4_K_M 推理制品不得作 LoRA 训练输入 | Task 18 验收要求、VLM-011/017 | ACTIVE |
+| PV2-D-021 | 2026-08-01 | 平台内核不反向 import FMCG Domain Pack；packaging/cascade facade 由组合根注入；运行中 8400 未装配 cascade_service 属 shadow 默认，页面诚实降级而非隐藏 | L0 规则、VLM-014/016 | ACTIVE |

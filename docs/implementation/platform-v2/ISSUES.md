@@ -34,4 +34,6 @@
 | VLM-ISSUE-003 | OPEN | 高 | 质量筛选中 934/944 张 reject 主要来自 tilt 启发式（水平线不足 fail-closed 返回 1.0），缺少人工金标准验证 | VLM-008：缺水平线改判 manual_review（reason code tilt_unobservable）；单一弱启发式不得直接 reject；旧 934 张作为历史证据保留进人工复核队列，不改写旧 JSON |
 | VLM-ISSUE-004 | OPEN | 中 | SAM 精修接受率 96.5% 只代表几何通过（紧框合法/未逃逸），不代表框内 SKU 类别正确（类别沿用原框坐标定位） | 如实登记；后续需 truebox/SKU 人工抽检才能判定标签正确性 |
 | VLM-ISSUE-005 | OPEN | 中 | Qwen3-VL/MLX 尚未安装（无 mlx、mlx-vlm、transformers 依赖，无权重下载） | 本轮只实现代码+mock 测试；真实安装/下载需用户显式授权且在无训练冲突时执行 |
-| VLM-ISSUE-006 | OPEN | 高 | sku_v7_sam 正在使用 MPS 训练（epoch 31/120，约 21h），所有真实 MLX/Qwen 重任务（下载/前向/LoRA/shadow）被资源门禁阻断 BLOCKED_BY_ACTIVE_TRAINING | 本轮只交付门禁代码与 mock 测试；训练自然结束且用户再次授权后才能启动 Qwen 真实阶段 |
+| VLM-ISSUE-006 | OPEN | 高 | sku_v7_sam 正在使用 MPS 训练（epoch 31/120，约 21h），所有真实 MLX/Qwen 重任务（下载/前向/LoRA/shadow）被资源门禁阻断 BLOCKED_BY_ACTIVE_TRAINING | 本轮只交付门禁代码与 mock 测试；训练自然结束且用户再次授权后才能启动 Qwen 真实阶段（对账时训练已至 epoch 39/120 仍在创新高，状态不变） |
+| VLM-ISSUE-007 | OPEN | 高 | 人工 truebox/SKU 真值不足（<20 条可评估真值），cascade shadow 晋级门只能报 not_evaluable，不得造 pass | VLM-017 已固化该语义（promotion_gate）；补人工真值后重评，报告见 docs/experiments/qwen3vl-cascade-shadow-report.md |
+| VLM-ISSUE-008 | OPEN | 低 | 运行中 8400 未装配 cascade_service（bundle 未注入），cascade/packaging/models-runtime 端点 404，Web 三页面诚实降级显示不可用 | 按 shadow 默认设计（production_switch=false）；装配需独立授权后在组合根注入，属下一阶段工作 |

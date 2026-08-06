@@ -76,3 +76,20 @@
 - **已知偏差**（ISSUES 已登记）：optimizer=auto 忽略 --lr0 0.0005（MuSGD 实际 lr=0.01）；934 张 tilt reject 缺人工金标准；SAM 96.5% 仅代表几何通过。
 - **新专项启动**：Qwen3-VL 4B + Graph+Loop 级联（Task VLM-000~018，见 IMPLEMENTATION-LIST）；复用唯一 Orchestrator，不建第二套系统；production_switch=false、prod bundle 不切换；测试基线更新为 **505 passed, 1 skipped**。
 - **训练保护红线**：sku_v7_sam 运行期间不 kill/暂停/改参数/改输出；不启动第二个 MPS 重任务；Qwen/MLX 真实任务全部 BLOCKED_BY_ACTIVE_TRAINING（代码+mock 测试先行）。
+
+## 2026-08-01 VLM 专项 Task 0–18 验收事实（Task 18，只写事实）
+
+状态语义（不混用）：`implemented`（代码已实现）≠ `tested`（测试通过）≠ `benchmarked/trained/shadow_passed/publish_approved/production_active`（均需真实机器证据）。
+
+| 项 | 状态 | 证据 |
+|---|---|---|
+| 契约/Registry/驻留/档位/风控/适配器/graph/billing/API/packaging/Web | implemented + tested | VLM-001～016 逐项见 IMPLEMENTATION-LIST，全 fake backend |
+| VLM 数据链路/preflight/evaluate/benchmark/QLoRA launcher/shadow 评估 | implemented + tested（mock/parse-only） | 5 个 CLI --help parse-only 验证；真实执行全部被门禁阻断 |
+| Qwen 权重下载/MLX 安装 | **未执行**（VLM-ISSUE-005） | 无授权且训练存在 |
+| zero-shot/benchmark/QLoRA/shadow 真实运行 | **未执行**（BLOCKED_BY_ACTIVE_TRAINING + G-APPLE 未通过） | runbook §10 阻断清单 |
+| shadow 晋级 | **not_evaluable**（人工真值不足，不得造 pass） | docs/experiments/qwen3vl-cascade-shadow-report.md |
+| production bundle | `prod_20260804_v4_r2` 未切换，production_switch=false | 8091 口径不变 |
+| 测试基线 | **780 passed，1 skipped**（主机 miniconda python3，Task 18 最终回归，20.5s） | 1 skipped 为既有真实模型相关跳过（mock-only 设计），不影响门禁 |
+| sku_v7_sam | RUNNING_EXPERIMENTAL（对账时 epoch 39/120，mAP50 best=0.6265@ep30），未被判定成功/可发布 | 训练自然结束后补最终评估 |
+
+操作手册：[`docs/runbooks/qwen3vl-cascade-local-runbook.md`](../../runbooks/qwen3vl-cascade-local-runbook.md)（环境/preflight/数据集/zero-shot/benchmark/pilot/shadow/驻留/故障排查，命令均经 --help 验证）。

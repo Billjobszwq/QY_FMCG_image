@@ -52,6 +52,7 @@ python -m src.recognize.api --port 8091    # 识别接口
 | [`setup.md`](./setup.md) | **环境+项目部署**：依赖、omlx、`.env`、校验、可选 Docker/镜像源、可选 Label Studio |
 | [`structure.md`](./structure.md) | **结构**：三阶段数据流、`src/` 模块地图、运行时数据目录、数据仓库 schema、红线 |
 | [`runbook.md`](./runbook.md) | **启动方式**：逐步命令、起服务、测试、闭环验证、故障排查、当前状态 |
+| [`runbooks/qwen3vl-cascade-local-runbook.md`](./runbooks/qwen3vl-cascade-local-runbook.md) | **Qwen 级联本机运行手册**：preflight/数据集/zero-shot/benchmark/pilot/shadow/驻留/故障排查，命令均经 --help 验证；当前真实重任务全部被门禁阻断 |
 | [`architecture.md`](./architecture.md) | **架构决策（为什么）**：7 条 ADR + 已知缺陷与缓解 + 规模化路径 |
 | [`tuning-methodology.md`](./tuning-methodology.md) | **模型迭代调优方法论**：评估→诊断→定向调优闭环、各轮训练演进、调参规则 |
 | [`handbook.md`](./handbook.md) | **项目手册（当前状态快照）**：架构/服务/数据/模型/命令/监控/已知坑，快速恢复上下文 |
@@ -106,6 +107,14 @@ python -m pytest tests/unit tests/contract -q     # 不变性/对齐/命名/别�
 - 🟥 250 条 diagnostic 审核全部 pending；qa_v3 只覆盖 120 张且没有人工质量金标准，不能宣称全量数据训练就绪。
 - ⏹️ 当前 `training_authorized=false`，训练 NO-GO。按当前新手册修复全部 P0 后，才可执行 1ep smoke 和 3ep pilot；10ep、classifier 和发布需新授权。
 - 📘 下一步只读入口与 Agent 提示词见 [`2026-08-05-unified-management-all-photo-training-execution-manual.md`](./superpowers/plans/2026-08-05-unified-management-all-photo-training-execution-manual.md)。
+
+## 当前状态补充（2026-08-01 Qwen 专项 Task 0–18 验收，只写事实）
+
+- ✅ VLM-000～018 非重计算代码全部完成：契约/Registry/hot-warm-cold 驻留/四档位/风控/5+1 适配器/14 节点级联 graph/计费/7+4 API/新包装状态机/Web 三页面/VLM 数据链路/preflight/evaluate/benchmark/QLoRA launcher/shadow 评估；全量 **780 passed，1 skipped**（全 fake/mock backend）。
+- ✅ 8400 新增级联任务/模型驻留/新包装三页面（shadow 默认：运行中服务未装配 cascade API，页面诚实降级）；8091/8092/Label Studio 口径不变。
+- ⛔ 真实 Qwen 重任务（权重下载/MLX 安装/前向/微调/真实 shadow）全部 BLOCKED_BY_ACTIVE_TRAINING + G-APPLE 未通过；shadow 晋级 not_evaluable（人工真值不足，不造 pass）。
+- ⛔ production bundle `prod_20260804_v4_r2` 未切换，production_switch=false；sku_v7_sam 保持 RUNNING_EXPERIMENTAL，未被判定成功/可发布。
+- 📘 操作命令见 [`runbooks/qwen3vl-cascade-local-runbook.md`](./runbooks/qwen3vl-cascade-local-runbook.md)；逐项状态见 [`implementation/platform-v2/STATUS.md`](./implementation/platform-v2/STATUS.md)。
 
 ## 维护约定
 
