@@ -20,6 +20,9 @@ class PlatformBundle:
     graphs: GraphRegistry
     engine: GraphEngine
     handlers: Mapping[str, Mapping[str, Any]] = field(default_factory=dict)
+    # VLM-014：级联服务/模型驻留由组合根注入（平台保持领域无关）。
+    cascade_service: Any | None = None
+    model_residency: Any | None = None
 
     def handlers_for(self, graph_name: str) -> Mapping[str, Any]:
         return self.handlers[graph_name]

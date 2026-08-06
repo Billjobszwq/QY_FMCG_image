@@ -44,6 +44,7 @@ def create_app(
     training_router=None,
     jobs_router=None,
     share_router=None,
+    cascade_router=None,
 ) -> FastAPI:
     app = FastAPI(
         title="Unified Platform API",
@@ -115,6 +116,13 @@ def create_app(
         app.include_router(create_recognition_tasks_router(
             bundle.store, rec_adapter,
             auth=AuthService(bundle.store)))
+        # VLM-014：若组合根注入 cascade_service，则自动装配统一 cascade API
+        if cascade_router is None and bundle.cascade_service is not None:
+            from src.platform.api.cascade import create_cascade_router
+            cascade_router = create_cascade_router(
+                bundle.store, bundle.cascade_service,
+                auth=AuthService(bundle.store),
+                residency=bundle.model_residency)
 
     # ---- M4 Label Studio 闭环（组合根注入 router 时启用）----
     if labeling_router is not None:
@@ -129,6 +137,10 @@ def create_app(
         app.include_router(jobs_router)
     if share_router is not None:
         app.include_router(share_router)
+
+    # ---- VLM-014：统一 cascade API（shadow 默认，旧 8091/recognition 不变）----
+    if cascade_router is not None:
+        app.include_router(cascade_router)
 
     @app.get("/api/v1/health")
     def health():
