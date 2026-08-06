@@ -276,3 +276,9 @@
 | 10 | 本轮禁止的工作（fail-closed） | — | Qwen 权重下载、MLX 真实安装、Qwen 真实前向/微调、真实大规模 shadow、生产模型切换、kill/干扰训练、启动第二个 MPS 重任务、PYTORCH_ENABLE_MPS_FALLBACK、把运行中训练判定为可发布；真实重任务统一标记 **BLOCKED_BY_ACTIVE_TRAINING** |
 | 11 | 治理偏差登记 | — | ISSUES.md 追加 VLM-ISSUE-001~006（STATUS 与实际训练冲突/optimizer=auto 忽略 lr0=0.0005/934 tilt 缺人工金标准/SAM 96.5% 仅几何通过/Qwen 未安装/真实 MLX 被资源门禁阻断） |
 
+## VLM 专项实施记录（Task 1–18，训练中不扰，真实重任务 BLOCKED_BY_ACTIVE_TRAINING）
+
+| # | 事项 | 退出码 | 结果摘要 |
+|---|---|---|---|
+| 1 | VLM-001：红测试 `tests/platform/test_vlm_contracts.py` 13 项 RED（模块不存在）→ 实现 → 全绿 | 0 | 新建 `src/modules/fmcg/cascade/{__init__,contracts}.py`：Candidate/RegionRef/PredictionEnvelope/CandidateSet/RiskDecision/CascadePolicy/QwenSkuDecision 全部 extra=forbid+frozen；accepted 需 sku_id+evidence_ids；calibrated_risk∈[0,1]；stage 限 S1–S5；RiskDecision NaN/Inf/缺校准版本 fail-closed；QwenSkuDecision 冻结 qwen-sku-decision.v1，`assert_sku_within_candidates` 闭集守卫（候选外 sku 不得 accepted）；全量 **518 passed + 1 skipped**（基线 505+13） |
+
