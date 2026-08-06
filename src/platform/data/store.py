@@ -463,6 +463,30 @@ BEGIN
 END;
 """
 
+_M015 = """
+CREATE TABLE IF NOT EXISTS model_residency (
+    model_id TEXT PRIMARY KEY,
+    residency TEXT NOT NULL CHECK (residency IN ('hot','warm','cold')),
+    state TEXT NOT NULL DEFAULT 'cold'
+        CHECK (state IN ('cold','loading','hot','unloading','failed')),
+    max_concurrency INTEGER NOT NULL DEFAULT 1,
+    idle_ttl_s INTEGER NOT NULL DEFAULT 300,
+    last_used_at TEXT,
+    registered_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS model_lease (
+    lease_id TEXT PRIMARY KEY,
+    model_id TEXT NOT NULL REFERENCES model_residency(model_id),
+    run_id TEXT NOT NULL,
+    attempt_id TEXT,
+    deadline TEXT,
+    created_at TEXT NOT NULL,
+    released_at TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_model_lease_model ON model_lease(model_id);
+"""
+
 MIGRATIONS: tuple[tuple[str, str], ...] = (
     ("001_platform_init", _M001),
     ("002_labeling_inbox", _M002),
@@ -478,6 +502,7 @@ MIGRATIONS: tuple[tuple[str, str], ...] = (
     ("012_quality_gold_v1", _M012),
     ("013_sam_lineage_v1", _M013),
     ("014_review_task_v1", _M014),
+    ("015_model_residency", _M015),
 )
 
 
