@@ -6,6 +6,8 @@
 >
 > **实施 Agent 当前唯一开工入口（2026-08-05）：** 先读 [`统一管理与全量照片训练执行手册`](./superpowers/plans/2026-08-05-unified-management-all-photo-training-execution-manual.md)。它基于 `feat/usable-platform-foundation@9db9946` 的实时复核，先纠正训练治理与文档冲突，再完成统一工作台、全照片资产化、SAM 标注、Graph+Loop v2 和 Apple MPS smoke/pilot。旧 [`统一框架持续可用执行手册 V2`](./superpowers/plans/2026-08-04-continuous-usable-framework-execution-manual.md) 与 [`全项目实施总纲`](./superpowers/plans/2026-08-04-full-project-execution-program.md) 保留为历史建设记录，不再作为当前状态判断依据。
 >
+> **Qwen3-VL 智能级联专项（2026-08-06 已批准方案 B）：** 先读 [`Qwen3-VL 4B + Graph+Loop 多模型智能级联设计`](./superpowers/specs/2026-08-06-qwen3-vl-4b-graph-loop-cascade-design.md)，实施时严格执行 [`Qwen3-VL 4B + Graph+Loop 实施计划与 Agent 提示词`](./superpowers/plans/2026-08-06-qwen3-vl-4b-graph-loop-cascade-implementation-plan.md)。专项复用统一底座，不建设第二套 Orchestrator；当前 `sku_v7_sam` 先按 experimental 对账，Qwen 使用隔离 MLX-VLM 环境且不得与现有 MPS 重训练并行。
+>
 > **现有识别/训练运行入口：** 本页前半部分保留早期系统说明；级联生产架构以 [`handbook.md`](./handbook.md) 为准，最终训练准入、Apple M3 Max/MPS 规范和最新阻断项以 [`2026-08-04-final-training-execution-gate.md`](./superpowers/plans/2026-08-04-final-training-execution-gate.md) 为准。这些文档说明当前系统如何运行，不覆盖最终平台架构。较早严格复核保留在 [`latest-handbook-reverification-2026-08-04.md`](./latest-handbook-reverification-2026-08-04.md) 作为历史证据。
 
 用多模态大模型当"老师"自动打标签、人工把关，训出 YOLO 当"学生"上识别热路径。原始资产只读、标签追加式留痕、张张过人工才进训练。
@@ -40,6 +42,8 @@ python -m src.recognize.api --port 8091    # 识别接口
 |---|---|
 | [`superpowers/specs/2026-08-04-fmcg-vision-saas-platform-design.md`](./superpowers/specs/2026-08-04-fmcg-vision-saas-platform-design.md) | **平台唯一架构总纲**：一套底座、Graph+Loop 内核、统一数据系统、Module SDK 和积木式 Domain Pack |
 | [`superpowers/plans/2026-08-05-unified-management-all-photo-training-execution-manual.md`](./superpowers/plans/2026-08-05-unified-management-all-photo-training-execution-manual.md) | **当前唯一实施入口**：训练事实纠偏、统一易用工作台、全照片资产化、SAM 审核、Graph+Loop v2、MPS smoke/pilot 与 Agent 提示词 |
+| [`superpowers/specs/2026-08-06-qwen3-vl-4b-graph-loop-cascade-design.md`](./superpowers/specs/2026-08-06-qwen3-vl-4b-graph-loop-cascade-design.md) | **已批准专项设计**：客户四档与内部 S0–S5 分离、hot/warm/cold 驻留、Qwen3-VL 闭集裁决、数据/训练/计费/新包装规格 |
+| [`superpowers/plans/2026-08-06-qwen3-vl-4b-graph-loop-cascade-implementation-plan.md`](./superpowers/plans/2026-08-06-qwen3-vl-4b-graph-loop-cascade-implementation-plan.md) | **Qwen 专项实施入口**：Task 0–18、TDD 文件清单、Apple/数据/训练/shadow 门禁和可直接复制的 Agent 提示词 |
 | [`superpowers/plans/2026-08-04-continuous-usable-framework-execution-manual.md`](./superpowers/plans/2026-08-04-continuous-usable-framework-execution-manual.md) | **历史建设手册**：记录 M0–M6 的持续可用交付顺序；其 M5 勾选已被 2026-08-05 审计重新打开 |
 | [`superpowers/plans/2026-08-04-full-project-execution-program.md`](./superpowers/plans/2026-08-04-full-project-execution-program.md) | **全项目开工总纲**：Stage 0–9 依赖、交付物、门禁、需求映射、Agent 启动提示词和审查清单 |
 | [`superpowers/plans/2026-08-04-stage0-1-graph-loop-kernel.md`](./superpowers/plans/2026-08-04-stage0-1-graph-loop-kernel.md) | **详细设计参考**：26 个 TDD 任务中的 Graph、Capability、IAM、CAS、Job、Billing 设计供新纵向计划按需复用，不再机械串行执行 |
