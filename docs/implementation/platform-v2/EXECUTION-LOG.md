@@ -259,3 +259,20 @@
 | 4 | run 目录拒覆盖与服务健康（T0-3） | 0 | 既有测试 tests/unit/test_run_overwrite_guard.py（train_v1.py 拒绝覆盖）继续绿；服务健康快照写入证据 services_before/after |
 
 全量回归 **469 passed + 1 skipped**（+13 t0_preflight +4 parse_swap_usage）；提交 **d58d554**。T0 退出门达成：G0 证据✓、合法 dry-run（U1 dry_run 测试链）✓、预算估算与停止线✓、无训练结果污染✓；未默认 1280（实测选 768）✓。
+
+## VLM 专项基线（2026-08-06，Qwen3-VL 级联 Task 0 事实对账，全部只读）
+
+| # | 事项 | 退出码 | 结果摘要 |
+|---|---|---|---|
+| 1 | Git 状态 | 0 | 分支 `feat/unified-workbench-training-readiness`，HEAD=**4f7bfdd9b136cb611843cc72f3ae80e1c9ec525c**（与指令声明基线一致）；近链：4f7bfdd（Qwen 设计文档）← f0a7fd1（监控升级）← b07ff0a ← e59f683（SAM 精修）← 5cec9f9（质量门禁） |
+| 2 | 工作树 | 0 | 仅 4 个未跟踪保护目录：`.quality/ .sam_checkpoints/ .sam_runs/ .superpowers/`（保留不暂存）；无其他修改 |
+| 3 | sku_v7_sam 训练进程 | 0 | **PID 90423 运行中**（另 caffeinate PID 90425），已运行约 21h；命令：`python3 -m src.training.train_v1 --model .models/sku_v4/weights/best.pt --data-yaml .datasets/sam_refined_full_v1/data.yaml --run-name sku_v7_sam --epochs 120 --patience 10 --batch 4 --imgsz 960 --device mps --lr0 0.0005 --seed 0`；日志尾 epoch 31/120 进行中 |
+| 4 | results.csv 解析（只读，当前 30 条完成 epoch） | 0 | **mAP50 best=0.6265 @epoch 30**（仍在创新高）；precision best=0.6104 @epoch 23；recall best=0.6129 @epoch 18；最新 epoch30：P=0.5880/R=0.6058 |
+| 5 | 系统资源 | 0 | swap used≈7592MB/9216MB（在 8192 停止线内，训练 RSS≈6.4GB）；AC 电源≈78% 充电中；训练正常 |
+| 6 | Ollama/MPS 环境 | 0 | Ollama.app 进程在但 ollama CLI 不在 PATH（无加载模型）；omlx-server 运行中；不得新启第二个 MPS 重任务 |
+| 7 | 服务状态 | 0 | 8091 识别入口、8092 训练监控、Label Studio 保留不动；本轮改造不得影响；新级联 shadow 默认（production_switch=false 冻结不变） |
+| 8 | 测试基线 | 0 | 全量 **505 passed, 1 skipped**（本轮开工前基线） |
+| 9 | 本轮允许的工作 | — | Task 0–18 非重计算代码：架构/契约/Graph/API/Web/数据构建器/训练启动器/资源管理器/单元+契约+fake mock 集成测试/文档 runbook |
+| 10 | 本轮禁止的工作（fail-closed） | — | Qwen 权重下载、MLX 真实安装、Qwen 真实前向/微调、真实大规模 shadow、生产模型切换、kill/干扰训练、启动第二个 MPS 重任务、PYTORCH_ENABLE_MPS_FALLBACK、把运行中训练判定为可发布；真实重任务统一标记 **BLOCKED_BY_ACTIVE_TRAINING** |
+| 11 | 治理偏差登记 | — | ISSUES.md 追加 VLM-ISSUE-001~006（STATUS 与实际训练冲突/optimizer=auto 忽略 lr0=0.0005/934 tilt 缺人工金标准/SAM 96.5% 仅几何通过/Qwen 未安装/真实 MLX 被资源门禁阻断） |
+

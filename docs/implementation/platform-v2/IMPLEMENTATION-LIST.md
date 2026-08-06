@@ -76,8 +76,36 @@
 | T1 | 1 epoch smoke（全部 P0 门禁+G-EVAL/G-SNAPSHOT/G-ASSET/G-LABEL/G-MPS 机器证据通过后） | T0 | agent | BLOCKED | — | — | — | 门未过禁止 |
 | T2 | 3 epoch P0/P1 pilot（T1 全绿后）；完成后立即停止报告，不发布 | T1 | agent | BLOCKED | — | — | — | 10ep/发布需新授权 |
 
+## VLM Qwen3-VL 4B + Graph+Loop 级联专项（Task 0–18）
+
+> 依据：`docs/superpowers/specs/2026-08-06-qwen3-vl-4b-graph-loop-cascade-design.md`（架构规格）+ `docs/superpowers/plans/2026-08-06-qwen3-vl-4b-graph-loop-cascade-implementation-plan.md`（唯一实施计划）
+> 红线：当前 sku_v7_sam 训练（PID 90423）运行期间，所有真实 Qwen/MLX 重任务被 G-CURRENT/G-APPLE 门禁 fail-closed 阻断（BLOCKED_BY_ACTIVE_TRAINING）；不得下载权重、不得安装大依赖、不得真实前向。
+
+| ID | 目标 | 依赖 | Owner | 状态 | 测试 | 证据 | Commit | 剩余风险 |
+|---|---|---|---|---|---|---|---|---|
+| VLM-000 | 运行事实对账：训练 PID/epoch/指标解析、治理偏差登记、STATUS 如实化 | — | agent | PENDING | — | results.csv 解析（只读）、ISSUES 登记 | — | 训练未结束不做最终评估文档 |
+| VLM-001 | 冻结级联契约 contracts.py（PredictionEnvelope/RegionRef/CandidateSet/RiskDecision/CascadePolicy/QwenSkuDecision） | VLM-000 | agent | PENDING | `tests/platform/test_vlm_contracts.py` | — | — | — |
+| VLM-002 | Capability Registry 扩展（resource_class/residency/meter_units）+ FMCG manifest 8 能力 + 组合根注入 | VLM-001 | agent | PENDING | registry/manifest 测试 | — | — | 旧 manifest 不得破坏 |
+| VLM-003 | ModelResidencyManager（hot/warm/cold、租约、TTL 卸载、熔断、审计） | VLM-002 | agent | PENDING | `tests/platform/test_model_runtime.py` | — | — | Qwen max_concurrency=1 |
+| VLM-004 | CascadePolicy 四档位（fast/standard/deep/expert）+ 策略入 checkpoint | VLM-001 | agent | PENDING | policy 测试 | — | — | — |
+| VLM-005 | risk.py 校准路由（calibrated_risk、硬冲突强制 S4、NaN fail-closed） | VLM-001 | agent | PENDING | risk 测试 | — | — | 校准器冻结 JSON+SHA |
+| VLM-006 | 适配器：quality/scene/legacy_cascade(detect_regions+classify_region)/sam_refiner/sku_retrieval | VLM-002 | agent | PENDING | adapter 测试 | — | — | recognize() 保持兼容 |
+| VLM-007 | qwen3vl_mlx HTTP adapter（闭集外 needs_review、租约、mock backend） | VLM-003 | agent | PENDING | adapter mock 测试 | — | — | 真实前向被门禁阻断 |
+| VLM-008 | VLM 数据链路：quality_gate tilt 修正（缺水平线→manual_review）+ split_guard 6 维 + builder + HF messages | VLM-001 | agent | PENDING | data 链路测试 | — | — | 旧 934 张 tilt reject 保留历史 |
+| VLM-009 | Apple/MLX preflight 硬门禁（G-CURRENT/G-APPLE，训练冲突 fail-closed） | VLM-003 | agent | PENDING | preflight mock 测试 | — | — | 真实 preflight 需下载授权 |
+| VLM-010 | evaluate.py（coverage=0→precision None+gate 不过）+ benchmark.py（batch 1/2/4） | VLM-009 | agent | PENDING | evaluate/benchmark mock 测试 | — | — | 不用照片数估时 |
+| VLM-011 | 受治理 QLoRA launcher（MLX-VLM 真实参数、禁 --use-mps/--num-epochs、completed_candidate 不发布） | VLM-010 | agent | PENDING | launcher parse-only 测试 | — | — | 真实训练被门禁阻断 |
+| VLM-012 | cascade graph 14 节点 + 四条路由测试 + 预算/不可用/SLA/retry 语义 | VLM-004~007 | agent | PENDING | graph 路由测试 | — | — | — |
+| VLM-013 | billing.py + Job attempt_timeout_at/queue_deadline_at（追加式迁移、幂等计费） | VLM-012 | agent | PENDING | billing 测试 | — | — | 12/48h 是队列 SLA 非推理 timeout |
+| VLM-014 | cascade API 7 端点（shadow 默认、旧 8091 不变） | VLM-012 | agent | PENDING | API E2E（fake backend） | — | — | production_switch=false |
+| VLM-015 | packaging.py 新包装状态机（Qwen 只建 candidate、supersede 追加） | VLM-012 | agent | PENDING | packaging 测试 | — | — | — |
+| VLM-016 | Web 三页面（CascadeTasks/ModelRuntime/NewPackaging）+ tsc/build/浏览器 | VLM-014 | agent | PENDING | npm test + build + E2E | — | — | — |
+| VLM-017 | shadow 评估 E0/E1/C1/C2（无真值报 not_evaluable，不造 pass） | VLM-014 | agent | PENDING | shadow 测试 | — | — | 真实 shadow 被门禁阻断 |
+| VLM-018 | runbook + 状态语义对齐 + 最终回归 + git 审计 | 全部 | agent | PENDING | 全量回归 | — | — | production bundle 不切换 |
+
 ## 冻结值（任何任务不得改变）
 
 - production_switch=false、training_started=false、deleted_files=false
-- 未跟踪制品 `.quality/ .sam_checkpoints/ .sam_runs/ .superpowers/` 不暂存不清理
+- 未跟踪制品 `.quality/ .sam_checkpoints/ .sam_runs/ .superpowers/` 不暂存不清理；另 `.models/ .datasets/ .eval/` 不得暂存
 - 不 `git add .`/`-A`；不 merge/push/deploy/force-push
+- sku_v7_sam 训练运行期间：不 kill/暂停/改参数；不启动第二个 MPS 重任务；Qwen 真实任务 BLOCKED_BY_ACTIVE_TRAINING

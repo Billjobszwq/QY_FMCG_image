@@ -69,3 +69,10 @@
 上述问题关闭并有机器证据前，`training_authorized` 必须保持 false。
 
 **修复进展（2026-08-05 U1）**：上述六项中前五项代码层已修复并有测试证据（统一阈值扫描/真实 CLI 命令+预检/演示 Snapshot 标不可训练/MPS G0 实测/approve 与 enqueue 拆分 + 可信登录）；剩余关闭条件：真实 Snapshot（服务端 builder）、人工 truebox、G 门禁机器证据。前端登录与训练页分区已上线（87f16d5，浏览器 E2E 截图 `.eval/training_login_check_*.png`）。
+
+## 2026-08-06 事实对账（VLM 专项 Task 0，见 VLM-ISSUE-001~006）
+
+- **训练实际状态与本文历史记录的冲突如实披露**：上方“training_started=false（冻结）”是平台治理冻结值（平台治理系统未启动过训练，语义不变）；但 `sku_v7_sam` 自 2026-08-05 起经用户授权在平台外真实运行（**PID 90423，epoch 31/120，约 21h，mAP50 best=0.6265@ep30 仍在创新高**）。该训练定性为 **RUNNING_EXPERIMENTAL**：未被平台判定为成功、可发布或可晋级；最终评估文档待训练自然结束后补写。
+- **已知偏差**（ISSUES 已登记）：optimizer=auto 忽略 --lr0 0.0005（MuSGD 实际 lr=0.01）；934 张 tilt reject 缺人工金标准；SAM 96.5% 仅代表几何通过。
+- **新专项启动**：Qwen3-VL 4B + Graph+Loop 级联（Task VLM-000~018，见 IMPLEMENTATION-LIST）；复用唯一 Orchestrator，不建第二套系统；production_switch=false、prod bundle 不切换；测试基线更新为 **505 passed, 1 skipped**。
+- **训练保护红线**：sku_v7_sam 运行期间不 kill/暂停/改参数/改输出；不启动第二个 MPS 重任务；Qwen/MLX 真实任务全部 BLOCKED_BY_ACTIVE_TRAINING（代码+mock 测试先行）。

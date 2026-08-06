@@ -29,3 +29,9 @@
 | PV2-023 | OPEN | 中 | 100 个轻量 job 测试不足以证明每日 10 万照片能力 | 用真实照片按 pipeline 阶段做 sustained/burst/p95/p99/失败恢复 benchmark |
 | PV2-024 | OPEN | 低 | 根 README 仅有标题，STATUS/服务和 HEAD 曾漂移 | 根入口已在本轮文档修正；后续建立只读状态生成与一致性检查 |
 | PV2-025 | OPEN | 高 | T0 实测系统 swap used=10867MB 超 8192MB 停止线（含其他进程），训练启动前必须处置（重启释放/关无关进程/降 batch）；另 mps_gate swap 解析曾被 macOS 15 格式掩盖（已修，d58d554） | 证据如实 exceeds_stop_line=true；T1 授权前需复测 swap 降至停止线下 |
+| VLM-ISSUE-001 | OPEN | 高 | STATUS.md 写 training_started=false（冻结）/训练 NO-GO，但 sku_v7_sam 实际自 2026-08-05 起真实运行（PID 90423，用户授权、平台治理系统外启动），治理冻结值与实际训练状态冲突 | 如实对账：STATUS 标注为 RUNNING_EXPERIMENTAL（平台外、非平台发布判定）；冻结值 training_started=false 语义保持不变（平台治理未启动过训练）；训练结束后补最终评估文档 |
+| VLM-ISSUE-002 | OPEN | 高 | sku_v7_sam 启动命令含 --lr0 0.0005，但 ultralytics optimizer=auto（默认）时 MuSGD 实际 lr=0.01，lr0 参数被忽略 | 如实登记不修改运行中训练；训练结束后评估报告中必须披露；下一轮训练显式指定 optimizer |
+| VLM-ISSUE-003 | OPEN | 高 | 质量筛选中 934/944 张 reject 主要来自 tilt 启发式（水平线不足 fail-closed 返回 1.0），缺少人工金标准验证 | VLM-008：缺水平线改判 manual_review（reason code tilt_unobservable）；单一弱启发式不得直接 reject；旧 934 张作为历史证据保留进人工复核队列，不改写旧 JSON |
+| VLM-ISSUE-004 | OPEN | 中 | SAM 精修接受率 96.5% 只代表几何通过（紧框合法/未逃逸），不代表框内 SKU 类别正确（类别沿用原框坐标定位） | 如实登记；后续需 truebox/SKU 人工抽检才能判定标签正确性 |
+| VLM-ISSUE-005 | OPEN | 中 | Qwen3-VL/MLX 尚未安装（无 mlx、mlx-vlm、transformers 依赖，无权重下载） | 本轮只实现代码+mock 测试；真实安装/下载需用户显式授权且在无训练冲突时执行 |
+| VLM-ISSUE-006 | OPEN | 高 | sku_v7_sam 正在使用 MPS 训练（epoch 31/120，约 21h），所有真实 MLX/Qwen 重任务（下载/前向/LoRA/shadow）被资源门禁阻断 BLOCKED_BY_ACTIVE_TRAINING | 本轮只交付门禁代码与 mock 测试；训练自然结束且用户再次授权后才能启动 Qwen 真实阶段 |
