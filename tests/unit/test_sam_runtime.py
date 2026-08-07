@@ -1,11 +1,15 @@
 """SAM runtime 设备门禁契约（手册§一.7 / §五）：
 严格 MPS 验证，禁止 PYTORCH_ENABLE_MPS_FALLBACK 与静默 CPU fallback；
-候选模型仅限 sam2.1_hiera_small / sam2.1_hiera_base_plus。"""
+候选模型仅限 sam2.1_hiera_small / sam2.1_hiera_base_plus。
+
+GLTC-V2 Task 0：默认 suite hermetic——宿主真实 MPS 探针测试标
+ host_mps（独立 suite 执行）；默认 suite 用注入 mock 验证同一逻辑。"""
 import pytest
 
 from src.sam_assist import runtime
 
 
+@pytest.mark.host_mps
 def test_device_gate_passes_on_mps_machine():
     rep = runtime.device_report()
     assert rep["mps_built"] is True
@@ -13,6 +17,18 @@ def test_device_gate_passes_on_mps_machine():
     assert rep["device"] == "mps"
     assert rep["machine"] == "arm64"
     assert rep["python"] and rep["torch_version"]
+
+
+def test_device_gate_passes_with_injected_mps(monkeypatch):
+    """hermetic 版：注入 MPS 可用，验证 gate 通过逻辑与报告字段。"""
+    monkeypatch.setattr(runtime, "_mps_built", lambda: True)
+    monkeypatch.setattr(runtime, "_mps_available", lambda: True)
+    rep = runtime.device_report()
+    assert rep["mps_built"] is True
+    assert rep["mps_available"] is True
+    assert rep["device"] == "mps"
+    gate = runtime.check_device_gate(env={})
+    assert gate["device"] == "mps"
 
 
 def test_fallback_env_var_forbidden():

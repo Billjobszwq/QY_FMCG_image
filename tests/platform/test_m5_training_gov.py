@@ -33,6 +33,14 @@ MANIFEST_LEAK = {
     "val": [{"sha256": "a1", "store": "S1", "session": "T1"}],
 }
 
+# GLTC-V2 Task 0：默认 suite 必须 hermetic。G0 注入通过 mock；
+# 真实宿主 G0 由 test_umt005_mps_g0.py 的 host_mps suite 独立保证。
+_G0_PASS = {
+    "gate_version": "mps_g0_v1", "ok": True,
+    "checks": [{"name": "arch_arm64", "ok": True, "detail": "ok"}],
+    "evidence": {},
+}
+
 
 @pytest.fixture()
 def store(tmp_path: Path):
@@ -43,7 +51,7 @@ def store(tmp_path: Path):
 
 @pytest.fixture()
 def svc(store):
-    return TrainingGovernanceService(store)
+    return TrainingGovernanceService(store, hardware_gate=lambda **kw: _G0_PASS)
 
 
 def _fake_probe(spec: ServiceSpec) -> ServiceStatus:
@@ -111,7 +119,7 @@ def test_dry_run_produces_plan_without_starting(svc) -> None:
     budget = json.loads(run["budget_json"])
     assert budget["minutes"] == 30
     plan = json.loads(run["plan_json"])
-    assert plan["mps_g0"] is True  # darwin
+    assert plan["mps_g0"] is True  # hermetic 注入的 G0 pass
     # dry-run 不改变授权状态
     assert svc.gates()["training_authorized"] is False
 
@@ -232,6 +240,15 @@ class FakeLS:
 
 def test_training_api_e2e(tmp_path: Path, monkeypatch) -> None:
     from fastapi.testclient import TestClient
+
+    # GLTC-V2 Task 0：hermetic——API 链路的 G0 经注入，不依赖宿主 MPS；
+    # 真实宿主 G0 由 host_mps suite 独立保证。
+    monkeypatch.setattr(
+        "src.modules.training_gov.service.run_mps_g0",
+        lambda **kw: {"gate_version": "mps_g0_v1", "ok": True,
+                      "checks": [{"name": "arch_arm64", "ok": True,
+                                  "detail": "ok"}],
+                      "evidence": {}})
 
     # UMT-006：服务端 users（admin + operator），写端点需登录 session+CSRF
     monkeypatch.setenv("PLATFORM_USERS", "admin:pw-admin:admin,opi:pw-op:operator")
