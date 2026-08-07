@@ -78,7 +78,7 @@ class TestDecisions:
 
     def test_policy_version_change_is_new_version(self):
         p1 = QualityPolicy(version="qpol_n2_v1")
-        p2 = p1.with_threshold(blur_max=p1.thresholds["blur_max"] * 0.5)
+        p2 = p1.with_threshold(blur_min=p1.thresholds["blur_min"] * 0.5)
         assert p2.version != p1.version
         assert p2.version.startswith("qpol_n2_v1+")
 
