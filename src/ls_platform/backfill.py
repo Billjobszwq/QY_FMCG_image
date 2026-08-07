@@ -27,14 +27,28 @@ class BackfillGuardError(RuntimeError):
 
 
 def _iter_tasks(ls: Any, pid: int) -> list[dict]:
-    """分页遍历项目全部 task（与 index_task_images 同策略）。"""
+    """分页遍历项目全部 task。
+
+    LS /api/projects/{id}/tasks 无尾斜杠时直接返回 list（单页上限
+    page_size）：满页则继续翻页，直到不满页为止（GLTC Task 4 修复：
+    旧逻辑在 list 响应上立即 break，200 任务只扫到 100）。"""
     out: list[dict] = []
     page = 1
+    page_size = 100
     while True:
-        d = ls.list_tasks(pid, page=page, page_size=100)
+        try:
+            d = ls.list_tasks(pid, page=page, page_size=page_size)
+        except Exception:
+            # LS 1.23 对超出末页的 page 返回 404：已有数据则视为遍历完成
+            if out:
+                break
+            raise
         tasks = d if isinstance(d, list) else d.get("tasks", d.get("results", []))
         out.extend(tasks)
-        if isinstance(d, list) or "next" not in d or not d.get("next"):
+        if isinstance(d, dict):
+            if not d.get("next"):
+                break
+        elif len(tasks) < page_size:
             break
         page += 1
     return out
@@ -46,8 +60,12 @@ def _task_predictions(ls: Any, task_id: int) -> list[dict]:
 
 
 def _is_assisted(project: dict) -> bool:
+    """assisted 项目判定：旧式 [assisted] 标题或 diag_v2_assisted；
+    任何含 blind 的项目永不进入回填范围（GLTC Task 4）。"""
     title = project.get("title", "")
-    return "[assisted]" in title and "[blind]" not in title
+    if "blind" in title.lower():
+        return False
+    return "[assisted]" in title or "assisted" in title.lower()
 
 
 def scan_project(ls: Any, pid: int, registry: dict[str, dict]) -> dict:
@@ -121,6 +139,7 @@ def backfill_project(
     report["apply"] = apply
     report["added"] = 0
     report["skipped_idempotent"] = 0
+    report["no_proposal_tasks"] = []  # 零检出任务（保留人工入口）
     report["errors"] = []  # 任务级错误账本
     if not apply:
         return report
@@ -156,6 +175,18 @@ def backfill_project(
                                      score=float(pred.get("score", 0.5)),
                                      model_version=new_mv)
                 written += 1
+            if written == 0:
+                # 零检出：不删任务，显式标 no_proposal，要求人工检查漏标
+                # （GLTC Task 4；幂等：已标记不重复写）
+                existing_meta = full.get("meta") or {}
+                if not existing_meta.get("no_proposal"):
+                    ls.update_task_meta(tid, {
+                        "no_proposal": True,
+                        "no_proposal_note": "模型零检出，请人工检查漏标",
+                        "no_proposal_model_version": new_mv})
+                else:
+                    report["skipped_idempotent"] += 1
+                report["no_proposal_tasks"].append(tid)
             report["added"] += written
             by_bucket[tid]["backfilled"] = written
         except Exception as e:  # noqa: BLE001 — 单任务失败记入账本不中断

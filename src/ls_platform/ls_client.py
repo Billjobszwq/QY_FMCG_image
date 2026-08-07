@@ -116,8 +116,9 @@ class LSClient:
         return data.get("tasks", data) if isinstance(data, dict) else data
 
     def list_tasks(self, pid: int, page: int = 1, page_size: int = 100) -> dict:
+        # 尾斜杠端点才支持 ?page= 分页（无尾斜杠版 page>1 会 404）
         r = self._check(self.s.get(
-            f"{self.url}/api/projects/{pid}/tasks",
+            f"{self.url}/api/projects/{pid}/tasks/",
             params={"page": page, "page_size": page_size}, timeout=60), "list_tasks")
         return r.json()
 
@@ -137,6 +138,17 @@ class LSClient:
         """GET 单个 task（含 predictions/annotations，回填扫描用）。"""
         return self._check(self.s.get(
             f"{self.url}/api/tasks/{task_id}", timeout=60), "get_task").json()
+
+    def update_task_meta(self, task_id: int, patch: dict) -> dict:
+        """合并式更新 task meta（不碰 predictions/annotations）。
+
+        用于 no_proposal 等治理标记（GLTC Task 4）；合并而非替换，
+        保留既有 photo_id/sha256 等 meta 字段。"""
+        current = self.get_task(task_id).get("meta") or {}
+        merged = {**current, **patch}
+        return self._check(self.s.patch(
+            f"{self.url}/api/tasks/{task_id}/",
+            json={"meta": merged}, timeout=60), "update_task_meta").json()
 
     def fetch_file(self, path_or_url: str) -> bytes:
         """带鉴权下载 LS 托管文件（data.image 相对路径或绝对 URL）。"""
