@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Request
+from pydantic import BaseModel
 
 from src.modules.dataset_factory import service as factory
 from src.modules.training_control import legacy as legacy_mod
@@ -128,4 +129,96 @@ def create_training_control_router(store: Any,
         return {"lane": lane, "report": report,
                 "note": "正式构建需 human gold；0 条准入不写文件"}
 
+    _mount_cycle_endpoints(router, store, auth)
     return router
+
+
+# ---------- N2 Task 2：持久化 Cycle 控制面（写端点 session+CSRF） ----------
+
+class CycleCreateBody(BaseModel):
+    name: str
+
+
+class CycleAdvanceBody(BaseModel):
+    target: str
+    expected_version: int
+    idempotency_key: str
+    waiting_for: str = ""
+
+
+def _mount_cycle_endpoints(router: APIRouter, store: Any,
+                           auth: AuthService | None) -> None:
+    from .cycle import CycleError, TrainingCycleService
+
+    def _svc() -> TrainingCycleService:
+        return TrainingCycleService(store)
+
+    @router.get("/api/v1/training/cycles")
+    def cycles_list() -> dict:
+        rows = store._conn.execute(
+            "SELECT * FROM training_cycle_v1 ORDER BY created_at"
+        ).fetchall()
+        return {"count": len(rows), "cycles": [dict(r) for r in rows]}
+
+    @router.post("/api/v1/training/cycles")
+    def cycles_create(body: CycleCreateBody, request: Request) -> dict:
+        require_principal(auth, request, csrf=True)
+        cid = _svc().create_cycle(name=body.name, actor="session")
+        return {"cycle_id": cid, "status": "DRAFT"}
+
+    @router.get("/api/v1/training/cycles/{cycle_id}")
+    def cycle_get(cycle_id: str) -> dict:
+        try:
+            return _svc().get_cycle(cycle_id)
+        except CycleError as e:
+            raise HTTPException(404, str(e))
+
+    @router.get("/api/v1/training/cycles/{cycle_id}/events")
+    def cycle_events(cycle_id: str) -> dict:
+        evs = _svc().events(cycle_id)
+        return {"cycle_id": cycle_id, "count": len(evs), "events": evs}
+
+    @router.post("/api/v1/training/cycles/{cycle_id}/advance")
+    def cycle_advance(cycle_id: str, body: CycleAdvanceBody,
+                      request: Request) -> dict:
+        require_principal(auth, request, csrf=True)
+        svc = _svc()
+        # 幂等键：相同键的推进请求只执行一次（重复按钮/重放安全）
+        seen = store._conn.execute(
+            "SELECT 1 FROM training_cycle_node_v1 WHERE idempotency_key=?",
+            (body.idempotency_key,)).fetchone()
+        if seen is not None:
+            return {"duplicate": True}
+        try:
+            svc.advance(cycle_id, body.target, actor="session",
+                        expected_version=body.expected_version,
+                        waiting_for=body.waiting_for)
+            svc.record_node(cycle_id, node=f"advance:{body.target}",
+                            status="completed",
+                            idempotency_key=body.idempotency_key,
+                            evidence={"target": body.target})
+        except CycleError as e:
+            msg = str(e)
+            if "非法跃迁" in msg or "版本冲突" in msg:
+                raise HTTPException(409, msg)
+            raise HTTPException(404, msg)
+        return {"duplicate": False,
+                "status": svc.get_cycle(cycle_id)["status"]}
+
+    @router.get("/api/v1/training/data-scope")
+    def data_scope() -> dict:
+        """三批数据范围投影（来自 ExactDedup/AssetIngest checkpoint）。"""
+        svc = _svc()
+        rows = store._conn.execute(
+            "SELECT cycle_id FROM training_cycle_v1 ORDER BY created_at"
+        ).fetchall()
+        scope: dict = {"batches": {}, "exact_unique": None,
+                       "canonical_points": None, "frozen": False}
+        for r in rows:
+            try:
+                cp = svc.node_checkpoint(r["cycle_id"], "AssetScope")
+                scope.update(cp["evidence"])
+                scope["frozen"] = cp["status"] == "frozen"
+            except CycleError:
+                continue
+        return scope
