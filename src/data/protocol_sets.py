@@ -229,6 +229,9 @@ def freeze(seed: int = DEFAULT_SEED, dry_run: bool = False) -> dict:
             "stores": sorted(set_stores[name]),
             "photo_ids": sorted(ids),
             "sha256": sorted(clean[p]["sha256"] for p in ids),
+            # PLC3-001：photo_ids 与 sha256 各自独立排序，禁止按位置 zip；
+            # 配对一律用 photo_sha256_map 或 src.data.photo_identity 按 ID 查询。
+            "photo_sha256_map": {pid: clean[pid]["sha256"] for pid in ids},
             "class_stats": _gold_class_stats(ids, anns, registry),
             "isolation": "store_group_split: 同门店照片必进同一集合；与 batch2 训练门店/SHA 零交集",
             "seen_by_current_model": False,
@@ -356,6 +359,8 @@ def make_dev_v2(seed: int = DEFAULT_SEED, dry_run: bool = False) -> dict:
         "sessions": sessions,
         "photo_ids": ids,
         "sha256": sorted(clean[p]["sha256"] for p in ids),
+        # PLC3-001：同上，禁止位置 zip；配对用 photo_sha256_map。
+        "photo_sha256_map": {pid: clean[pid]["sha256"] for pid in ids},
         "class_stats": _gold_class_stats(ids, anns, registry),
         "isolation": "store_group_split: 五键（ID/SHA/规范门店/别名/session）与全部 active 协议集及 batch2 零交集",
         "seen_by_current_model": False,
