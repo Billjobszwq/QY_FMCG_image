@@ -589,6 +589,40 @@ BEGIN
 END;
 """
 
+_M018 = """
+CREATE TABLE IF NOT EXISTS gold_region_v1 (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    task_id TEXT NOT NULL,
+    region_id TEXT NOT NULL,
+    photo_id TEXT NOT NULL,
+    sha256 TEXT NOT NULL,
+    box_json TEXT NOT NULL,
+    sku_id TEXT NOT NULL DEFAULT '',
+    sku_name TEXT NOT NULL DEFAULT '',
+    package_version_id TEXT NOT NULL DEFAULT '',
+    review_status TEXT NOT NULL DEFAULT 'submitted',
+    actor TEXT NOT NULL,
+    role TEXT NOT NULL DEFAULT 'annotator',
+    evidence_json TEXT NOT NULL DEFAULT '{}',
+    group_store TEXT NOT NULL DEFAULT '',
+    group_session TEXT NOT NULL DEFAULT '',
+    near_dup_group TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL,
+    UNIQUE(task_id, region_id, actor)
+);
+CREATE INDEX IF NOT EXISTS idx_gold_region_task ON gold_region_v1(task_id);
+CREATE TRIGGER gold_region_v1_no_delete
+    BEFORE DELETE ON gold_region_v1
+BEGIN
+    SELECT RAISE(ABORT, 'gold_region_v1 不可变：禁止 DELETE');
+END;
+CREATE TRIGGER gold_region_v1_no_update
+    BEFORE UPDATE ON gold_region_v1
+BEGIN
+    SELECT RAISE(ABORT, 'gold_region_v1 不可变：禁止 UPDATE');
+END;
+"""
+
 MIGRATIONS: tuple[tuple[str, str], ...] = (
     ("001_platform_init", _M001),
     ("002_labeling_inbox", _M002),
@@ -607,6 +641,7 @@ MIGRATIONS: tuple[tuple[str, str], ...] = (
     ("015_model_residency", _M015),
     ("016_job_sla_and_cascade_usage", _M016),
     ("017_package_decision_v1", _M017),
+    ("018_gold_region_v1", _M018),
 )
 
 
@@ -1861,6 +1896,51 @@ class PlatformStore:
         for r in rows:
             d = dict(r)
             d["box"] = json.loads(d["box_json"]) if d["box_json"] else None
+            out.append(d)
+        return out
+
+    # ---------- gold regions（区域级人工真值账本，追加式） ----------
+
+    def add_gold_region(self, *, task_id: str, region_id: str,
+                        photo_id: str, sha256: str, box: tuple | list,
+                        sku_id: str, sku_name: str,
+                        package_version_id: str = "",
+                        review_status: str = "submitted",
+                        actor: str, role: str = "annotator",
+                        evidence: dict | None = None,
+                        group_store: str = "", group_session: str = "",
+                        near_dup_group: str = "") -> bool:
+        """追加一条区域级人工真值记录；(task_id, region_id, actor) 幂等。"""
+        try:
+            self._conn.execute(
+                "INSERT INTO gold_region_v1"
+                "(task_id, region_id, photo_id, sha256, box_json, sku_id,"
+                " sku_name, package_version_id, review_status, actor, role,"
+                " evidence_json, group_store, group_session, near_dup_group,"
+                " created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                (task_id, region_id, photo_id, sha256,
+                 json.dumps([float(v) for v in box]), sku_id, sku_name,
+                 package_version_id, review_status, actor, role,
+                 json.dumps(evidence or {}, ensure_ascii=False),
+                 group_store, group_session, near_dup_group, _utcnow()))
+            self._conn.commit()
+            return True
+        except sqlite3.IntegrityError:
+            return False  # 同一审核员对同一 region 重复提交 → 幂等跳过
+
+    def list_gold_regions(self, task_id: str | None = None) -> list[dict[str, Any]]:
+        if task_id is None:
+            rows = self._conn.execute(
+                "SELECT * FROM gold_region_v1 ORDER BY id").fetchall()
+        else:
+            rows = self._conn.execute(
+                "SELECT * FROM gold_region_v1 WHERE task_id=? ORDER BY id",
+                (task_id,)).fetchall()
+        out = []
+        for r in rows:
+            d = dict(r)
+            d["box"] = json.loads(d["box_json"])
+            d["evidence"] = json.loads(d["evidence_json"] or "{}")
             out.append(d)
         return out
 

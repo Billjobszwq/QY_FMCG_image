@@ -17,7 +17,8 @@ from pydantic import BaseModel
 
 from ..annotate.batches import next_batch_plan
 from ..annotate.review import (claim_task, export_review, final_box,
-                               submit_review, task_view, _derive_status)
+                               gold_region_report, submit_review, task_view,
+                               _derive_status)
 from ..auth import AuthService, require_principal
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
@@ -32,6 +33,7 @@ class SubmitBody(BaseModel):
     verdict: str
     box: list[float]
     role: str = "annotator"
+    regions: list[dict] | None = None  # 区域级人工真值（可选）
 
 
 def create_review_router(store, auth: AuthService | None) -> APIRouter:
@@ -90,9 +92,21 @@ def create_review_router(store, auth: AuthService | None) -> APIRouter:
         try:
             return submit_review(store, task_id=body.task_id,
                                  actor=p["actor"], verdict=body.verdict,
-                                 box=body.box, role=role)
+                                 box=body.box, role=role,
+                                 regions=body.regions)
         except ValueError as e:
             raise HTTPException(status_code=422, detail=str(e))
+
+    @router.get("/api/v1/review/gold-summary")
+    def gold_summary(request: Request) -> dict:
+        """区域级 human_final/gold_verified 进度（不伪造：只统计
+        经人工提交并满足双审一致/仲裁终结条件的区域）。"""
+        require_principal(auth, request, csrf=False)
+        rep = gold_region_report(store)
+        return {"counts": rep["counts"],
+                "usable_for_training": rep["usable_for_training"],
+                "photos_with_gold": rep["photos_with_gold"],
+                "note": "submitted/conflict 不得进入训练集"}
 
     @router.get("/api/v1/review/task/{task_id}/final-box")
     def fbox(task_id: str, request: Request) -> dict:
