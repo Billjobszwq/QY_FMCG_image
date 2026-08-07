@@ -623,6 +623,50 @@ BEGIN
 END;
 """
 
+
+# PLC3-002：审核队列版本账本 + 追加式失效记录。
+# 两表均不可变（触发器禁 DELETE/UPDATE）；状态由 join 推导，不改写历史行。
+_M019 = """
+CREATE TABLE IF NOT EXISTS review_queue_ledger_v1 (
+    queue_version TEXT PRIMARY KEY,
+    protocol TEXT NOT NULL DEFAULT '',
+    n_tasks INTEGER NOT NULL DEFAULT 0,
+    source_path TEXT NOT NULL DEFAULT '',
+    registered_at TEXT NOT NULL
+);
+CREATE TRIGGER review_queue_ledger_v1_no_delete
+    BEFORE DELETE ON review_queue_ledger_v1
+BEGIN
+    SELECT RAISE(ABORT, 'review_queue_ledger_v1 不可变：禁止 DELETE');
+END;
+CREATE TRIGGER review_queue_ledger_v1_no_update
+    BEFORE UPDATE ON review_queue_ledger_v1
+BEGIN
+    SELECT RAISE(ABORT, 'review_queue_ledger_v1 不可变：禁止 UPDATE');
+END;
+CREATE TABLE IF NOT EXISTS review_queue_invalidation_v1 (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    queue_version TEXT NOT NULL UNIQUE,
+    reason TEXT NOT NULL,
+    root_cause TEXT NOT NULL DEFAULT '',
+    impact_summary TEXT NOT NULL DEFAULT '',
+    git_commit TEXT NOT NULL DEFAULT '',
+    evidence_path TEXT NOT NULL DEFAULT '',
+    superseded_by TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL
+);
+CREATE TRIGGER review_queue_invalidation_v1_no_delete
+    BEFORE DELETE ON review_queue_invalidation_v1
+BEGIN
+    SELECT RAISE(ABORT, 'review_queue_invalidation_v1 不可变：禁止 DELETE');
+END;
+CREATE TRIGGER review_queue_invalidation_v1_no_update
+    BEFORE UPDATE ON review_queue_invalidation_v1
+BEGIN
+    SELECT RAISE(ABORT, 'review_queue_invalidation_v1 不可变：禁止 UPDATE');
+END;
+"""
+
 MIGRATIONS: tuple[tuple[str, str], ...] = (
     ("001_platform_init", _M001),
     ("002_labeling_inbox", _M002),
@@ -642,6 +686,7 @@ MIGRATIONS: tuple[tuple[str, str], ...] = (
     ("016_job_sla_and_cascade_usage", _M016),
     ("017_package_decision_v1", _M017),
     ("018_gold_region_v1", _M018),
+    ("019_review_queue_ledger_v1", _M019),
 )
 
 
@@ -1943,6 +1988,91 @@ class PlatformStore:
             d["evidence"] = json.loads(d["evidence_json"] or "{}")
             out.append(d)
         return out
+
+    # ---------- review queue ledger（PLC3-002，追加式失效账本） ----------
+
+    def register_queue_version(self, *, queue_version: str, protocol: str = "",
+                               n_tasks: int = 0,
+                               source_path: str = "") -> bool:
+        """登记队列版本（幂等：已存在则保留原登记，不覆盖）。"""
+        try:
+            self._conn.execute(
+                "INSERT INTO review_queue_ledger_v1"
+                "(queue_version, protocol, n_tasks, source_path, registered_at)"
+                " VALUES (?,?,?,?,?)",
+                (queue_version, protocol, n_tasks, source_path, _utcnow()))
+            self._conn.commit()
+            return True
+        except sqlite3.IntegrityError:
+            return False
+
+    def invalidate_queue_version(self, *, queue_version: str, reason: str,
+                                 root_cause: str = "",
+                                 impact_summary: str = "",
+                                 git_commit: str = "",
+                                 evidence_path: str = "",
+                                 superseded_by: str = "") -> bool:
+        """追加式失效一个队列版本；不改写 review_task_v1 任务行。
+
+        fail-closed：未登记的队列版本不允许失效；重复失效幂等。"""
+        row = self._conn.execute(
+            "SELECT queue_version FROM review_queue_ledger_v1"
+            " WHERE queue_version=?", (queue_version,)).fetchone()
+        if row is None:
+            raise StoreError(f"队列版本未登记，不得失效: {queue_version}")
+        try:
+            self._conn.execute(
+                "INSERT INTO review_queue_invalidation_v1"
+                "(queue_version, reason, root_cause, impact_summary,"
+                " git_commit, evidence_path, superseded_by, created_at)"
+                " VALUES (?,?,?,?,?,?,?,?)",
+                (queue_version, reason, root_cause, impact_summary,
+                 git_commit, evidence_path, superseded_by, _utcnow()))
+            self._conn.commit()
+            return True
+        except sqlite3.IntegrityError:
+            return False  # 已失效，幂等
+
+    def list_queue_ledger(self) -> list[dict[str, Any]]:
+        """队列版本账本（join 推导 status：active/invalid）。"""
+        rows = self._conn.execute(
+            "SELECT l.*, i.reason AS invalid_reason,"
+            " i.root_cause, i.impact_summary, i.git_commit AS invalid_commit,"
+            " i.evidence_path, i.superseded_by, i.created_at AS invalidated_at"
+            " FROM review_queue_ledger_v1 l"
+            " LEFT JOIN review_queue_invalidation_v1 i"
+            "   ON i.queue_version = l.queue_version"
+            " ORDER BY l.registered_at, l.queue_version").fetchall()
+        out = []
+        for r in rows:
+            d = dict(r)
+            d["status"] = "invalid" if d["invalid_reason"] is not None else "active"
+            out.append(d)
+        return out
+
+    def _invalid_queue_versions(self) -> set[str]:
+        rows = self._conn.execute(
+            "SELECT queue_version FROM review_queue_invalidation_v1").fetchall()
+        return {r["queue_version"] for r in rows}
+
+    def list_review_tasks_active(self, *, limit: int = 5000
+                                 ) -> list[dict[str, Any]]:
+        """活动审核任务：排除已失效队列版本（历史行保留，不删除）。"""
+        invalid = self._invalid_queue_versions()
+        tasks = self.list_review_tasks(limit=limit)
+        return [t for t in tasks if t["queue_version"] not in invalid]
+
+    def review_task_stats(self) -> dict[str, int]:
+        """active/invalid/total 分开统计（失效 V1 不阻断 V2）。"""
+        invalid = self._invalid_queue_versions()
+        active = invalid_n = 0
+        for t in self.list_review_tasks():
+            if t["queue_version"] in invalid:
+                invalid_n += 1
+            else:
+                active += 1
+        return {"active": active, "invalid": invalid_n,
+                "total": active + invalid_n}
 
     # ---------- backup ----------
 
