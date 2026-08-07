@@ -48,3 +48,76 @@
   默认 hermetic suite：**920 passed, 1 skipped, 5 deselected**；
   host suite（普通 Terminal，AC 电源）：`pytest -m host_mps` **5 passed**。
 - 全量（分层后）：920 + host 5 = 925 口径全绿；分层前一次性全量 925 passed。
+
+## 2026-08-08 Task 1–11 实施记录
+
+- **Task 1**（commit "feat: freeze four-lane v2 contracts..."）：
+  `src/modules/training_control/{contracts,vocabulary}.py`：TrainingLane 冻结四通道、
+  PlanV2 lineage（parent 只允 public: base；teacher 与 parent 结构分离）、
+  18 态状态机（无 CANCELLED 捷径）、13 Hook、Event/Artifact/Lease/Snapshot 契约；
+  migration 021（training_plan_v2/training_run_v2/training_event_v1/
+  training_artifact_v1/resource_lease_v1，事件与 artifact 触发器禁删改）。24 测试绿。
+- **Task 2**（commit "feat: isolate legacy models..."）：`legacy.py` 只读 inventory +
+  分类 + LegacyInferenceCapability（仅 recognition/assisted_proposal/baseline）；
+  migration 022 legacy_model_registry_v1（禁删改）。真实执行
+  `scripts/register_legacy_models.py`：备份 `.platform/backups/platform_before_legacy_registry_20260807T165*`
+  （integrity ok）→ 14 模型登记（prod_20260805_v5_r1=production_legacy，
+  sku_v7_sam=experimental_ended，其余 historical）；文件零移动；
+  证据 `.platform/legacy_model_inventory.json`（含逐权重 sha256）。
+- **Task 3**（commit "feat: dataset factory..."）：`src/modules/dataset_factory/service.py`：
+  共同准入（human_final/gold_verified；rq_v1/frozen/model-only 拒入）、
+  五键 split 守卫、staging→原子发布、exclusion ledger/quality histogram/
+  source hashes/manifest hash、D3 无 mask gold 只 calibration、
+  D4 build_candidate_set 签名禁 GT 不足 k 不补。14 测试绿。
+- **Task 4**（commit "feat: connect assisted proposals..."）：
+  修复 LS 分页（尾斜杠端点 + 末页 404 容忍）；`_is_assisted` 识别 diag_v2_assisted、
+  blind 永不进入；零检出标 no_proposal（幂等）。真实回填：
+  dry-run 200/200 → apply **added=1125 predictions / errors=0**（200 任务，
+  186 有 taxonomy 建议 SKU，13 零检出 no_proposal）；
+  model_version 唯一 `legacy.recognition.v2@cascade_v3@visible-sku-v2`；
+  项目 20 全量 50 任务 **prediction=0、模型 meta=0**；
+  proposal 未写 gold_region（gold 仍 0）。
+  审计 `reports/backfill_visible_sku/apply_20260808_011153.json`。
+- **Task 5**（commit "feat: four lane adapters..."）：四 adapter 统一接口；
+  参数白名单、目标目录防覆盖、VLM 禁 Ollama 量化 base、segmenter 无 mask gold
+  拒 train、结构化 TrainingEventV1、safe-stop 只发 stop_requested。11 测试绿。
+- **Task 6**（commit "feat: training control graph..."）：TrainingControlGraph
+  （非法跃迁拒绝+审计）、HookRegistry（13 hook 只推进合法状态、人工 gate
+  checkpoint 可 restore 回放）、AgentCommandGate（白名单；approve/launch/publish
+  仅人类）。8 测试绿。
+- **Task 7**（commit "feat: reliable worker..."）：ReliableWorker：提交重跑 G0、
+  heavy lease 并发 1/MPS-MLX 互斥（失败回滚无残留）、冻结 env/command/data/code/
+  config hash、PID/heartbeat/attempt、safe-stop 证据链（无进程退出证据不得写终态）、
+  orphan 恢复（PID 不在/心跳过期→FAILED+释放租约）。7 测试绿。
+- **Task 8**（commit "feat: unified training control api..." +
+  "fix: mount ... via composition root"）：lanes/readiness/overview/legacy-models/
+  runs-v2 只读投影 + datasets/{lane}/build（session+CSRF）。依赖方向修复：
+  router 移至 src/modules/training_control/api.py，经组合根注入
+  （架构守卫 test_platform_does_not_import_domain_modules 绿）。
+- **Task 9**（commit "feat: unified web training console..."）：
+  TrainingControl.tsx（当前生产 Legacy 卡与 nextgen 四 lane 卡视觉隔离、blocker
+  中文化、按钮算力/权限语义、租约与 gold 投影、旧模型账本折叠区）；
+  Training.tsx 原单 YOLO 区降为 Legacy 折叠区。tsc 干净、vite build 成功。
+- **Task 10**（commit "feat: freeze lane evaluation metrics..."）：
+  LANE_MIN_METRICS 四 lane 冻结；candidate 必须 frozen_set_hash+error ledger+晋级门；
+  production_switch 恒 False。5 测试绿。
+- **Task 11**（commit "test: verify end-to-end four-lane control chain..."）：
+  端到端链 smoke（factory→adapter→graph→worker→evaluation，全程 mock G0 无真实训练）；
+  故障演练覆盖：worker 崩溃 orphan 恢复、目标目录已存在、G0 失败、租约冲突、
+  safe-stop 无证据拒绝、LS 末页 404 容忍（均以测试固化）。
+  浏览器 QA（只读，Browser subagent）：`/#/training` 全部区块正确渲染、
+  blocker 如实显示、控制台无 JS 错误（仅未登录 /auth/me 401 预期）、
+  刷新状态保持；截图 `reports/gltc_web_qa_training_console.png`。
+
+## 2026-08-08 最终验证
+
+- 默认 hermetic suite：**1010 passed, 1 skipped, 5 deselected**（基线 914 → +96）。
+- host MPS suite：`pytest -m host_mps` **5 passed**（普通 Terminal，AC 电源）。
+- web：`tsc --noEmit` 干净；vite build 成功。
+- DB：integrity_check=ok；migration 至 022；gold_region_v1=0；
+  training_run（旧）4 行未动（supersession 账本 4 行）；training_run_v2 生产库 0 行（未提交任何真实训练）。
+- 服务：8091 /v2/health ok（prod_20260805_v5_r1 未切换）；8092 200；
+  8300 LS 存活；8400 healthy（ml_backend=disabled，GLTC D1）。
+- LS：项目 19 = 1125 proposals（append-only）+ 13 no_proposal；项目 20 零泄漏；
+  项目 1/10~13 未动。
+- 无训练进程；本轮未启动任何真实训练；未切换生产 bundle；未删除任何文件。
