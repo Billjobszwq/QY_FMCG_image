@@ -43,6 +43,10 @@ def svc(tmp_path: Path):
 
 
 class TestG0RealChecks:
+    # GLTC D4：真实宿主探针测试（依赖宿主 MPS/sysctl/pmset 权限），
+    # 独立于默认 hermetic suite：pytest -m host_mps
+    pytestmark = pytest.mark.host_mps
+
     def test_g0_reports_all_required_checks(self):
         rep = run_mps_g0(disk_root=".")
         assert rep["gate_version"] == GATE_VERSION

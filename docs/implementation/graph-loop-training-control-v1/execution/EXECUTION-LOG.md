@@ -22,3 +22,29 @@
   `src/training/vlm/`、`src/ls_ml_backend/`；training_gov service 的
   `_require_g0()` 先于授权校验（错误优先级待冻结，D3）。
 - 建立 execution/ 账本 6 文件（本目录），只追加不覆盖。
+
+## 2026-08-08 T0-fix（GLTC-000 实现）
+
+- 红测试 11 条（tests/platform/test_gltc000_baseline_fixes.py，commit "test: reproduce
+  training control baseline gaps"）→ 全绿。
+- 修复：
+  1. 错误优先级冻结（D3）：start_training/approve_plan/enqueue 顺序 = 计划有效性
+     → supersession → training_authorized flag → IAM → G0；enqueue 重跑真实 G0
+     （launch 禁信旧报告）。
+  2. HardwareGateProvider 注入（D4）：TrainingGovernanceService(hardware_gate=...)；
+     `_resolve_gate()` 晚绑定默认真实 run_mps_g0；mock 仅限测试注入。
+  3. legacy dry-run（D2）：migration 020 `training_run_supersession_v1`（触发器禁删改）+
+     store.supersede_training_run/is_training_run_superseded；
+     `scripts/mark_legacy_training_runs.py` 真实执行：备份
+     `.platform/backups/platform_before_legacy_run_supersession_20260807T165110Z.sqlite`
+     （integrity ok）→ 4/4 条含 `--dataset/--budget-minutes` 的 dry_run 追加标记
+     reason=cli_args_removed，superseded_by=training_control_v2；历史行未改；
+     证据 `.platform/training_run_legacy_supersession.json`；幂等（证据存在即拒绝覆盖）。
+  4. health disabled（D1）：ServiceSpec.disabled；ml_backend legacy/disabled 不探测；
+     aggregate 忽略 disabled；8400 graceful 重启后 /api/v1/health=**healthy**
+     （recognize/monitor/label_studio/omlx healthy，ml_backend disabled）。
+- 测试分层（D4）：pyproject addopts `-m 'not host_mps'` + markers；
+  test_umt005 TestG0RealChecks 标 host_mps。
+  默认 hermetic suite：**920 passed, 1 skipped, 5 deselected**；
+  host suite（普通 Terminal，AC 电源）：`pytest -m host_mps` **5 passed**。
+- 全量（分层后）：920 + host 5 = 925 口径全绿；分层前一次性全量 925 passed。

@@ -667,6 +667,27 @@ BEGIN
 END;
 """
 
+_M020 = """
+CREATE TABLE IF NOT EXISTS training_run_supersession_v1 (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    run_id TEXT NOT NULL UNIQUE,
+    reason TEXT NOT NULL,
+    superseded_by TEXT NOT NULL DEFAULT '',
+    git_commit TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL
+);
+CREATE TRIGGER training_run_supersession_v1_no_delete
+    BEFORE DELETE ON training_run_supersession_v1
+BEGIN
+    SELECT RAISE(ABORT, 'training_run_supersession_v1 不可变：禁止 DELETE');
+END;
+CREATE TRIGGER training_run_supersession_v1_no_update
+    BEFORE UPDATE ON training_run_supersession_v1
+BEGIN
+    SELECT RAISE(ABORT, 'training_run_supersession_v1 不可变：禁止 UPDATE');
+END;
+"""
+
 MIGRATIONS: tuple[tuple[str, str], ...] = (
     ("001_platform_init", _M001),
     ("002_labeling_inbox", _M002),
@@ -687,6 +708,7 @@ MIGRATIONS: tuple[tuple[str, str], ...] = (
     ("017_package_decision_v1", _M017),
     ("018_gold_region_v1", _M018),
     ("019_review_queue_ledger_v1", _M019),
+    ("020_training_run_supersession_v1", _M020),
 )
 
 
@@ -2106,6 +2128,36 @@ class PlatformStore:
                 active += 1
         return {"active": active, "invalid": invalid_n,
                 "total": active + invalid_n}
+
+    # ---------- training run supersession（追加式，不改历史行） ----------
+
+    def supersede_training_run(self, run_id: str, *, reason: str,
+                                 superseded_by: str = "",
+                                 git_commit: str = "") -> None:
+        """GLTC D2：追加式标记 legacy/superseded（历史 run 行不改不删）。
+
+        幂等：已标记的 run 重复调用不新增（UNIQUE(run_id) 兼做保护）。
+        """
+        if self.is_training_run_superseded(run_id):
+            return
+        self._conn.execute(
+            "INSERT INTO training_run_supersession_v1"
+            " (run_id, reason, superseded_by, git_commit, created_at)"
+            " VALUES (?,?,?,?,?)",
+            (run_id, reason, superseded_by, git_commit, _utcnow()))
+        self._conn.commit()
+
+    def is_training_run_superseded(self, run_id: str) -> bool:
+        row = self._conn.execute(
+            "SELECT 1 FROM training_run_supersession_v1 WHERE run_id=?",
+            (run_id,)).fetchone()
+        return row is not None
+
+    def list_training_run_supersessions(self) -> list[dict[str, Any]]:
+        rows = self._conn.execute(
+            "SELECT * FROM training_run_supersession_v1"
+            " ORDER BY id").fetchall()
+        return [dict(r) for r in rows]
 
     # ---------- backup ----------
 

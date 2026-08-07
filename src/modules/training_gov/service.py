@@ -144,8 +144,24 @@ def unified_eval(
 # ---------- 治理服务 ----------
 
 class TrainingGovernanceService:
-    def __init__(self, store: Any) -> None:
+    def __init__(self, store: Any, *, hardware_gate: Any = None) -> None:
         self.store = store
+        # GLTC D4：HardwareGateProvider 可注入（测试 hermetic）；
+        # 未注入时默认真实 run_mps_g0（晚绑定，保留 monkeypatch 语义）。
+        # mock 只允许在测试注入，不得进入真实 launch 路径。
+        self._hardware_gate = hardware_gate
+
+    def _resolve_gate(self) -> Any:
+        return self._hardware_gate if self._hardware_gate is not None \
+            else run_mps_g0
+
+    def _require_active_run(self, run_id: str) -> None:
+        """GLTC D2：被追加式标记 legacy/superseded 的 run 禁止一切
+        批准/启动/入队；历史行保留作证据。"""
+        if self.store.is_training_run_superseded(run_id):
+            raise TrainingGovError(
+                f"训练计划已被标记 legacy/superseded（non_executable），"
+                f"禁止批准或入队: {run_id}")
 
     # ----- dataset snapshot -----
 
@@ -306,7 +322,7 @@ class TrainingGovernanceService:
             f"wall-clock > {budget_minutes}min 即停",
         ]
         # UMT-005：MPS G0 必须真实实测，禁止 sys.platform 假判；证据写入 run
-        g0 = run_mps_g0(disk_root=".")
+        g0 = self._resolve_gate()(disk_root=".")
         run_name = f"{snap['name']}_{snap['version']}"
         yaml_path = data_yaml or f".datasets/{run_name}/data.yaml"
         command = [
@@ -347,16 +363,20 @@ class TrainingGovernanceService:
         return run
 
     def start_training(self, run_id: str, *, actor: str, role: str) -> dict[str, Any]:
-        """授权门：flag + IAM 双校验。平台不执行训练，仅标记 authorized 并回显命令。"""
+        """授权门：flag + IAM 双校验。平台不执行训练，仅标记 authorized 并回显命令。
+
+        错误优先级冻结（GLTC D3）：计划有效性 → 授权 → 硬件 G0。
+        """
         run = self.store.get_training_run(run_id)
         if run is None:
             raise KeyError(run_id)
-        self._require_g0(run)
+        self._require_active_run(run_id)
         if self.store.get_flag("training_authorized") != "true":
             raise AuthorizationRequired(
                 "training_authorized=false：训练启动需显式人工授权")
         if not iam_can(role, "training.approve"):
             raise AuthorizationRequired(f"角色 {role} 无 training.approve 权限")
+        self._require_g0(run)
         return self.store.update_training_run(
             run_id, kind="authorized", status="authorized", approved_by=actor)
 
@@ -373,16 +393,20 @@ class TrainingGovernanceService:
 
     def approve_plan(self, run_id: str, *, actor: str, role: str,
                      worker: Any = None) -> dict[str, Any]:
-        """批准训练计划：只落状态，绝不提交 job/消耗算力（UMT-007）。"""
+        """批准训练计划：只落状态，绝不提交 job/消耗算力（UMT-007）。
+
+        错误优先级冻结（GLTC D3）：计划有效性 → 授权 → 硬件 G0。
+        """
         run = self.store.get_training_run(run_id)
         if run is None:
             raise KeyError(run_id)
-        self._require_g0(run)
+        self._require_active_run(run_id)
         if self.store.get_flag("training_authorized") != "true":
             raise AuthorizationRequired(
                 "training_authorized=false：批准训练计划需显式人工授权")
         if not iam_can(role, "training.approve"):
             raise AuthorizationRequired(f"角色 {role} 无 training.approve 权限")
+        self._require_g0(run)
         out = self.store.update_training_run(
             run_id, kind="authorized", status="approved", approved_by=actor)
         self.store.append_audit(
@@ -393,22 +417,33 @@ class TrainingGovernanceService:
 
     def enqueue_training_job(self, run_id: str, *, actor: str, role: str,
                              worker: Any) -> dict[str, Any]:
-        """提交训练 Job：仅已批准计划可入队；由可恢复 Worker 执行。"""
+        """提交训练 Job：仅已批准计划可入队；由可恢复 Worker 执行。
+
+        GLTC D3：launch 路径重跑真实 G0，禁止只信 dry-run 时的旧报告。
+        """
         run = self.store.get_training_run(run_id)
         if run is None:
             raise KeyError(run_id)
+        self._require_active_run(run_id)
         # 幂等（UMT-109）：已入队/执行中的 run 重复提交返回同一 Job
         if run.get("status") in ("queued", "running") and run.get("job_id"):
             return {**run, "job_id": run["job_id"]}
         if run.get("status") != "approved":
             raise TrainingGovError(
                 f"仅已批准的训练计划可入队（当前 status={run.get('status')}）")
-        self._require_g0(run)
         if self.store.get_flag("training_authorized") != "true":
             raise AuthorizationRequired(
                 "training_authorized=false：提交训练 Job 需显式人工授权")
         if not iam_can(role, "training.approve"):
             raise AuthorizationRequired(f"角色 {role} 无 training.approve 权限")
+        # 重跑真实 G0（环境可能在 dry-run 后恶化）；失败即拒绝提交
+        fresh = self._resolve_gate()(disk_root=".")
+        if not fresh.get("ok"):
+            failed = [c["name"] for c in fresh.get("checks", [])
+                      if not c.get("ok")]
+            raise TrainingGovError(
+                f"MPS G0 未通过（launch 重跑），训练保持禁用；"
+                f"失败项: {failed or '无报告'}")
         command = json.loads(run["command_json"])
         job_id = worker.submit("training.run", {
             "run_id": run_id, "command": command,

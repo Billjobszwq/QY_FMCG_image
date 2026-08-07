@@ -43,3 +43,10 @@ dev = [
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+# GLTC D4：默认 suite 必须 hermetic（不依赖宿主 MPS/sysctl 权限）；
+# 真实宿主探针测试标 host_mps，独立执行：pytest -m host_mps
+addopts = "-m 'not host_mps'"
+markers = [
+    "host_mps: 真实宿主 MPS/Apple 探针测试（非 hermetic，需普通 Terminal）",
+    "slow: 耗时较长的测试",
+]

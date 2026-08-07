@@ -18,6 +18,7 @@ import httpx
 HEALTHY = "healthy"
 DEGRADED = "degraded"
 UNAVAILABLE = "unavailable"
+DISABLED = "disabled"  # GLTC D1：legacy/disabled 服务不探测、不计 degraded
 
 
 @dataclass(frozen=True)
@@ -31,6 +32,8 @@ class ServiceSpec:
     # require_ok_flag=True 时要求响应 JSON 的 ok 字段为 true（如 8091 /v2/health）
     require_ok_flag: bool = False
     description: str = ""
+    # disabled=True：legacy 链路，不发起探测，不影响平台聚合状态
+    disabled: bool = False
 
 
 # 手册 §5 端口表 + services.json（ISSUE-018）
@@ -62,7 +65,9 @@ DEFAULT_SERVICES: tuple[ServiceSpec, ...] = (
         "http://127.0.0.1:8301",
         "/health",
         critical=False,
-        description="Label Studio 预标注 ML backend",
+        description="Label Studio 预标注 ML backend（legacy/disabled："
+                    "proposal 正式写入口已收敛到平台识别能力，GLTC D1）",
+        disabled=True,
     ),
     ServiceSpec(
         "omlx",
@@ -90,7 +95,13 @@ def probe_service(
     timeout: float = 2.0,
     client: httpx.Client | None = None,
 ) -> ServiceStatus:
-    """探测单个服务。任何异常都归类为 unavailable，绝不向调用方抛出。"""
+    """探测单个服务。任何异常都归类为 unavailable，绝不向调用方抛出。
+
+    disabled 服务不发起探测（GLTC D1）：直接返回 disabled 状态。
+    """
+    if spec.disabled:
+        return ServiceStatus(spec.name, DISABLED, None,
+                             "legacy/disabled：不探测")
 
     def _probe(c: httpx.Client) -> ServiceStatus:
         try:
@@ -123,12 +134,20 @@ def probe_service(
 
 
 def aggregate_platform(pairs: list[tuple[ServiceSpec, ServiceStatus]]) -> str:
-    """由 (spec, status) 列表计算平台整体状态。"""
+    """由 (spec, status) 列表计算平台整体状态。
+
+    disabled 服务不参与聚合（GLTC D1）：legacy 链路下线不得把
+    平台拖入 degraded。
+    """
 
     for spec, st in pairs:
+        if spec.disabled:
+            continue
         if spec.critical and st.status == UNAVAILABLE:
             return UNAVAILABLE
-    for _, st in pairs:
+    for spec, st in pairs:
+        if spec.disabled:
+            continue
         if st.status != HEALTHY:
             return DEGRADED
     return HEALTHY

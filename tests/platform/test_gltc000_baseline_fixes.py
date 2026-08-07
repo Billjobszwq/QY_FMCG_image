@@ -102,8 +102,9 @@ class TestHardwareGateInjectable:
     def test_default_provider_is_real_gate(self, store):
         from src.modules.training_gov import service as svc_mod
         svc = TrainingGovernanceService(store)
-        assert svc._hardware_gate is svc_mod.run_mps_g0 or \
-            getattr(svc._hardware_gate, "__wrapped__", None) is not None
+        # 未注入时默认 provider 必须是真实 run_mps_g0（晚绑定，保持
+        # monkeypatch 语义）；不得降级为假判或 mock。
+        assert svc._resolve_gate() is svc_mod.run_mps_g0
 
     def test_enqueue_reruns_gate_not_stale_report(self, store):
         """launch 路径重跑真实 G0：dry-run 时 pass，enqueue 时 fail → 拒绝。"""
