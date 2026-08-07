@@ -51,3 +51,14 @@
   - 双审 one-to-one IoU 匹配（DOUBLE_REVIEW_IOU_THRESHOLD=0.75，降序贪心），匹配对再比 SKU；未匹配=分歧。
   - 仲裁只覆盖 IoU 匹配的分歧组；未分歧区域保持 human_final；仲裁逐区域 gold_verified。
   - 全量 871 passed, 1 skipped（基线 852 + 新增 19，零回归、零旧测试迁移）。
+
+## 2026-08-07 S8（commit 8a/8）
+
+- **Commit 8a** `6917e95` test: define ls v2 payload contracts（8 条红测试）。
+- **Commit 8** `d306e44` feat: connect v2 queue to usable Label Studio workflow
+  - `src/review/ls_v2_payload.py`：纯构建 payload；blind 序列化文本零 predictions/model_version/score/suggested（盲审零模型信息）；blob 缺失 fail-closed；重叠照片标记 overlap_photo_ids（assisted/blind 身份隔离）。
+  - 真实接入：新建 LS 项目 **19 diag_v2_assisted（200 任务）** 与 **20 diag_v2_blind（50 任务）**；multipart 逐张上传 250/250（226 唯一+24 重叠双传）；meta 回填 task_ref/photo_id/sha256。
+  - 守护：项目 1/10~13 创建前后两次校验标题逐字未变；LS 未重启；图片抽查 GET 200。
+  - 证据：`.review_queue/ls_v2_evidence.json`。人工入口 http://127.0.0.1:8300/projects/19 与 /projects/20。
+  - 全量 879 passed（基线 871 + 8）。
+  - 未决：assisted predictions 为空（队列侧无 proposals，按契约不伪造；可后续经 predictions API 追加）。
