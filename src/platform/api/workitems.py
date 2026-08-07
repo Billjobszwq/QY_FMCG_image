@@ -1,8 +1,8 @@
 """U2-1：统一任务中心 WorkItem API（角色首页数据源）。
 
 聚合真实来源（禁止演示数据/伪造）：
-- 人工审核队列：PLATFORM_REVIEW_QUEUE（默认 .review_queue/
-  review_queue_diag_v1.json），pending 项逐条进入待办；
+- 人工审核：review_task_v1 + review_event_v1 + 队列账本（DB 事件推导，
+  任务书§八唯一事实源）；队列 JSON 只是不可变导入制品，不作运行状态；
 - 训练治理：training_run（计划待批准/已批准待提交/活动/历史）；
 - 可恢复 Job：queued/running/failed；
 - 标注批次：labeling_batch。
@@ -12,16 +12,12 @@ summary 默认业务语言（待办/活动/阻断/下一步）；M4/M5、hash �
 """
 from __future__ import annotations
 
-import json
-import os
-from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter
 
+from src.platform.annotate.review import review_progress
 from src.platform.vocabulary import status_stage, status_text
-
-REPO_ROOT = Path(__file__).resolve().parents[3]
 
 _TRAIN_STATUS_CN = {
     "dry_run": "计划待批准",
@@ -34,48 +30,37 @@ _TRAIN_STATUS_CN = {
 }
 
 
-def _load_review_queue() -> dict[str, Any]:
-    path = Path(os.environ.get(
-        "PLATFORM_REVIEW_QUEUE",
-        str(REPO_ROOT / ".review_queue" / "review_queue_diag_v1.json")))
-    if not path.is_file():
-        return {}
-    try:
-        return json.loads(path.read_text(encoding="utf-8"))
-    except Exception:
-        return {}
-
-
 def collect_workitems(store: Any) -> dict[str, Any]:
     items: list[dict[str, Any]] = []
     blocked: list[str] = []
     next_steps: list[str] = []
 
-    # ---- 人工审核队列（真实 pending，不得伪造完成） ----
-    rq = _load_review_queue()
-    rq_items = rq.get("items", []) if isinstance(rq, dict) else []
-    pending_reviews = [it for it in rq_items
-                       if it.get("status") == "pending"]
-    for it in pending_reviews:
+    # ---- 人工审核（唯一事实源 = DB 事件推导，不得伪造完成） ----
+    progress = review_progress(store)
+    review_tasks = progress["active"]["tasks"]
+    open_reviews = [tk for tk in review_tasks
+                    if tk["status"] != "finalized"]
+    for tk in review_tasks:
         items.append({
-            "id": f"review:{it.get('photo_id', '?')}",
+            "id": f"review:{tk['task_id']}",
             "kind": "human_review",
-            "status": "pending",
-            "status_text": status_text("human_review", "pending"),
+            "status": tk["status"],
+            "status_text": status_text("human_review", tk["status"]),
             "stage": status_stage(
-                status_text("human_review", "pending")),
-            "title": f"人工审核：{it.get('photo_id', '?')}",
+                status_text("human_review", tk["status"])),
+            "title": f"人工审核：{tk['photo_id']}",
             "owner": "标注审核员",
             "detail": {
-                "photo_id": it.get("photo_id"),
-                "review_mode": it.get("review_mode"),
-                "protocol": rq.get("protocol") if isinstance(rq, dict) else None,
+                "photo_id": tk["photo_id"],
+                "review_mode": tk["review_mode"],
+                "queue_version": tk["queue_version"],
+                "protocol": tk.get("protocol") or None,
             },
         })
-    if pending_reviews:
+    if open_reviews:
         next_steps.append(
-            f"完成 {len(pending_reviews)} 张人工 truebox 审核"
-            f"（协议 {rq.get('protocol', '?')}），训练晋级只认人工结论")
+            f"完成 {len(open_reviews)} 项人工 truebox 审核"
+            f"，训练晋级只认人工结论")
 
     # ---- 训练治理 ----
     authorized = store.get_flag("training_authorized") == "true"
@@ -105,7 +90,7 @@ def collect_workitems(store: Any) -> dict[str, Any]:
     if not authorized:
         blocked.append("训练未获显式授权（training_authorized=false）；"
                        "批准计划与提交 Job 均需 admin 授权后操作")
-    if open_runs == 0 and not pending_reviews:
+    if open_runs == 0 and not open_reviews:
         next_steps.append("无活动训练任务：平台处于 idle，未消耗训练算力")
 
     # ---- 可恢复 Job ----
@@ -143,7 +128,8 @@ def collect_workitems(store: Any) -> dict[str, Any]:
         })
 
     todos = sum(1 for w in items if w["status"] in (
-        "pending", "dry_run", "approved"))
+        "pending", "claimed", "awaiting_second", "awaiting_arbitration",
+        "dry_run", "approved"))
     active = sum(1 for w in items if w["status"] in ("queued", "running"))
     if not next_steps:
         next_steps.append("按 IMPLEMENTATION-LIST 顺序推进下一任务")
@@ -152,7 +138,8 @@ def collect_workitems(store: Any) -> dict[str, Any]:
         "count": len(items),
         "items": items,
         "summary": {
-            "pending_review": len(pending_reviews),
+            "pending_review": sum(
+                1 for tk in review_tasks if tk["status"] == "pending"),
             "todos": todos,
             "active": active,
             "blocked": blocked,

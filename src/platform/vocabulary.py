@@ -42,6 +42,10 @@ _KIND_STATUS: dict[str, dict[str, str]] = {
     },
     "human_review": {
         "pending": "待人工审核",
+        "claimed": "已认领",
+        "awaiting_second": "待二审",
+        "awaiting_arbitration": "待仲裁",
+        "finalized": "已完成",
         "in_review": "审核中",
         "accepted": "已完成",
         "rejected": "失败",

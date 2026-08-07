@@ -314,6 +314,40 @@ def final_box(store, task_id: str) -> list[float] | None:
     return _derive_status(store, row)["final_box"]
 
 
+def review_progress(store) -> dict[str, Any]:
+    """统一审核状态源（任务书§八）：完全由 review_task_v1 +
+    review_event_v1 + 队列账本推导；静态队列 JSON 只是不可变导入
+    制品，不作为运行状态。active/invalid 分开统计，失效队列不进
+    默认进度、不阻断后续批次。"""
+    tasks = store.list_review_tasks()
+    active = store.list_review_tasks_active()
+    active_ids = {t["task_id"] for t in active}
+    invalid_tasks = [t for t in tasks if t["task_id"] not in active_ids]
+    by_status: dict[str, int] = {}
+    derived: list[dict[str, Any]] = []
+    for row in active:
+        st = _derive_status(store, row)
+        by_status[st["status"]] = by_status.get(st["status"], 0) + 1
+        derived.append({**st,
+                        "queue_version": row.get("queue_version", ""),
+                        "protocol": row.get("protocol", "")})
+    return {
+        "source": "db_events",
+        "active": {
+            "total": len(active),
+            "by_status": by_status,
+            "queue_versions": sorted({str(r.get("queue_version") or "")
+                                      for r in active}),
+            "tasks": derived,
+        },
+        "invalid": {
+            "total": len(invalid_tasks),
+            "queue_versions": sorted({str(r.get("queue_version") or "")
+                                      for r in invalid_tasks}),
+        },
+    }
+
+
 def export_review(store, path: Path | str) -> dict[str, Any]:
     """不可变导出：全部任务 + 终态 final_box + 事件账，附 SHA256。"""
     tasks = store.list_review_tasks()

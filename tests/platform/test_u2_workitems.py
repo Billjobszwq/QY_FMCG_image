@@ -60,6 +60,15 @@ def client(tmp_path: Path, monkeypatch):
                      training_router=build_training_router(bundle, _worker),
                      jobs_router=jobs_router,
                      web_dist=tmp_path / "none")
+    # 运行状态唯一事实源 = DB：真实种子 3 条 pending 审核任务
+    # （JSON env 仍在，但不得再作为运行状态来源）
+    for i in range(3):
+        bundle.store.add_review_task(
+            task_id=f"rt_u2_p{i:03d}", claim_token=f"tok_u2_p{i:03d}",
+            photo_id=f"p{i:03d}", sha256=f"sha_u2_{i:03d}",
+            review_mode=("double_review" if i < 2 else "blind_manual"),
+            requires_second_review=True,
+            queue_version="rq_v1", protocol="diagnostic_v1")
     return TestClient(app), bundle
 
 

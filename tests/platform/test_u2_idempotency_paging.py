@@ -136,13 +136,13 @@ class TestWorkItemsPaging:
     def test_workitems_paging_and_kind_filter(self, client, tmp_path,
                                               monkeypatch):
         client, bundle = client
-        rq = tmp_path / "rq.json"
-        rq.write_text(json.dumps({
-            "protocol": "diagnostic_v1",
-            "items": [{"photo_id": f"p{i}", "status": "pending"}
-                      for i in range(5)]}, ensure_ascii=False),
-            encoding="utf-8")
-        monkeypatch.setenv("PLATFORM_REVIEW_QUEUE", str(rq))
+        # 状态源 = DB 事件：种子 5 条 pending 审核任务
+        for i in range(5):
+            bundle.store.add_review_task(
+                task_id=f"rt_pg_p{i}", claim_token=f"tok_pg_p{i}",
+                photo_id=f"p{i}", sha256=f"sha_pg_{i:03d}",
+                review_mode="double_review", requires_second_review=True,
+                queue_version="rq_v1", protocol="diagnostic_v1")
         full = client.get("/api/v1/workitems").json()
         assert full["count"] >= 5
         p1 = client.get("/api/v1/workitems?limit=2&offset=0").json()

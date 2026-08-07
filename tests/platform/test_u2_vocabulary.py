@@ -60,13 +60,6 @@ def test_workitems_items_carry_status_text(tmp_path: Path, monkeypatch):
     from src.composition.build import build_production_bundle
     from src.platform.api.app import create_app
 
-    rq = tmp_path / "rq.json"
-    rq.write_text(json.dumps({
-        "protocol": "diagnostic_v1",
-        "items": [{"photo_id": "p1", "status": "pending"}]},
-        ensure_ascii=False), encoding="utf-8")
-    monkeypatch.setenv("PLATFORM_REVIEW_QUEUE", str(rq))
-
     bundle = build_production_bundle(
         db_path=tmp_path / "p.sqlite", cas_root=tmp_path / "cas",
         recognition_adapter=None, monitor_adapter=None,
@@ -74,6 +67,12 @@ def test_workitems_items_carry_status_text(tmp_path: Path, monkeypatch):
         probe=lambda spec: None)
     app = create_app(services=(), probe=lambda spec: None, bundle=bundle,
                      web_dist=tmp_path / "none")
+    # 状态源 = DB：种子 1 条 pending 审核任务
+    bundle.store.add_review_task(
+        task_id="rt_voc_p1", claim_token="tok_voc_p1",
+        photo_id="p1", sha256="sha_voc_001",
+        review_mode="double_review", requires_second_review=True,
+        queue_version="rq_v1", protocol="diagnostic_v1")
     c = TestClient(app)
     d = c.get("/api/v1/workitems").json()
     assert d["count"] >= 1
