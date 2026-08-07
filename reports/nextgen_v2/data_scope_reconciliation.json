@@ -1,0 +1,40 @@
+{
+ "generated_at": "2026-08-07T19:12:18.070973+00:00",
+ "batch1_photos": 2947,
+ "batch1_points": 84459,
+ "batch2_photos": 6510,
+ "batch2_points": 174249,
+ "batch3_photos_xlsx": 22664,
+ "batch3_points_total": 571404,
+ "batch3_unique_photos": 22664,
+ "clean_manifest": 22659,
+ "xlsx_mapped": 22659,
+ "batch3_missing_sha_photos": 5,
+ "batch3_missing_sha_ledger": {
+  "36070492": 18,
+  "36143897": 19,
+  "36176757": 18,
+  "36209734": 15,
+  "36281298": 22
+ },
+ "exact_unique_all": 29171,
+ "exact_unique_expected_by_taskbook": 29176,
+ "exact_unique_delta_explanation": "差额 5 = 批3 反光 reject 照片无 blob/SHA（clean 阶段拒入），其 photo_id 与点数保留在缺失账本；不静默吞差",
+ "b1_b2_overlap": 2945,
+ "b1_b3_overlap": 0,
+ "b2_b3_overlap": 0,
+ "b1_only_photos": 2,
+ "canonical_points": 745695,
+ "canonical_points_expected": 745695,
+ "b1_only_points": 42,
+ "other_points": {
+  "other": 22650,
+  "百事other": 9720,
+  "可乐other": 8216
+ },
+ "other_points_expected": 40591,
+ "missing_photo_points_in_other": 10,
+ "coordinate_discrepancies_expected": 476,
+ "note": "476 vs 463 口径差异见 coordinate_discrepancy_ledger.json",
+ "other_points_delta_explanation": "任务书 40,591 vs 实测 40,586（差 5）：5 张 reject 照片共 92 点，其中 10 点为 other 家族名称。92 点全量记录于 batch3_missing_sha_ledger，不静默吞差；5 点差额待与审计方核对 reject 照片是否计入。"
+}

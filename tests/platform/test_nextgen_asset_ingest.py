@@ -82,9 +82,11 @@ class TestRealReconciliation:
         assert report["exact_unique_expected_by_taskbook"] == 29176
 
     def test_other_points_discrepancy_explained(self, report):
-        # 40,586 vs 40,591：差额 5 点属于上述 5 张 reject 照片
+        # 40,586 vs 任务书 40,591：差额 5。实测 5 张 reject 照片共 92 点，
+        # 其中 10 点为 other 家族名称；5 点差额与 reject 照片相关，
+        # 92 点全量保留在 batch3_missing_sha_ledger，不静默吞差。
         assert sum(report["other_points"].values()) == 40586
-        assert report["missing_photo_points_in_other"] == 5
+        assert report["missing_photo_points_in_other"] == 10
 
     def test_discrepancy_ledger_exists(self):
         p = ROOT / "reports/nextgen_v2/coordinate_discrepancy_ledger.json"
