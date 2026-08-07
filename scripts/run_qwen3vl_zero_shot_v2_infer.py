@@ -169,6 +169,13 @@ def main() -> int:
     kb_ids, kb_vec = kb.load_vectors()
     kb_id_set = set(kb_ids)
 
+    # ---- 2b. canonical sku identity 映射链（任务书§十五）----
+    # identity 判定禁止展示名字符串比较：dataset_class → canonical_sku_id
+    # → package_version_id → KB vector_id（数据源：data/sku_registry.json、
+    # data/sku_aliases.json、KB vector_ids）。
+    from src.training.vlm.evaluate import build_default_identity_index
+    identity_index = build_default_identity_index(ROOT, kb_root=a.kb_root)
+
     # ---- 3. Qwen 闭集重排（隔离环境 mlx-vlm） ----
     from PIL import Image
     from mlx_vlm import load, generate
@@ -235,11 +242,14 @@ def main() -> int:
         except Exception as e:  # fail-closed：错误进账本
             err = f"{type(e).__name__}: {e}"
             decision, pred = "error", None
+        gt_ident = identity_index.resolve_sku_identity(reg["gt"])
         rec = {
             "gt": reg["gt"], "decision": decision, "pred": pred,
             "retrieval_ranking": ranking,
             "n_candidates": len(ranking),
-            "gt_in_registry": reg["gt"] in kb_id_set,
+            "gt_in_registry": gt_ident.kb_vector_id is not None,
+            "gt_sku_id": gt_ident.sku_id,
+            "gt_package_version_id": gt_ident.package_version_id,
             "target_type": "closed_set", "schema_ok": True,
             "candidate_escape": pred is not None and pred not in ranking,
             "attribute_correct": None,

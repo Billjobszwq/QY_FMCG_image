@@ -20,7 +20,10 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from src.training.vlm.evaluate import evaluate_records_v2  # noqa: E402
+from src.training.vlm.evaluate import (  # noqa: E402
+    build_default_identity_index,
+    evaluate_records_v2,
+)
 
 
 def main() -> int:
@@ -49,8 +52,12 @@ def main() -> int:
     meta_path = run_dir / "meta.json"
     meta = (json.loads(meta_path.read_text(encoding="utf-8"))
             if meta_path.is_file() else {})
+    # 任务书§十五：identity 判定走 canonical sku_id 映射链
+    kb_root = ROOT / str(meta.get("kb_root") or ".kb")
+    identity_index = build_default_identity_index(ROOT, kb_root=kb_root)
     report = evaluate_records_v2(
-        records, wall_seconds=meta.get("wall_seconds"))
+        records, wall_seconds=meta.get("wall_seconds"),
+        identity_index=identity_index)
     report["sampling_report"] = meta.get("sampling_report")
     report["infer_version"] = meta.get("infer_version")
     report["evidence_level"] = meta.get("evidence_level",
