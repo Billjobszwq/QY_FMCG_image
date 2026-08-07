@@ -2,7 +2,9 @@
 
 从 data/sku_registry.json 读取全部 SKU，生成 configs/label-studio/label_config.xml。
 结构：Image(缩放/旋转) + RectangleLabels(商品框) + perRegion Taxonomy(208 SKU 可搜索)
-      + perRegion status(裁决状态) + perRegion TextArea(留痕备注)。
+      + perRegion status(裁决状态，含 unreviewed 初始态) + perRegion TextArea(留痕备注)。
+状态语义：unreviewed = 自动 prediction 初始态，不得进入 human_final；
+matched 只能由人工选择。
 用法：python -m src.ls_platform.gen_label_config"""
 from __future__ import annotations
 
@@ -37,6 +39,7 @@ def build_config(registry: dict) -> str:
   </Taxonomy>
   <Choices name="status" toName="image" perRegion="true" required="true"
            header="裁决状态" choice="single-radio" showInLine="true">
+    <Choice value="unreviewed" alias="unreviewed" />
     <Choice value="matched" alias="matched" />
     <Choice value="unknown" alias="unknown" />
     <Choice value="conflict" alias="conflict" />

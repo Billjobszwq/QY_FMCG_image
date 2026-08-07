@@ -217,6 +217,7 @@
   </Taxonomy>
   <Choices name="status" toName="image" perRegion="true" required="true"
            header="裁决状态" choice="single-radio" showInLine="true">
+    <Choice value="unreviewed" alias="unreviewed" />
     <Choice value="matched" alias="matched" />
     <Choice value="unknown" alias="unknown" />
     <Choice value="conflict" alias="conflict" />

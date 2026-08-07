@@ -67,3 +67,26 @@ def test_sam_prediction_never_carries_matched_semantics() -> None:
             "SAM prediction 只能有框，不得写 taxonomy/状态"
     meta = pred.get("metadata", {})
     assert meta.get("is_final_annotation") is False
+
+
+def test_label_config_contains_unreviewed_and_human_statuses() -> None:
+    """label_config 必须提供 unreviewed 初始态 + 4 个人工裁决状态。"""
+    from src.ls_platform.gen_label_config import build_config
+
+    registry = {"可口可乐500ml": {"sku_id": "QY_KK_000001",
+                               "name": "可口可乐500ml", "class_id": 1}}
+    xml = build_config(registry)
+    for choice in ("unreviewed", "matched", "unknown", "conflict",
+                   "unreadable"):
+        assert f'value="{choice}"' in xml
+    assert 'name="sku"' in xml and "perRegion" in xml
+
+
+def test_importer_seed_prediction_uses_unreviewed_not_matched() -> None:
+    """种子点标注 prediction 也不得自动写 matched（人工未确认）。"""
+    from src.ls_platform.importer import _build_prediction_result
+
+    ann = {"x": 100, "y": 200, "name": "可口可乐500ml"}
+    result = _build_prediction_result(ann, 1000, 1000, {"可口可乐500ml"})
+    statuses = [r for r in result if r["type"] == "choices"]
+    assert statuses and statuses[0]["value"]["choices"] == ["unreviewed"]

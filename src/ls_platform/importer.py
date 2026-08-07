@@ -78,7 +78,7 @@ def _build_prediction_result(ann, W, H, sku_names):
         "from_name": "status",
         "to_name": "image",
         "type": "choices",
-        "value": {**box, "choices": ["matched"]},
+        "value": {**box, "choices": ["unreviewed"]},
     })
     return result
 

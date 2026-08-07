@@ -80,8 +80,11 @@ def build_labeling_router(bundle: PlatformBundle):
     )
 
     def builder(photos):
+        from src.modules.labeling.service import load_default_registry
+
         return predictions_from_recognition(
-            recognition, photos, model_version="legacy.recognition.v2@cascade_v3"
+            recognition, photos, model_version="legacy.recognition.v2@cascade_v3",
+            registry=load_default_registry(REPO_ROOT / "data" / "sku_registry.json"),
         )
 
     return create_labeling_router(
