@@ -105,6 +105,12 @@ def create_app(
         from src.platform.api.review import create_review_router
         app.include_router(create_review_router(
             bundle.store, auth=AuthService(bundle.store)))
+        # GLTC Task 8：四训练通道统一控制面（lanes/readiness/overview/
+        # legacy 只读投影；dataset build 需 session+CSRF）
+        from src.platform.api.training_control import (
+            create_training_control_router)
+        app.include_router(create_training_control_router(
+            bundle.store, auth=AuthService(bundle.store)))
         # U5-2/U5-3：Graph+Loop v2 运行（runs/trail 登录只读；
         # start/gate 需 session+CSRF 且仅限 admin）
         from src.platform.api.loops import create_loops_router
