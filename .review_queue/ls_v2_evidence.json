@@ -1,0 +1,80 @@
+{
+  "created_at": "2026-08-07T13:31:16.378777+00:00",
+  "git_commit": "6917e95cc00b46b0e1d9e09a0127f21d2ed0bdcc",
+  "queue_file": "/Users/zhangweiqi/Documents/QY/项目/LLM-Image/.review_queue/review_queue_diag_v2.json",
+  "queue_version": "rq_v2",
+  "projects": {
+    "assisted": 19,
+    "blind": 20
+  },
+  "project_titles": {
+    "assisted": "diag_v2_assisted",
+    "blind": "diag_v2_blind"
+  },
+  "task_counts": {
+    "assisted": 200,
+    "blind": 50
+  },
+  "uploads": {
+    "assisted": {
+      "project_id": 19,
+      "expected": 200,
+      "uploaded": 200,
+      "meta_patched": 200,
+      "failures": []
+    },
+    "blind": {
+      "project_id": 20,
+      "expected": 50,
+      "uploaded": 50,
+      "meta_patched": 50,
+      "failures": []
+    }
+  },
+  "n_unique_photos": 226,
+  "overlap_photo_ids": [
+    "35996301",
+    "36013437",
+    "36036528",
+    "36059731",
+    "36073262",
+    "36079937",
+    "36090294",
+    "36092113",
+    "36092213",
+    "36092474",
+    "36097550",
+    "36097556",
+    "36101074",
+    "36101203",
+    "36101533",
+    "36101978",
+    "36101979",
+    "36128772",
+    "36138941",
+    "36146416",
+    "36150219",
+    "36152490",
+    "36166390",
+    "36171901"
+  ],
+  "guard_projects_10_13": {
+    "before": {
+      "10": "M4-trial10 [assisted]",
+      "11": "M4-trial10 [blind]",
+      "12": "M4-trial50 [assisted]",
+      "13": "M4-trial50 [blind]"
+    },
+    "after": {
+      "10": "M4-trial10 [assisted]",
+      "11": "M4-trial10 [blind]",
+      "12": "M4-trial50 [assisted]",
+      "13": "M4-trial50 [blind]"
+    },
+    "unchanged": true
+  },
+  "human_entry_examples": [
+    "http://127.0.0.1:8300/projects/19",
+    "http://127.0.0.1:8300/projects/20"
+  ]
+}
