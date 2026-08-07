@@ -151,3 +151,47 @@ def test_workitems_hide_invalid_queue_tasks(tmp_path, monkeypatch):
     assert all(w["detail"]["queue_version"] == "rq_v2" for w in reviews)
     only = client.get("/api/v1/workitems?kind=human_review").json()
     assert only["count"] == 2
+
+
+def _seed_split(bundle):
+    store = bundle.store
+    _seed(store, queue_version="rq_v1", n=3, prefix="a")
+    _seed(store, queue_version="rq_v2", n=2, prefix="b")
+    store.register_queue_version(queue_version="rq_v1", n_tasks=3)
+    store.register_queue_version(queue_version="rq_v2", n_tasks=2)
+    store.invalidate_queue_version(
+        queue_version="rq_v1", reason="invalid_id_sha_mapping",
+        superseded_by="rq_v2")
+    return store
+
+
+def test_review_status_api_defaults_to_active_only(tmp_path, monkeypatch):
+    """任务书§八：review/status 默认只统计 active；active/invalid 分开。
+
+    rq_v1(3 条) 失效 + rq_v2(2 条) active → n_tasks 必须只计 active=2，
+    不得把失效 V1 混入 status_distribution。"""
+    client, bundle = _client(tmp_path, monkeypatch)
+    _seed_split(bundle)
+    d = client.get("/api/v1/review/status").json()
+    assert d["n_tasks"] == 2
+    assert sum(d["status_distribution"].values()) == 2
+    assert d["invalid"]["total"] == 3
+    assert d["invalid"]["queue_versions"] == ["rq_v1"]
+    assert d["active_queue_versions"] == ["rq_v2"]
+
+
+def test_review_tasks_api_defaults_to_active_only(tmp_path, monkeypatch):
+    """review/tasks 默认只返回 active；历史失效记录仅可显式查询
+    （历史/失效证据入口），不得混进默认列表。"""
+    client, bundle = _client(tmp_path, monkeypatch)
+    store = _seed_split(bundle)
+    # 新增只读端点不需登录：直接验证查询服务口径一致
+    from src.platform.annotate.review import review_progress
+    p = review_progress(store)
+    d = client.get("/api/v1/review/tasks-active").json()
+    assert d["n_tasks"] == p["active"]["total"] == 2
+    assert {t["queue_version"] for t in d["tasks"]} == {"rq_v2"}
+    hist = client.get("/api/v1/review/tasks-history").json()
+    assert hist["n_tasks"] == p["invalid"]["total"] == 3
+    assert {t["queue_version"] for t in hist["tasks"]} == {"rq_v1"}
+    assert all(t["invalidated"] for t in hist["tasks"])

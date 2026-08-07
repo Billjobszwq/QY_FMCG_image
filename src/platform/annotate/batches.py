@@ -32,8 +32,12 @@ def _tasks_by_protocol(store) -> dict[str, list[dict[str, Any]]]:
 
 
 def batch_report(store, protocol: str) -> dict[str, Any]:
-    """单批质量报告：完成度 + 双审一致率（只统计真实终态事件）。"""
-    tasks = [t for t in store.list_review_tasks()
+    """单批质量报告：完成度 + 双审一致率（只统计真实终态事件）。
+
+    统一状态源（任务书§八）：只统计 active 队列任务；失效队列
+    （如 rq_v1 invalid_id_sha_mapping）的历史行保留但不计入，
+    不得阻断 active 批次的进度与后续阶梯。"""
+    tasks = [t for t in store.list_review_tasks_active()
              if (t["protocol"] or DIAGNOSTIC) == protocol]
     n_total = len(tasks)
     n_finalized = 0

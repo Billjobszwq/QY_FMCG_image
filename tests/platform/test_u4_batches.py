@@ -143,3 +143,43 @@ class TestBatchGate:
             _finalize_agreed(store, row)
         plan = next_batch_plan(store)
         assert plan["status"] == "ready" and plan["next_size"] == 500
+
+
+def test_invalid_queue_does_not_block_batch_gate(store, tmp_path):
+    """任务书§八：失效 V1 不得阻断 V2 的进度和后续批次。
+
+    rq_v1（2 条 pending）失效后，rq_v2（1 条）全部终态 →
+    批次门禁必须 complete/ready，不得因失效任务永远 waiting_human；
+    n_total 只计 active。"""
+    from src.platform.annotate.batches import (batch_report,
+                                               next_batch_plan)
+    from src.platform.annotate.review import import_review_queue
+
+    q1 = tmp_path / "q_v1.json"
+    q1.write_text(json.dumps({"queue_version": "rq_v1",
+                              "protocol": "diagnostic_v1",
+                              "items": _double_items(2, "v1")}),
+                  encoding="utf-8")
+    import_review_queue(store, q1)
+    store.register_queue_version(queue_version="rq_v1", n_tasks=2)
+    store.invalidate_queue_version(
+        queue_version="rq_v1", reason="invalid_id_sha_mapping",
+        superseded_by="rq_v2")
+
+    q2 = tmp_path / "q_v2.json"
+    q2.write_text(json.dumps({"queue_version": "rq_v2",
+                              "protocol": "diagnostic_v1",
+                              "items": _double_items(1, "v2")}),
+                  encoding="utf-8")
+    import_review_queue(store, q2)
+    store.register_queue_version(queue_version="rq_v2", n_tasks=1)
+    for row in [t for t in store.list_review_tasks()
+                if t["queue_version"] == "rq_v2"]:
+        _finalize_agreed(store, row)
+
+    rep = batch_report(store, "diagnostic_v1")
+    assert rep["n_total"] == 1, "失效队列任务不得计入批次总数"
+    assert rep["complete"] is True
+    plan = next_batch_plan(store)
+    assert plan["status"] == "ready", \
+        "失效 V1 的 pending 不得阻断 V2 完成后的阶梯推进"

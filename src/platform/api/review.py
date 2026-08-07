@@ -17,7 +17,8 @@ from pydantic import BaseModel
 
 from ..annotate.batches import next_batch_plan
 from ..annotate.review import (claim_task, export_review, final_box,
-                               gold_region_report, submit_review, task_view,
+                               gold_region_report, review_progress,
+                               submit_review, task_view,
                                _derive_status)
 from ..auth import AuthService, require_principal
 
@@ -41,21 +42,45 @@ def create_review_router(store, auth: AuthService | None) -> APIRouter:
 
     @router.get("/api/v1/review/status")
     def status() -> dict:
-        tasks = store.list_review_tasks()
-        dist: dict[str, int] = {}
-        for t in tasks:
-            st = _derive_status(store, t)["status"]
-            dist[st] = dist.get(st, 0) + 1
+        # 统一状态源（任务书§八）：只统计 active 队列；
+        # 失效版本单独披露，不混入默认进度。
+        p = review_progress(store)
         try:
             plan = next_batch_plan(store)
         except ValueError:
             plan = {"status": "empty", "note": "审核队列为空"}
         return {
-            "n_tasks": len(tasks),
-            "status_distribution": dist,
+            "source": p["source"],
+            "n_tasks": p["active"]["total"],
+            "status_distribution": p["active"]["by_status"],
+            "active_queue_versions": p["active"]["queue_versions"],
+            "invalid": p["invalid"],
             "batch_plan": plan,
             "note": "final_box 只来自人工终态；未完成任务不得伪造完成",
         }
+
+    @router.get("/api/v1/review/tasks-active")
+    def tasks_active() -> dict:
+        """默认列表：仅 active 队列任务（失效 V1 不出现）。"""
+        p = review_progress(store)
+        return {"n_tasks": p["active"]["total"],
+                "tasks": p["active"]["tasks"]}
+
+    @router.get("/api/v1/review/tasks-history")
+    def tasks_history() -> dict:
+        """历史/失效证据入口：仅失效队列任务，逐条标记 invalidated。"""
+        p = review_progress(store)
+        active_ids = {t["task_id"] for t in p["active"]["tasks"]}
+        items = []
+        for t in store.list_review_tasks(limit=5000):
+            if t["task_id"] in active_ids:
+                continue
+            st = _derive_status(store, t)
+            items.append({**st,
+                          "queue_version": t.get("queue_version", ""),
+                          "invalidated": True})
+        return {"n_tasks": len(items), "tasks": items,
+                "note": "失效队列仅可作历史证据；禁止用于审核/导出/训练"}
 
     @router.get("/api/v1/review/tasks")
     def tasks(request: Request) -> dict:
