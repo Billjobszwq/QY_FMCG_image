@@ -9,7 +9,10 @@
 >   best_mAP50=0.6285@ep44，ENDED_EXPERIMENTAL，未判定可发布）；
 >   .venv_mlx_vlm 已安装 mlx-vlm 0.6.10，权重已下载，真实 preflight 14/14 通过
 >   （run=20260807_125229）。BLOCKED_BY_ACTIVE_TRAINING 与 G-APPLE 均已解除；
->   zero-shot/benchmark/QLoRA/shadow 真实运行仍**未执行**，按本手册逐步推进。
+>   zero-shot 与 benchmark 已真实执行：zero-shot run=20260807_130724（coverage=95.8%、
+>   accepted_precision=47.8%、gate_pass=false，未达标如实记录）；
+>   benchmark run=20260807_131457（12 探针实测，estimation_basis=measured）。
+>   QLoRA pilot 与 shadow 真实运行仍**阻断**（human_final 人工真值不足）。
 
 ## 0. 前置约束（红线）
 

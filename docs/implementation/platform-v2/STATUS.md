@@ -87,7 +87,10 @@
 | VLM 数据链路/preflight/evaluate/benchmark/QLoRA launcher/shadow 评估 | implemented + tested（mock/parse-only） | 5 个 CLI --help parse-only 验证；真实执行全部被门禁阻断 |
 | Qwen 权重下载/MLX 安装 | **已完成**（隔离环境 .venv_mlx_vlm，mlx-vlm 0.6.10，权重 mlx-community/Qwen3-VL-4B-Instruct-4bit 已下载缓存） | 用户授权 + G-CURRENT 通过后执行 |
 | G-APPLE preflight | **真实通过**（14/14：Metal GPU、模型加载、processor 图像、bounded forward max_tokens=8、AC 电源、磁盘/内存/swap、8091/8092 健康；run=20260807_125229） | scripts/run_qwen3vl_preflight.py --authorized |
-| zero-shot/benchmark/QLoRA/shadow 真实运行 | **未执行**（G-APPLE 已通过，待按 runbook 逐步执行） | runbook §2–7 |
+| zero-shot 真实运行 | **已执行**（run=20260807_130724，48 个确定性采样闭集重排 crop，K=8：coverage=95.8%，accepted_precision=47.8%，top5=100%，candidate_escape=0，p95=358ms；**gate_pass=false**（precision<0.9 门槛），未达标即未达标，不伪造） | scripts/run_qwen3vl_zero_shot_infer.py → run_qwen3vl_zero_shot.py |
+| benchmark 真实运行 | **已执行**（run=20260807_131457，12 探针全部实测，estimation_basis=measured，总 wall=8.4s；qlora/bf16 为矩阵标签，本机仅 4bit 推理权重） | scripts/run_qwen3vl_benchmark_real.py |
+| QLoRA pilot 真实运行 | **阻断**（G-DATA：Canonical 数据集需 human_final 审核真值，当前不足，fail-closed） | runbook §6 |
+| shadow 真实运行 | **阻断**（需 C1/C2 真实级联执行产物 + 人工真值，当前不足） | runbook §7 |
 | shadow 晋级 | **not_evaluable**（人工真值不足，不得造 pass） | docs/experiments/qwen3vl-cascade-shadow-report.md |
 | production bundle | `prod_20260804_v4_r2` 未切换，production_switch=false | 8091 口径不变 |
 | 测试基线 | **780 passed，1 skipped**（主机 miniconda python3，Task 18 最终回归，20.5s） | 1 skipped 为既有真实模型相关跳过（mock-only 设计），不影响门禁 |
