@@ -2319,6 +2319,72 @@ class PlatformStore:
             " ORDER BY model_id").fetchall()
         return [dict(r) for r in rows]
 
+    # ---------- training_run_v2 / 结构化事件（GLTC Task 7） ----------
+
+    def create_training_run_v2(self, run_id: str, *, lane: str,
+                               plan_id: str = "", status: str = "QUEUED",
+                               lease_json: str = "[]",
+                               attempt: int = 1) -> None:
+        self._conn.execute(
+            "INSERT INTO training_run_v2 (run_id, plan_id, lane, status,"
+            " lease_json, attempt, created_at, updated_at)"
+            " VALUES (?,?,?,?,?,?,?,?)",
+            (run_id, plan_id, lane, status, lease_json, attempt,
+             _utcnow(), _utcnow()))
+        self._conn.commit()
+
+    def update_training_run_v2(self, run_id: str, **fields: Any) -> None:
+        allowed = {"status", "pid", "heartbeat_at", "attempt",
+                   "lease_json", "worker", "job_id"}
+        cols = [k for k in fields if k in allowed]
+        if not cols:
+            return
+        sets = ", ".join(f"{c}=?" for c in cols)
+        self._conn.execute(
+            f"UPDATE training_run_v2 SET {sets}, updated_at=?"
+            " WHERE run_id=?",
+            (*[fields[c] for c in cols], _utcnow(), run_id))
+        self._conn.commit()
+
+    def get_training_run_v2(self, run_id: str) -> dict[str, Any] | None:
+        row = self._conn.execute(
+            "SELECT * FROM training_run_v2 WHERE run_id=?",
+            (run_id,)).fetchone()
+        return dict(row) if row else None
+
+    def list_training_runs_v2(self, *, statuses: tuple[str, ...] | None = None
+                              ) -> list[dict[str, Any]]:
+        if statuses:
+            marks = ",".join("?" * len(statuses))
+            rows = self._conn.execute(
+                f"SELECT * FROM training_run_v2 WHERE status IN ({marks})"
+                " ORDER BY created_at", statuses).fetchall()
+        else:
+            rows = self._conn.execute(
+                "SELECT * FROM training_run_v2 ORDER BY created_at"
+            ).fetchall()
+        return [dict(r) for r in rows]
+
+    def append_training_event(self, run_id: str, kind: str,
+                              payload: dict[str, Any] | None = None
+                              ) -> None:
+        row = self._conn.execute(
+            "SELECT COALESCE(MAX(seq), 0) + 1 AS next FROM training_event_v1"
+            " WHERE run_id=?", (run_id,)).fetchone()
+        self._conn.execute(
+            "INSERT INTO training_event_v1"
+            " (run_id, seq, kind, payload_json, created_at)"
+            " VALUES (?,?,?,?,?)",
+            (run_id, row["next"], kind,
+             json.dumps(payload or {}, ensure_ascii=False), _utcnow()))
+        self._conn.commit()
+
+    def list_training_events(self, run_id: str) -> list[dict[str, Any]]:
+        rows = self._conn.execute(
+            "SELECT * FROM training_event_v1 WHERE run_id=?"
+            " ORDER BY seq", (run_id,)).fetchall()
+        return [dict(r) for r in rows]
+
     # ---------- backup ----------
 
     def backup(self, dest: Path | str) -> dict[str, Any]:
