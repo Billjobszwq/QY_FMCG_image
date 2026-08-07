@@ -13,8 +13,10 @@ from pathlib import Path
 
 def _rle_encode(mask) -> str:
     import numpy as np
-    flat = mask.flatten(order="F")
-    idx = np.flatnonzero(np.diff(np.concatenate(([0], flat.view(int), [0]))))
+    flat = mask.flatten(order="F").astype(np.int8)
+    idx = np.flatnonzero(np.diff(np.concatenate(([0], flat, [0]))))
+    if len(idx) % 2 != 0:  # 防御：边界数必须成对
+        idx = idx[:-1]
     return ",".join(f"{idx[i]}:{idx[i+1]-idx[i]}" for i in range(0, len(idx), 2))
 
 

@@ -25,6 +25,10 @@ sys.path.insert(0, str(ROOT))
 
 SAM_PYTHON = ROOT / ".venv_sam/bin/python"
 CKPT_MANIFEST = ROOT / ".sam_checkpoints/manifest.json"
+CHECKPOINT_CONFIGS = {
+    "sam2.1_hiera_small": "configs/sam2.1/sam2.1_hiera_s.yaml",
+    "sam2.1_hiera_base_plus": "configs/sam2.1/sam2.1_hiera_b+.yaml",
+}
 OUT = ROOT / "reports/nextgen_v2/sam_point_masks.jsonl"
 STATS = ROOT / "reports/nextgen_v2/sam_point_stats.json"
 
@@ -33,7 +37,7 @@ def _load_ckpt(model="sam2.1_hiera_small"):
     man = json.loads(CKPT_MANIFEST.read_text(encoding="utf-8"))
     for e in man["entries"]:
         if e["model"] == model:
-            return Path(e["file"]), e["config"], e["sha256"]
+            return Path(e["file"]), CHECKPOINT_CONFIGS[model], e["sha256"]
     raise SystemExit(f"checkpoint 缺失: {model}")
 
 
@@ -90,6 +94,20 @@ def sample_points(n_target: int, per_sku_cap: int, per_photo_cap: int,
             break
     return picked, cm
 
+
+
+
+def _component_with_point(mask, x: int, y: int):
+    """提取包含正点的连通分量（商品 mask 应为单连通）；
+    正点不在 mask 内返回 None。"""
+    import numpy as np
+    if not (0 <= y < mask.shape[0] and 0 <= x < mask.shape[1]) \
+            or not mask[y, x]:
+        return None
+    import cv2
+    n, labels = cv2.connectedComponents(mask.astype(np.uint8))
+    lab = labels[y, x]
+    return labels == lab
 
 def _roi_box(pt, others, width, height):
     """局部 ROI：最近邻距离的一半作为半径（缺省图像 6%）。"""
@@ -174,12 +192,13 @@ def main() -> int:
                                          delete=False) as tf:
             json.dump(request, tf, ensure_ascii=False)
             req_path = tf.name
-        proc = subprocess.run([str(SAM_PYTHON),
-                               str(ROOT / "scripts/sam_point_worker.py"),
+        proc = subprocess.run([str(SAM_PYTHON), "-m",
+                               "scripts.sam_point_worker",
                                "--request", req_path],
-                              capture_output=True, text=True, timeout=3600)
+                              cwd=ROOT, capture_output=True, text=True,
+                              timeout=3600)
         if proc.returncode != 0:
-            print("worker 失败:", proc.stderr[:300], flush=True)
+            print("worker 失败:", proc.stderr[-600:], flush=True)
             stats["worker_failures"] += 1
             continue
         resp = json.loads(proc.stdout)
@@ -197,10 +216,19 @@ def main() -> int:
                 cands = []
                 for c in inst["candidates"]:
                     m = _decode_rle(c["rle"], h, w)
-                    cands.append((m, c["score"]))
+                    m = _component_with_point(m, int(pt["x"]), int(pt["y"]))
+                    if m is not None:
+                        cands.append((m, c["score"]))
+                roi = _roi_box(pt, [p for k, p in enumerate(todo[pid])
+                                    if k != j], w, h)
+                in_roi = [(p["x"], p["y"]) for p in todo[pid]
+                          if roi[0] <= p["x"] <= roi[2]
+                          and roi[1] <= p["y"] <= roi[3]
+                          and not (abs(p["x"] - pt["x"]) < 1e-6
+                                   and abs(p["y"] - pt["y"]) < 1e-6)]
                 pick, why = score_multimask(
                     cands, positive=(pt["x"], pt["y"]),
-                    other_positives=[(p["x"], p["y"]) for p in todo[pid]],
+                    other_positives=in_roi,
                     width=w, height=h, neighbor_masks=neighbor_masks)
                 rec = {"photo_id": pid,
                        "photo_sha256": info["sha256"],
