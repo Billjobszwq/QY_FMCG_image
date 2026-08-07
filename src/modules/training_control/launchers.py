@@ -180,9 +180,17 @@ class BaseLauncher:
 class DetectorLauncher(BaseLauncher):
     lane = "detector"
     allowed_flags = ("--data-yaml", "--run-name", "--epochs", "--imgsz",
-                     "--device", "--batch", "--parse-check")
+                     "--device", "--batch", "--parse-check", "--model")
+
+    # nextgen lineage：base 只允许公开权重（禁旧业务 checkpoint）
+    ALLOWED_BASES = ("yolo11n.pt", "yolov8n.pt", "yolo26m.pt")
 
     def build_command(self, *, run_name, args, dataset_dir, output_dir):
+        if "--model" in args:
+            base = args[args.index("--model") + 1]
+            if base not in self.ALLOWED_BASES:
+                raise LauncherError(
+                    f"nextgen base 只允许公开权重: {base}")
         return [sys.executable, "-m", "src.training.train_v1",
                 "--data-yaml", str(Path(dataset_dir) / "data.yaml"),
                 "--run-name", run_name, *args]

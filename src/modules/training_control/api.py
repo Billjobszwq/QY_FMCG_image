@@ -9,6 +9,8 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+import json
+
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 
@@ -131,6 +133,7 @@ def create_training_control_router(store: Any,
 
     _mount_cycle_endpoints(router, store, auth)
     _mount_profile_endpoints(router, store)
+    _mount_control_endpoints(router, store, auth)
     return router
 
 
@@ -147,6 +150,149 @@ class CycleAdvanceBody(BaseModel):
     waiting_for: str = ""
 
 
+
+
+
+# ---------- N2 Task 2：真实控制 API（data-scope/quality/sam/snapshots/plans/runs） ----------
+
+class PlanCreateBody(BaseModel):
+    lane: str
+    hypothesis: str = ""
+    base_revision: str
+    dataset_hash: str
+    eval_set_hash: str = ""
+    budget: dict = {}
+    stop_lines: list[str] = []
+
+
+class ApproveBody(BaseModel):
+    approval_key: str
+
+
+class LaunchBody(BaseModel):
+    run_name: str
+    args: list[str] = []
+    dataset_dir: str
+
+
+def _mount_control_endpoints(router: APIRouter, store: Any,
+                             auth: AuthService | None) -> None:
+    from pathlib import Path as _P
+    from .cycle import CycleError, TrainingCycleService
+    from .launchers import (ClassifierLauncher, DetectorLauncher,
+                            LauncherError, SegmenterLauncher, VlmLauncher)
+
+    def _svc() -> TrainingCycleService:
+        return TrainingCycleService(store)
+
+    def _launcher(lane: str):
+        return {"detector": DetectorLauncher,
+                "classifier": ClassifierLauncher,
+                "segmenter": SegmenterLauncher,
+                "vlm": VlmLauncher}[lane](store)
+
+    @router.get("/api/v1/training/data-scope")
+    def data_scope_get() -> dict:
+        rep_dir = _P("reports/nextgen_v2")
+        out: dict = {"reconciliations": []}
+        for f in sorted(rep_dir.glob("data_scope_reconciliation*.json")):
+            out["reconciliations"].append(json.loads(f.read_text()))
+        return out
+
+    @router.post("/api/v1/training/data-scope/freeze")
+    def data_scope_freeze(request: Request) -> dict:
+        require_principal(auth, request, csrf=True)
+        svc = _svc()
+        cycles = store._conn.execute(
+            "SELECT cycle_id FROM training_cycle_v1 ORDER BY created_at"
+        ).fetchall()
+        if not cycles:
+            raise HTTPException(404, "无 cycle；请先创建")
+        cid = cycles[0]["cycle_id"]
+        cur = svc.get_cycle(cid)
+        try:
+            svc.advance(cid, "ASSET_SCOPE_FROZEN", actor="session",
+                        expected_version=cur["version"])
+        except CycleError as e:
+            raise HTTPException(409, str(e))
+        return {"cycle_id": cid, "status": "ASSET_SCOPE_FROZEN"}
+
+    @router.post("/api/v1/training/quality/run")
+    def quality_run(request: Request) -> dict:
+        require_principal(auth, request, csrf=True)
+        stats_f = _P("reports/nextgen_v2/quality_scan_stats.json")
+        if not stats_f.exists():
+            raise HTTPException(
+                409, "质量扫描未运行（scripts/run_nextgen_quality_scan.py）")
+        return json.loads(stats_f.read_text(encoding="utf-8"))
+
+    @router.post("/api/v1/training/sam/run")
+    def sam_run(request: Request) -> dict:
+        require_principal(auth, request, csrf=True)
+        stats_f = _P("reports/nextgen_v2/sam_point_stats.json")
+        if not stats_f.exists():
+            raise HTTPException(
+                409, "SAM 生成未运行（scripts/run_nextgen_sam_points.py）")
+        return json.loads(stats_f.read_text(encoding="utf-8"))
+
+    @router.post("/api/v1/training/snapshots/{lane}/build")
+    def snapshot_build(lane: str, request: Request) -> dict:
+        require_principal(auth, request, csrf=True)
+        datasets = _P(".datasets_nextgen")
+        found = [d.name for d in datasets.glob(f"{lane[:2]}_*")
+                 if d.is_dir()] if datasets.exists() else []
+        return {"lane": lane, "built_snapshots": found,
+                "note": "物化经 scripts/build_d*_*.py（幂等、目录存在拒绝）"}
+
+    @router.post("/api/v1/training/plans")
+    def plans_create(body: PlanCreateBody, request: Request) -> dict:
+        require_principal(auth, request, csrf=True)
+        svc = _svc()
+        cycles = store._conn.execute(
+            "SELECT cycle_id FROM training_cycle_v1 ORDER BY created_at"
+        ).fetchall()
+        cid = cycles[0]["cycle_id"] if cycles else svc.create_cycle(
+            name="nextgen_v2", actor="session")
+        pid = svc.register_plan(
+            cid, lane=body.lane, hypothesis=body.hypothesis,
+            base_revision=body.base_revision, dataset_hash=body.dataset_hash,
+            budget=body.budget, stop_lines=body.stop_lines,
+            eval_set_hash=body.eval_set_hash, actor="session")
+        return {"plan_id": pid, "cycle_id": cid, "status": "DRAFT"}
+
+    @router.post("/api/v1/training/plans/{plan_id}/approve")
+    def plans_approve(plan_id: str, body: ApproveBody,
+                      request: Request) -> dict:
+        require_principal(auth, request, csrf=True)
+        _svc().approve_plan(plan_id, actor="session",
+                            approval_key=body.approval_key)
+        return {"plan_id": plan_id, "status": "APPROVED"}
+
+    @router.post("/api/v1/training/runs/{run_id}/safe-stop")
+    def runs_safe_stop(run_id: str, request: Request) -> dict:
+        require_principal(auth, request, csrf=True)
+        att = _svc().get_run_attempt(run_id)
+        _svc().update_run_attempt(run_id, status="STOPPING")
+        return {"run_id": run_id, "status": "STOPPING",
+                "note": "需进程退出证据后 confirm_stopped；禁伪 cancelled"}
+
+    @router.get("/api/v1/training/runs/{run_id}/artifacts")
+    def run_artifacts(run_id: str) -> dict:
+        rows = store._conn.execute(
+            "SELECT * FROM training_artifact_v2 WHERE run_id=?",
+            (run_id,)).fetchall()
+        return {"run_id": run_id, "count": len(rows),
+                "artifacts": [dict(r) for r in rows]}
+
+    @router.post("/api/v1/training/resource-benchmarks")
+    def resource_benchmarks(request: Request) -> dict:
+        require_principal(auth, request, csrf=True)
+        rows = store._conn.execute(
+            "SELECT * FROM resource_benchmark_v1 ORDER BY id").fetchall()
+        return {"count": len(rows),
+                "benchmarks": [dict(r) for r in rows],
+                "decision": "heavy_concurrency=1（未做组合并发实测，"
+                            "保持 1；Qwen MLX 永远独占）"}
 
 
 # ---------- N2 Task 11：Recognition Profiles ----------

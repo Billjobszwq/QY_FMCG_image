@@ -1,0 +1,13 @@
+{
+ "scanned_new": 22659,
+ "skipped_done": 0,
+ "errors": 0,
+ "conclusions": {
+  "hard_valid": 22652,
+  "manual_review": 5,
+  "rejected": 2
+ },
+ "elapsed_s": 1852.0,
+ "policy_version": "qpol_n2_v1",
+ "note": "自动结论；人工校准门（≥1000 张）完成前不得作为过滤终局"
+}
