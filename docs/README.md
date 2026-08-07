@@ -4,7 +4,7 @@
 
 > **平台最终架构入口（2026-08-04）：** 整个产品的唯一总纲是 [`Graph+Loop 智能业务操作系统最终统一架构设计`](./superpowers/specs/2026-08-04-fmcg-vision-saas-platform-design.md)。它定义一套统一底座和可插拔 Domain Pack；位置外勤规格只是从属模块文档，不是第二套系统。
 >
-> **实施 Agent 当前唯一开工入口（2026-08-05）：** 先读 [`统一管理与全量照片训练执行手册`](./superpowers/plans/2026-08-05-unified-management-all-photo-training-execution-manual.md)。它基于 `feat/usable-platform-foundation@9db9946` 的实时复核，先纠正训练治理与文档冲突，再完成统一工作台、全照片资产化、SAM 标注、Graph+Loop v2 和 Apple MPS smoke/pilot。旧 [`统一框架持续可用执行手册 V2`](./superpowers/plans/2026-08-04-continuous-usable-framework-execution-manual.md) 与 [`全项目实施总纲`](./superpowers/plans/2026-08-04-full-project-execution-program.md) 保留为历史建设记录，不再作为当前状态判断依据。
+> **实施 Agent 当前唯一开工入口（2026-08-08）：** 先读 [`Project Logic Chain V3`](./implementation/project-logic-chain-v3/STATUS.md) 的当前事实，再完整执行 [`Graph+Loop 四训练通道统一控制方案`](./implementation/graph-loop-training-control-v1/00-READ-ME-FIRST.md) 和其中的 [`Agent 执行提示词`](./implementation/graph-loop-training-control-v1/AGENT-EXECUTION-PROMPT.md)。目标是保留并隔离旧模型，打通标注、过滤、四数据集、四训练 lane 和统一 Web；机器框架可立即建设，真实训练仍等待 gold 与单独授权。2026-08-05 及更早手册保留为历史，不再作为当前唯一状态入口。
 >
 > **Qwen3-VL 智能级联专项（2026-08-06 已批准方案 B）：** 先读 [`Qwen3-VL 4B + Graph+Loop 多模型智能级联设计`](./superpowers/specs/2026-08-06-qwen3-vl-4b-graph-loop-cascade-design.md)，实施时严格执行 [`Qwen3-VL 4B + Graph+Loop 实施计划与 Agent 提示词`](./superpowers/plans/2026-08-06-qwen3-vl-4b-graph-loop-cascade-implementation-plan.md)。专项复用统一底座，不建设第二套 Orchestrator；当前 `sku_v7_sam` 先按 experimental 对账，Qwen 使用隔离 MLX-VLM 环境且不得与现有 MPS 重训练并行。
 >
@@ -40,8 +40,11 @@ python -m src.recognize.api --port 8091    # 识别接口
 
 | 文档 | 内容 |
 |---|---|
+| [`implementation/project-logic-chain-v3/STATUS.md`](./implementation/project-logic-chain-v3/STATUS.md) | **当前运行事实入口**：rq_v2、LS 19/20、gold、服务、数据库、正式/Legacy 模块与人工验收 Gate |
+| [`implementation/graph-loop-training-control-v1/00-READ-ME-FIRST.md`](./implementation/graph-loop-training-control-v1/00-READ-ME-FIRST.md) | **当前机器侧实施入口**：旧模型隔离、四数据集、四训练通道、TrainingControlGraph、Apple 资源和统一 Web |
+| [`implementation/graph-loop-training-control-v1/AGENT-EXECUTION-PROMPT.md`](./implementation/graph-loop-training-control-v1/AGENT-EXECUTION-PROMPT.md) | **可直接交给 Agent 的完整任务书**：阅读清单、红线、Task 0–12、验证与最终报告格式 |
 | [`superpowers/specs/2026-08-04-fmcg-vision-saas-platform-design.md`](./superpowers/specs/2026-08-04-fmcg-vision-saas-platform-design.md) | **平台唯一架构总纲**：一套底座、Graph+Loop 内核、统一数据系统、Module SDK 和积木式 Domain Pack |
-| [`superpowers/plans/2026-08-05-unified-management-all-photo-training-execution-manual.md`](./superpowers/plans/2026-08-05-unified-management-all-photo-training-execution-manual.md) | **当前唯一实施入口**：训练事实纠偏、统一易用工作台、全照片资产化、SAM 审核、Graph+Loop v2、MPS smoke/pilot 与 Agent 提示词 |
+| [`superpowers/plans/2026-08-05-unified-management-all-photo-training-execution-manual.md`](./superpowers/plans/2026-08-05-unified-management-all-photo-training-execution-manual.md) | **历史实施入口**：训练事实纠偏、统一工作台、全照片资产化、SAM 审核和早期 MPS 计划 |
 | [`superpowers/specs/2026-08-06-qwen3-vl-4b-graph-loop-cascade-design.md`](./superpowers/specs/2026-08-06-qwen3-vl-4b-graph-loop-cascade-design.md) | **已批准专项设计**：客户四档与内部 S0–S5 分离、hot/warm/cold 驻留、Qwen3-VL 闭集裁决、数据/训练/计费/新包装规格 |
 | [`superpowers/plans/2026-08-06-qwen3-vl-4b-graph-loop-cascade-implementation-plan.md`](./superpowers/plans/2026-08-06-qwen3-vl-4b-graph-loop-cascade-implementation-plan.md) | **Qwen 专项实施入口**：Task 0–18、TDD 文件清单、Apple/数据/训练/shadow 门禁和可直接复制的 Agent 提示词 |
 | [`superpowers/plans/2026-08-04-continuous-usable-framework-execution-manual.md`](./superpowers/plans/2026-08-04-continuous-usable-framework-execution-manual.md) | **历史建设手册**：记录 M0–M6 的持续可用交付顺序；其 M5 勾选已被 2026-08-05 审计重新打开 |
@@ -97,7 +100,18 @@ python -m src.recognize.api --port 8091    # 识别接口
 python -m pytest tests/unit tests/contract -q     # 不变性/对齐/命名/别名 契约
 ```
 
-## 当前状态（2026-08-05 独立审计快照）
+## 当前状态（2026-08-08）
+
+- ✅ 当前分支 `feat/unified-workbench-training-readiness`，基线 HEAD `c1d1d6f`；只允许四个受保护未跟踪目录保持原样。
+- ✅ rq_v1 已追加式失效；rq_v2 active 250；LS 项目 19 assisted / 20 blind；API 和批次门禁 active-only。
+- ✅ 当前生产 bundle 为 `prod_20260805_v5_r1`，继续提供识别；旧模型全部保留，后续 nextgen 训练不得继承旧权重。
+- ✅ Graph+Loop、统一 Web、审核状态机、FMCG 级联、VLM 数据/训练门禁已有代码；当前缺口是四训练 lane 与标注/过滤/数据集/Worker/界面的统一。
+- ⏳ `gold_region_v1=0`，Gate=`AWAITING_HUMAN_ACCEPTANCE`；5+5 真人验收与 250 条审核仍需人工执行。
+- ⛔ `training_authorized=false`，无活动真实训练；框架建设不能被 gold=0 阻塞，真实训练不能绕过 gold 和授权。
+- ⚠️ 2026-08-08 Codex 受限环境 full suite 为 `904 passed, 10 failed, 1 skipped`，失败集中于宿主 MPS 探针与授权错误优先级；实施 Agent 必须在普通 Terminal 复核并完成 hermetic/host 测试分层。
+- 📘 当前 Agent 入口：[`implementation/graph-loop-training-control-v1/AGENT-EXECUTION-PROMPT.md`](./implementation/graph-loop-training-control-v1/AGENT-EXECUTION-PROMPT.md)。
+
+## 历史状态（2026-08-05 独立审计快照）
 
 - ✅ 当前分支 `feat/usable-platform-foundation@9db9946`；主机全量测试为 **310 passed, 1 skipped**。
 - ✅ 8400 统一入口可运行；8091、8092、8300、8455 healthy，8301 unavailable，因此平台如实为 degraded。

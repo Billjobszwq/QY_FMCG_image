@@ -144,7 +144,7 @@ flowchart TB
 ### 14 模型 Registry、bundle、shadow
 - 模块/入口：`src/platform/model_runtime.py`（register/load/acquire/release/unload/reap 全写 audit_event）、`src/platform/api/bundle.py`、`scripts/archive_production_bundle.py`；shadow 评估 `scripts/run_cascade_shadow_eval.py`、`src/platform/api/cascade.py`（production_switch 默认 false）。
 - 当前存储：bundle manifest（归档制品）+ `015_model_residency`（migration）。
-- 状态：正式；生产 bundle `prod_20260804_v4_r2` 未切换，本轮冻结。
+- 状态：正式；当前生产 bundle `prod_20260805_v5_r1`，本轮未切换、继续冻结。
 - 本轮修复点：无。
 
 ### 15 Graph+Loop 级联推理

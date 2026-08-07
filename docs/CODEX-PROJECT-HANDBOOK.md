@@ -4,7 +4,7 @@
 >
 > 权威边界：本文件不是产品 L0 架构、实施计划、训练启动授权或线上状态接口。它只负责把权威文件、已经发生的工作和下一步入口串起来。若本文件与权威文件或当前代码冲突，以权威文件和重新验证的当前事实为准，并立即修订本文件。
 >
-> 当前快照时间：2026-08-04，Asia/Shanghai。
+> 当前快照时间：2026-08-08，Asia/Shanghai。
 
 ---
 
@@ -43,15 +43,16 @@
 | 项目 | 当前快照 |
 |---|---|
 | Repository | `/Users/zhangweiqi/Documents/QY/项目/LLM-Image` |
-| Branch | `main` |
-| 手册编写前稳定基线 HEAD | `4dac8f88ea7467c58f7f57ea9d503ad35c04efc6`；提交本手册后以实时 `git rev-parse HEAD` 为准 |
-| Fresh tests | `74 passed in 13.90s`，2026-08-04 本轮复核 |
+| Branch | `feat/unified-workbench-training-readiness` |
+| 当前代码基线 HEAD | `c1d1d6fe5980b84bfd85ec851dd7194936205200`；本轮只新增/更新文档，后续以实时 `git rev-parse HEAD` 为准 |
+| 最近交付报告测试 | `914 passed, 1 skipped`；但 2026-08-08 Codex 受限环境 fresh run 为 `904 passed, 10 failed, 1 skipped`，失败集中于宿主 MPS 探针和授权错误优先级，必须在普通 Terminal 复核 |
 | Python | `/Users/zhangweiqi/miniconda3/bin/python3`，3.13.2 |
-| 工作树 | 只有历史未跟踪 `.superpowers/`；不得修改、暂存、清理或删除 |
-| 当前生产 bundle | `prod_20260804_v4_r2`，保持不变 |
-| 正式训练 | 停止；Phase D 不晋级；classifier 未启动 |
-| Foundation 实现 | 尚未开始；目前完成的是架构和实施文档，不是代码底座 |
-| 下一工作主题 | 切回现有系统 Bug 复查/修复，然后重新评估模型训练 |
+| 工作树 | 四个受保护未跟踪目录 `.quality/ .sam_checkpoints/ .sam_runs/ .superpowers/`；不得修改、暂存、清理或删除 |
+| 当前生产 bundle | `prod_20260805_v5_r1`，继续使用；本轮不得切换 |
+| 人工审核 | rq_v2 active 250；LS 项目 19 assisted / 20 blind；`gold_region_v1=0`；Gate=`AWAITING_HUMAN_ACCEPTANCE` |
+| 训练 | 无活动真实训练；`training_authorized=false`；当前仅有历史 dry-run 和不可训练 E2 snapshot |
+| Foundation 实现 | Platform/Graph+Loop/统一 Web/FMCG cascade/审核链已经有实际代码，不再是“只有文档”；训练控制仍需四通道重构 |
+| 当前工作主题 | 实施 `graph-loop-training-control-v1`：旧模型隔离、四数据集、四训练 lane、统一 Web；机器框架与人工 gold 并行 |
 
 这些值会变化。任何新会话必须先实时验证，不得把快照当作永远有效的事实。
 
@@ -91,6 +92,15 @@
 - “保管手册/记忆”允许维护本文件和记忆索引，不允许把客户数据写入记忆。
 
 ## 2. 权威文件层级
+
+### 2.0 当前最高优先接续入口（2026-08-08）
+
+| 文件 | 作用 |
+|---|---|
+| `docs/implementation/project-logic-chain-v3/` | 当前 22 层运行逻辑、事实源、rq_v2/LS/gold 状态和验收链 |
+| `docs/implementation/graph-loop-training-control-v1/` | 下一阶段旧模型隔离、四数据集、四训练通道、统一控制台实施任务 |
+| `docs/superpowers/specs/2026-08-06-qwen3-vl-4b-graph-loop-cascade-design.md` | 已批准的 S0–S5 级联、客户档位、Qwen 和 Apple 资源契约 |
+| `.platform/platform.sqlite` | 当前本机运行唯一事实源；文档不得覆盖其事实 |
 
 ### 2.1 系统架构和实施
 
@@ -144,9 +154,9 @@
 - 新增 `src/eval/e0_strict_iou.py` 和 `src/eval/e2_detector_eval.py`。
 - `train_v1.py` 已存在 run 拒绝覆盖，并修正 pilot metadata 写入时机。
 - classifier/finetune 需要显式指定数据目录，避免默认读取旧制品。
-- 当前测试从历史 22/46 项增加到 fresh `74 passed`。
+- 在 2026-08-04 阶段，测试曾从历史 22/46 项增加到 `74 passed`；该数字只保留作历史里程碑。
 
-### 3.2 最终平台架构
+### 3.2 最终平台架构（历史冻结结论，代码已进入后续阶段）
 
 关键文档提交：
 
@@ -168,19 +178,28 @@
 7. Agent 不允许任意 SQL、shell、文件系统或直接客户源表写入。
 8. Foundation 必须先通过双模块验证和隔离门，后续模块才能开工。
 
-### 3.3 已交付实施文档
+### 3.3 已交付实施文档与当前代码推进
 
 - `docs/superpowers/plans/2026-08-04-full-project-execution-program.md`：540 行，Stage 0–9、需求映射、Agent 启动提示词和审查清单。
 - `docs/superpowers/plans/2026-08-04-stage0-1-graph-loop-kernel.md`：Task 1–26 的代码级 TDD 计划。
 - Stage 0–1 涵盖 Graph Kernel、Module SDK、IAM、CAS、Job、DataProduct、Billing、Audit、Web Shell、双模块隔离、备份恢复和性能安全门。
 
-重要：这些是可开工文档，不是已经实现的 Foundation 代码。当前 `src/platform`、`src/modules` 等目标结构尚未按该计划建设。
+历史说明“Foundation 尚未实现”已过期。当前已经存在并通过大量测试的 `src/platform`、`src/modules`、Graph Kernel、PlatformStore、统一 Web、Job/Worker、FMCG 级联、审核状态机、模型驻留和计费代码。是否达到商用 Foundation 仍需按当前验收门判断，不能把“代码存在”说成“全部完成”。
+
+### 3.4 2026-08-07/08 逻辑链 V3 收口
+
+- 修复 protocol photo_id/SHA 位置 zip 全链错配；rq_v1 追加式失效，rq_v2 250 条成为唯一 active 队列。
+- 平台 API、批次门禁和任务列表已收敛到 active-only；失效历史只读保留。
+- LS 项目 19 assisted、20 blind 已创建；blind 零 prediction；assisted 当前无 proposal，等待接入当前生产模型。
+- `gold_region_v1` 原子双审/仲裁状态机和 truebox 导出链已实现，当前真实 gold 数仍为 0。
+- zero-shot canonical identity 已修复，当前主要数据短板是候选 KB/alias 覆盖，而非 registry escape。
+- 统一 Web/Graph+Loop/SQLite 是当前正式控制链；旧 `src/labeling`、rq_v1 和旧 LS 项目只读保留。
 
 ## 4. 当前系统现实与目标架构的差距
 
-### 4.1 当前代码现实
+### 4.1 当前代码现实（2026-08-08）
 
-当前仓库仍是识别项目演进而来的代码结构：
+当前仓库仍由识别项目演进而来，但平台底座已经实际存在：
 
 - `src/cascade`
 - `src/catalog`
@@ -193,8 +212,12 @@
 - `src/models`
 - `src/recognize`
 - `src/training`
+- `src/platform`
+- `src/modules`
+- `src/composition`
+- `web/src/pages`
 
-它不是最终 Unified Foundation。不能因为总纲和计划已经完成，就对用户说“平台底座已经搭好”。
+它仍不是最终商用 Foundation。当前主要断点已经从“完全没有底座”转为“模块存在但训练、标注、过滤和四数据集控制面尚未统一”。不能因为页面和模块存在，就对用户说端到端已经完成。
 
 ### 4.2 目标结构
 
@@ -210,9 +233,11 @@ web/src/platform/
 web/src/modules/<module_id>/
 ~~~
 
-当前阶段若切回 Bug 修复和模型训练，不得顺手提前实施一半 Foundation。旧系统修复要保持局部、可回归，并为未来 Adapter 留出边界。
+下一阶段以 `docs/implementation/graph-loop-training-control-v1/` 为边界实施训练控制面。必须继续使用 Adapter/Capability/Graph Hook，不能把四条训练逻辑塞回单体 `Training.tsx`、`service.py` 或 shell 分支。
 
 ## 5. 当前训练状态
+
+> 本章 5.3/5.4 的 E0/E2 数字是 2026-08-04 历史实验基线，用于对照，不代表当前 production bundle 的同口径业务指标。
 
 ### 5.1 硬件
 
@@ -221,15 +246,18 @@ web/src/modules/<module_id>/
 - MPS tensor 与当前级联 MPS 推理已经成功。
 - Apple 硬件不是阻断项；数据、标签、评估和算法收益才是阻断项。
 - 禁止静默 CPU fallback；新的训练会话必须重新跑 G0。
+- Codex/沙箱进程可能看不到 MPS 或 sysctl；测试必须区分 hermetic mock 与普通 Terminal 的 host G0，真实启动只能接受后者。
 
 ### 5.2 数据与门禁
 
-- G0–G6 已关闭。
+- 历史 E2 的 G0–G6 已关闭，不自动授权任何新 lineage。
 - `dev_v2` 为 801 张；协议五键守卫对 active 集命中为 0。
 - `e2_product_pilot_v1`：2,000 train + 300 val，单类 `product`，manifest hash `35f70f0a0cfd53b8`。
 - 训练标签和 dev_v2 GT 仍包含锚点/比例生成的合成框；`diagnostic_v1` 的完整人工真实矩形框未完成。
 - 旧 `.datasets/sku_v6`、`crop_dataset`、`crop_dataset_yolo` 不能恢复为新 lineage 正式制品。
 - 旧 v6 权重只作历史对照，不得恢复训练。
+- rq_v2/LS 审核链已经建立，但 `gold_region_v1=0`；这阻止真实训练数据发布，不阻止机器侧训练控制框架建设。
+- 当前 platform DB 只有 `e2_product_pilot@v1` snapshot，且 `trainable=0`；training run 仅有 4 个历史 dry-run，`training_authorized=false`。
 
 ### 5.3 E0 基线
 
@@ -259,9 +287,27 @@ P1 相对 E0 只提升 `+3.35pp`，低于 `+10pp` 晋级门；FP/photo 也超过
 - 不跑单 seed 10 epoch；
 - 不启动 classifier 阶段；
 - 不发布新 bundle；
-- 生产继续使用 `prod_20260804_v4_r2`。
+- 当时生产继续使用 `prod_20260804_v4_r2`；2026-08-05 后当前生产已经是 `prod_20260805_v5_r1`，见第 5.5 节。
 
 不能为了让实验继续而事后降低门槛。若未来改变门槛，必须先写新假设和协议，再运行新实验。
+
+### 5.5 当前生产与后续训练隔离
+
+- 当前 `.models/bundles/CURRENT.json` 指向 `prod_20260805_v5_r1`，由 detector `sku_v5` + 原 classifier/registry/thresholds 组成。
+- `.models/sku_v1` 至 `sku_v7_sam`、E2、classifier、archive 和 best 全部原样保留。
+- 新训练族固定为 `fmcg_nextgen_v1`，不得从上述业务 checkpoint 续训、resume、继承 EMA/optimizer 或作为蒸馏 teacher。
+- 当前生产 bundle 只允许继续识别、生成 assisted provisional proposal 和作为冻结基线。
+- 后续四训练 lane：T1 detector、T2 classifier、T3 SAM segmenter、T4 `qwen3-vl:4b` QLoRA；统一风险/路由校准属于 Graph+Loop 治理，不是第五模型。
+
+### 5.6 当前训练控制面的真实缺口
+
+1. `web/src/pages/Training.tsx` 仍以单 YOLO snapshot/dry-run 为主，Qwen、classifier、SAM 没有同级 lane。
+2. 现有 Worker 直接 `subprocess.Popen` 后等待退出，缺少结构化进度、资源互斥、安全停止、orphan 恢复和完整 artifact registry。
+3. 训练页仍把 8092 标成旧监控，不能作为统一状态事实源。
+4. assisted 项目 19 无 proposal，标注与当前生产识别能力未完成接线。
+5. 当前测试在受限环境有 10 个 MPS 相关失败，暴露 host-dependent test 与错误优先级问题。
+6. 4 个历史 dry-run 仍保存当前 CLI 不支持的 `--dataset/--budget-minutes`，必须追加标记 legacy/superseded，禁止批准或入队。
+7. 8400 当前 degraded：Label Studio ML backend unavailable；8300 本体可用，proposal 正式写入口仍需收敛。
 
 ## 6. 切回 Bug 修复时的入口
 
@@ -487,48 +533,43 @@ Agent 不是万能管理员。Graph 节点必须声明 capability、数据域、
 ## 11. 容易失忆或误判的事实
 
 1. `handbook.md` 中“仍需关闭 G1–G6”已经过期。实际 G0–G6 已关闭，pilot 已完成，但 Phase D 不晋级。
-2. `training-history-and-decisions.md` 的 fresh 46 tests 已过期，当前为 74 tests。
+2. `training-history-and-decisions.md` 的 46 tests 和本手册旧版的 74 tests 都已过期；当前必须以实时 full suite 为准。
 3. final training gate 第 0 章保留了最初 NO-GO 背景，第 5、7 章才记录后续实际执行状态。
 4. E2 的 dev_v2 GT 仍是锚点合成框，不是真实人工框。严格 IoU 算法正确不代表 GT 真实。
 5. P1 在 pilot val 上 recall@FP3.0 为 39.0%，在 dev_v2 上只有 24.23%；不能混用两个分布。
 6. MPS 可用不等于应该继续训练；当前停止原因是收益和 FP 门，不是硬件。
-7. Foundation 文档已经完成，但 Foundation 代码尚未实施。
+7. “Foundation 代码尚未实施”已经过期；当前已有 Platform/Graph+Loop/统一 Web 实现，但训练控制面没有完成四通道统一。
 8. Stage 0–1 Task 16 只是 Graph Kernel 子门，Task 26 才是 Foundation 完成门。
 9. 旧 Bug 文档的 Open/部分修复状态是历史快照，下一轮必须 fresh reproduce。
-10. 当前生产 bundle 没有因 pilot 改变，仍是 `prod_20260804_v4_r2`。
+10. 当前生产 bundle 已在 2026-08-05 经授权切换为 `prod_20260805_v5_r1`；后续本轮不得再切换。
+11. rq_v1 的 250 条是失效历史，rq_v2 的 250 条才是 active；不得把两者相加当成 500 个待审任务。
+12. LS 19 assisted 当前无 proposal 不等于设计要盲标；它应接当前生产模型追加 provisional proposal。LS 20 blind 必须始终零 prediction。
+13. `gold_region_v1=0` 阻止真实数据集/训练，不阻止机器侧 API、Graph、Worker 和 Web 框架建设。
+14. 四训练通道是 detector/classifier/segmenter/VLM，不是客户四档；客户档位由 GraphPolicy 决定服务预算和最大阶段。
+15. SAM 盒提示校准不是 SAM 权重微调；无真实 mask gold 时必须诚实显示 calibration-only。
 
 ## 12. 下一次工作的明确切换点
 
-用户已经明确：完成本手册后，切回前面的 Bug 修复和模型训练。
+当前唯一机器侧实施入口：`docs/implementation/graph-loop-training-control-v1/AGENT-EXECUTION-PROMPT.md`。
 
-建议执行顺序：
+### Track A：机器侧立即实施
 
-### Phase 1：Bug fresh re-audit
+1. 普通 Terminal 复核 10 个 MPS 测试失败，完成 hermetic/host 分层。
+2. 旧模型不可变 inventory 与 nextgen parent 隔离。
+3. assisted 项目 19 接当前生产 proposal，blind 20 零泄漏。
+4. 四 Dataset Factory builder 与统一过滤投影。
+5. 四 lane adapter、TrainingControlGraph、Hook、资源租约和可靠 Worker。
+6. 统一 API/Web、浏览器 QA、故障恢复和机器验收。
 
-1. 重新跑 74 项 baseline。
-2. 对第 6.2 节候选逐项查当前代码、测试、制品和进程。
-3. 生成新的 issue matrix，不修改旧历史报告。
-4. 先修 P0 业务正确性、安全、审计和数据损坏问题。
-5. 每个 Bug 使用七层关闭证据。
+### Track B：真人与真实训练并行等待
 
-### Phase 2：运行与性能复核
+1. 两位真人完成 5 assisted + 5 blind 验收。
+2. 通过后放量 rq_v2 250；分歧第三人仲裁。
+3. 产生真实 gold 后分别构建 D1–D4，不能用一个数据集冒充四种任务。
+4. 对具体 TrainingPlan 单独授权；一次只跑一个 Apple heavy job。
+5. candidate 评估、shadow、发布仍保持独立门禁。
 
-1. 联调 8091/8092/8300/8301/8304。
-2. monitor 2 小时长稳。
-3. 多入口模型内存和 MPS contention。
-4. 并发背压、p95、错误率和审计一致性。
-
-### Phase 3：训练诊断，不直接全量训练
-
-1. 完成真实框 diagnostic 子集。
-2. 重跑 E0/P0/P1 同口径评估。
-3. 形成错误分类账和分桶。
-4. 冻结下一实验假设和止损门。
-5. 用户明确授权后才启动新的 MPS 实验。
-
-### Phase 4：再判断平台 Foundation 开工时点
-
-Bug 和训练工作与 Foundation 是两个工作流。除非用户明确切换到平台实施，否则不执行 Stage 0–1 代码计划。
+机器侧完成时只能标记 `FRAMEWORK_READY_AWAITING_GOLD_AND_TRAINING_AUTHORIZATION`，不能写训练完成。
 
 ## 13. 本手册维护规则
 
@@ -557,3 +598,4 @@ Bug 和训练工作与 Foundation 是两个工作流。除非用户明确切换�
 | 日期 | HEAD | 变更 |
 |---|---|---|
 | 2026-08-04 | base `4dac8f8` | 创建 Codex 专用接续手册；整合训练门禁、E2 不晋级、统一架构、实施计划、Bug/训练恢复流程和长期方法论 |
+| 2026-08-08 | base `c1d1d6f` | 更新到 logic-chain-v3：rq_v2/LS 19/20/gold=0、production v5_r1、现有 Platform 实现；加入四训练通道、旧模型隔离、机器/人工并行线、MPS 测试漂移和新执行目录 |
