@@ -23,3 +23,15 @@
 
 ## PLC3-ISSUE-006 一个 arbiter region 覆盖整任务
 - gold_region_report 中 `if arbs:` 对全部 key 走 superseded 轨道。处置：PLC3-005。
+
+## PLC3-ISSUE-007（收尾复核发现，已关闭）API/批次门禁未收敛到 active 队列
+- 状态：CLOSED（S12b）
+- 现象：`/api/v1/review/status` 与 `batch_report` 统计全部 500 任务（含失效
+  rq_v1）；运行中 8400 进程为旧代码。若 rq_v2 完成，失效 V1 的 pending 将永久
+  阻断批次阶梯（§八红线）。
+- 处置：红测试 3 条 → `/review/status` 走 `review_progress`（active/invalid
+  分开）；新增 `/review/tasks-active`（默认）与 `/review/tasks-history`（失效
+  证据，逐条 invalidated）；`batch_report` 改 `list_review_tasks_active()`；
+  8400 graceful 重启。真实 API 对账 active=250/invalid=250 与 DB 一致。
+- 证据：EXECUTION-LOG S12b；commit「fix: keep review api and batch gate on
+  active queue only」；全量 914 passed。

@@ -62,3 +62,48 @@
   - 证据：`.review_queue/ls_v2_evidence.json`。人工入口 http://127.0.0.1:8300/projects/19 与 /projects/20。
   - 全量 879 passed（基线 871 + 8）。
   - 未决：assisted predictions 为空（队列侧无 proposals，按契约不伪造；可后续经 predictions API 追加）。
+
+## 2026-08-07 S9（commit 9a/9）
+
+- **Commit 9a** `84512b2` test: define truebox gold export contracts（10 条红测试）。
+- **Commit 9** `6a04bc8` feat: export immutable diagnostic truebox gold
+  - `src/review/truebox_export.py`：build_truebox_export/export_truebox_gold/load_truebox_v2/gt_images_from_export；严格模式 fail-closed（submitted/conflict/失效队列/sha 不一致即拒绝）；只允许 human_final/gold_verified；原子写+拒绝覆盖；0 gold 不写文件。
+  - 全字段审计：export_hash/protocol_hash/git_commit/source_queue_versions/reviewer 链/evidence_ids/store-session-近重复组。
+  - `scripts/run_truebox_eval.py` load_gt 兼容 v1/v2；`scripts/export_truebox_v2.py` 生产库干跑：0 gold 未写文件（gold_region_v1=0）。
+  - 全量 889 passed（879 + 10）。
+
+## 2026-08-07 S10–S11（commit 10/11/12a）
+
+- **Commit 10a** `21fd488` test: require canonical sku identity in zero-shot eval（13 条红测试）。
+- **Commit 10** `ca95e79` fix: evaluate sku identity by canonical id
+  - `src/training/vlm/evaluate.py`：SkuIdentityIndex/resolve_sku_identity/classify_sku_identity；dataset_class→canonical_sku_id→package_version_id→KB vector_id 链；评估禁展示名比较。
+  - 7 类错误分类：true_kb_missing/alias_mapping_missing/package_version_mismatch/retrieval_miss/reranker_miss/registry_escape/unknown-new_packaging。
+  - 旧 report 只读重放：accepted_precision 0→0.125，recall@1 0→0.5，registry_escape 22→0；真实短板 alias_mapping_missing 20（KB 缺碳酸/果汁参考图，需业务补图）。
+- **Commit 11** `d89fc82` test: verify end-to-end review chain（9 条端到端链测试：构建→导入→状态机→gold→失效隔离→truebox→WorkItems 一致）。
+- **Commit 12a** `4a84172` feat: prepare 5+5 acceptance batch awaiting human
+  - `.review_queue/acceptance_batch_5plus5.json`/`.md`：5 assisted + 5 blind（含 2 组同图对照 35996301/36013437），全部来自真实 V2 队列；status=AWAITING_HUMAN_ACCEPTANCE；15 项自检清单。
+  - 一致性：平台库 active=250 == 队列 250 == LS 19+20 任务 250。
+  - 全量 911 passed（902 + 9）。
+
+## 2026-08-07 S12b（收尾复核：发现并修复 API/批次门禁断链残余）
+
+- 现场复核发现两处§八断链残余（旧代码/旧口径未覆盖 API 与批次门禁）：
+  1. `/api/v1/review/status` 直接 `list_review_tasks()`（全部 500，含失效 rq_v1）；
+  2. `batch_report` 同样统计全部任务 → 失效 V1 的 pending 将在 V2 完成后永久阻断阶梯推进。
+  另发现运行中的 8400 进程（pid 31270，周三启动）仍是统一状态源合入前的旧代码。
+- 红测试先行：
+  - tests/platform/test_review_status_source.py +2（status 默认只 active；tasks-active/tasks-history 分离）；
+  - tests/platform/test_u4_batches.py +1（失效队列不阻断批次门禁：complete/ready 判定只计 active）。
+- 修复：
+  - `src/platform/api/review.py`：status 走 review_progress（active/invalid 分开）；
+    新增只读 `/api/v1/review/tasks-active`（默认列表）与 `/api/v1/review/tasks-history`（历史/失效证据，逐条 invalidated 标记）。
+  - `src/platform/annotate/batches.py`：batch_report 改 `list_review_tasks_active()`。
+- 8400 graceful 重启（kill -TERM 旧进程 → nohup src.composition.serve --port 8400，日志 /tmp/platform_8400.log）。
+- 真实 API 对账（重启后）：review/status n_tasks=250（rq_v2 pending 250，invalid=250 rq_v1）；
+  tasks-active=250 全 rq_v2；tasks-history=250 全 rq_v1 且 invalidated=True；
+  workitems pending_review=250；与 DB review_task_v1（active=250/invalid=250）一致。
+- 全量测试 **914 passed, 1 skipped**（911 + 3 新增，零回归）。
+- 其余收尾复核证据：全量 pytest 前 911 passed；web tsc --noEmit 干净 + vite build 成功；
+  sqlite integrity_check=ok、19 migrations、gold_region_v1=0；
+  rq_v2 现场重验 pairing 250/250、唯一照片 226；LS 项目 19(200)/20(50) 在位、blind 抽样 5/5 零泄漏；
+  8091 bundle=prod_20260805_v5_r1 未切换；8092/8400/8300 健康；无训练进程。
