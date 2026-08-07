@@ -130,6 +130,7 @@ def create_training_control_router(store: Any,
                 "note": "正式构建需 human gold；0 条准入不写文件"}
 
     _mount_cycle_endpoints(router, store, auth)
+    _mount_profile_endpoints(router, store)
     return router
 
 
@@ -145,6 +146,20 @@ class CycleAdvanceBody(BaseModel):
     idempotency_key: str
     waiting_for: str = ""
 
+
+
+
+# ---------- N2 Task 11：Recognition Profiles ----------
+
+def _mount_profile_endpoints(router: APIRouter, store: Any) -> None:
+    from .profiles import ProfileRegistry
+
+    @router.get("/api/v1/recognition/profiles")
+    def profiles_list() -> dict:
+        reg = ProfileRegistry(store)
+        ps = reg.list_profiles()
+        return {"count": len(ps), "profiles": ps,
+                "note": "识别只允许选择注册 profile_id，禁任意权重路径"}
 
 def _mount_cycle_endpoints(router: APIRouter, store: Any,
                            auth: AuthService | None) -> None:
