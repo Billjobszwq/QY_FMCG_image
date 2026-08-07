@@ -33,7 +33,7 @@
 | VLM-ISSUE-002 | OPEN | 高 | sku_v7_sam 启动命令含 --lr0 0.0005，但 ultralytics optimizer=auto（默认）时 MuSGD 实际 lr=0.01，lr0 参数被忽略 | 如实登记不修改运行中训练；训练结束后评估报告中必须披露；下一轮训练显式指定 optimizer |
 | VLM-ISSUE-003 | OPEN | 高 | 质量筛选中 934/944 张 reject 主要来自 tilt 启发式（水平线不足 fail-closed 返回 1.0），缺少人工金标准验证 | VLM-008：缺水平线改判 manual_review（reason code tilt_unobservable）；单一弱启发式不得直接 reject；旧 934 张作为历史证据保留进人工复核队列，不改写旧 JSON |
 | VLM-ISSUE-004 | OPEN | 中 | SAM 精修接受率 96.5% 只代表几何通过（紧框合法/未逃逸），不代表框内 SKU 类别正确（类别沿用原框坐标定位） | 如实登记；后续需 truebox/SKU 人工抽检才能判定标签正确性 |
-| VLM-ISSUE-005 | OPEN | 中 | Qwen3-VL/MLX 尚未安装（无 mlx、mlx-vlm、transformers 依赖，无权重下载） | G-CURRENT 已通过（训练自然早停结束）且用户已授权启动下一阶段；隔离环境 .venv_mlx_vlm 安装与权重下载执行中，完成后关闭 |
+| VLM-ISSUE-005 | CLOSED | 中 | Qwen3-VL/MLX 尚未安装（无 mlx、mlx-vlm、transformers 依赖，无权重下载） | 已关闭：隔离环境 .venv_mlx_vlm 安装 mlx-vlm 0.6.10，权重 mlx-community/Qwen3-VL-4B-Instruct-4bit 下载完成，真实 preflight 14/14 通过（run=20260807_125229） |
 | VLM-ISSUE-006 | RECONCILED | 高 | sku_v7_sam 正在使用 MPS 训练，所有真实 MLX/Qwen 重任务被资源门禁阻断 BLOCKED_BY_ACTIVE_TRAINING | 训练已于 epoch 50/120 因 patience=10 自然早停优雅退出（best_mAP50=0.6285@ep44，best.pt 完整），未受任何人工中断；BLOCKED_BY_ACTIVE_TRAINING 解除；训练定性 ENDED_EXPERIMENTAL，最终评估与晋级判定仍待独立执行 |
 | VLM-ISSUE-007 | OPEN | 高 | 人工 truebox/SKU 真值不足（<20 条可评估真值），cascade shadow 晋级门只能报 not_evaluable，不得造 pass | VLM-017 已固化该语义（promotion_gate）；补人工真值后重评，报告见 docs/experiments/qwen3vl-cascade-shadow-report.md |
 | VLM-ISSUE-008 | OPEN | 低 | 运行中 8400 未装配 cascade_service（bundle 未注入），cascade/packaging/models-runtime 端点 404，Web 三页面诚实降级显示不可用 | 按 shadow 默认设计（production_switch=false）；装配需独立授权后在组合根注入，属下一阶段工作 |

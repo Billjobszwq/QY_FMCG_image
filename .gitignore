@@ -57,6 +57,7 @@ __pycache__/
 .coverage
 htmlcov/
 .venv/
+.venv_*/
 venv/
 .ipynb_checkpoints/
 *.egg-info/

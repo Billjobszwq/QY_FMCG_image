@@ -5,8 +5,11 @@
 > - `implemented` = 代码已实现；`tested` = 有单元/契约/mock 集成测试通过；
 > - `benchmarked/trained/shadow_passed/publish_approved/production_active`
 >   均需真实机器证据，当前**全部未达到**。
-> - 当前所有真实 Qwen/MLX 重任务状态：**BLOCKED_BY_ACTIVE_TRAINING**
->   或 **G-APPLE 未通过（未安装/未下载）**。
+> - 更新（训练早停 + G-APPLE 通过后）：sku_v7_sam 已自然早停（epoch 50/120，
+>   best_mAP50=0.6285@ep44，ENDED_EXPERIMENTAL，未判定可发布）；
+>   .venv_mlx_vlm 已安装 mlx-vlm 0.6.10，权重已下载，真实 preflight 14/14 通过
+>   （run=20260807_125229）。BLOCKED_BY_ACTIVE_TRAINING 与 G-APPLE 均已解除；
+>   zero-shot/benchmark/QLoRA/shadow 真实运行仍**未执行**，按本手册逐步推进。
 
 ## 0. 前置约束（红线）
 
@@ -140,10 +143,10 @@ python3 -m scripts.run_cascade_shadow_eval --mode run
 | adapter 熔断/超时 | 级联自动回落人工审核（S5），不无限重试；查 residency 审计 |
 | shadow 报 not_evaluable | 补人工 truebox/SKU 真值后重评；不得造 pass |
 
-## 10. 当前阻断清单（截至本手册写入时）
+## 10. 阻断清单（训练早停 + G-APPLE 通过后更新）
 
-1. sku_v7_sam 训练运行中 → 全部真实 MLX/Qwen 重任务阻断；
-2. MLX/mlx-vlm 未安装、权重未下载 → G-APPLE 未通过；
+1. ~~sku_v7_sam 训练运行中~~ → 已自然早停，G-CURRENT 对账完成，解除；
+2. ~~MLX/mlx-vlm 未安装、权重未下载~~ → 已完成（.venv_mlx_vlm，mlx-vlm 0.6.10），preflight 14/14 通过，解除；
 3. 人工 truebox/SKU 真值不足 → shadow 晋级 not_evaluable；
 4. 934 张 tilt reject 人工复核未完成；
 5. 生产发布（G-PUBLISH）未申请，`production_switch=false`。

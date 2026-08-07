@@ -55,6 +55,76 @@ def _probe_not_installed(name: str):
     return probe
 
 
+# 真实探针（仅在隔离环境 .venv_mlx_vlm 内有效；任一异常均 fail-closed）
+_LOADED: dict = {}
+
+
+def _probe_mlx_metal_device():
+    try:
+        import mlx.core as mx
+        metal = mx.metal.is_available()
+        dev = str(mx.default_device())
+        ok = metal and "gpu" in dev.lower()
+        return ok, f"default_device={dev}, metal.is_available={metal}"
+    except ImportError:
+        return False, "mlx 未安装（fail-closed，禁止假装已验证）"
+    except Exception as e:
+        return False, f"MLX Metal 检查失败: {e}"
+
+
+def _probe_model_loadable():
+    try:
+        from mlx_vlm import load
+        model, processor = load(MODEL_ID)  # 首次运行会下载权重（已获授权）
+        _LOADED["model"], _LOADED["processor"] = model, processor
+        return True, f"已加载 {MODEL_ID}"
+    except ImportError:
+        return False, "mlx_vlm 未安装（fail-closed）"
+    except Exception as e:
+        return False, f"模型加载失败: {e}"
+
+
+def _probe_processor_image():
+    try:
+        from PIL import Image
+        from mlx_vlm.utils import load_config
+        from mlx_vlm.prompt_utils import apply_chat_template
+        proc = _LOADED.get("processor")
+        if proc is None:
+            return False, "模型未加载，无法验证 processor"
+        config = load_config(MODEL_ID)
+        img = Image.new("RGB", (64, 64), (128, 128, 128))
+        prompt = apply_chat_template(proc, config, "描述图像",
+                                     num_images=1)
+        inputs = proc(images=img, text=prompt, return_tensors="np") \
+            if hasattr(proc, "image_processor") else proc(img, prompt)
+        keys = sorted(getattr(inputs, "keys", lambda: ["?"])())
+        return True, f"processor 已处理 64x64 图像（keys={keys}）"
+    except Exception as e:
+        return False, f"processor 图像处理失败: {e}"
+
+
+def _probe_bounded_forward():
+    try:
+        from PIL import Image
+        from mlx_vlm import generate
+        from mlx_vlm.utils import load_config
+        from mlx_vlm.prompt_utils import apply_chat_template
+        model, proc = _LOADED.get("model"), _LOADED.get("processor")
+        if model is None or proc is None:
+            return False, "模型未加载，无法执行 bounded forward"
+        config = load_config(MODEL_ID)
+        img = Image.new("RGB", (64, 64), (0, 0, 0))
+        prompt = apply_chat_template(proc, config, "这是什么？",
+                                     num_images=1)
+        result = generate(model, proc, prompt, image=img, max_tokens=8,
+                          verbose=False)
+        text = getattr(result, "text", str(result))
+        return True, f"bounded forward 完成（max_tokens=8）: {text[:40]}"
+    except Exception as e:
+        return False, f"bounded forward 失败: {e}"
+
+
 def _probe_ac_power():
     try:
         out = subprocess.run(["pmset", "-g", "ps"], capture_output=True,
@@ -94,7 +164,9 @@ def _probe_thermal():
     try:
         out = subprocess.run(["pmset", "-g", "therm"], capture_output=True,
                              text=True, timeout=10).stdout
-        ok = "CPU_Scheduler_Limit" in out
+        # 无热告警记录（No thermal warning）同样表示热状态正常
+        ok = ("CPU_Scheduler_Limit" in out
+              or "No thermal warning level has been recorded" in out)
         return ok, out.strip().replace("\n", " | ") or "unknown"
     except Exception as e:
         return False, f"热状态检查失败: {e}"
@@ -103,14 +175,14 @@ def _probe_thermal():
 def _probe_service_health():
     import urllib.request
 
-    for port in (8091, 8092):
+    for port, path in ((8091, "/v2/health"), (8092, "/api/live")):
         try:
-            with urllib.request.urlopen(f"http://127.0.0.1:{port}/healthz",
+            with urllib.request.urlopen(f"http://127.0.0.1:{port}{path}",
                                         timeout=3):
                 pass
         except Exception as e:
-            return False, f"服务 {port} 不可达: {e}"
-    return True, "8091/8092 健康"
+            return False, f"服务 {port}{path} 不可达: {e}"
+    return True, "8091/v2/health 与 8092/api/live 可达"
 
 
 def main() -> int:
@@ -122,10 +194,10 @@ def main() -> int:
     probes = {
         "arm64": _probe_arm64,
         "apple_silicon": _probe_apple_silicon,
-        "mlx_metal_device": _probe_not_installed("mlx_metal_device"),
-        "model_loadable": _probe_not_installed("model_loadable"),
-        "processor_image": _probe_not_installed("processor_image"),
-        "bounded_forward": _probe_not_installed("bounded_forward"),
+        "mlx_metal_device": _probe_mlx_metal_device,
+        "model_loadable": _probe_model_loadable,
+        "processor_image": _probe_processor_image,
+        "bounded_forward": _probe_bounded_forward,
         "ac_power": _probe_ac_power,
         "disk_space": _probe_disk,
         "memory": _probe_memory,
