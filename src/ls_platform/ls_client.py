@@ -133,6 +133,16 @@ class LSClient:
             timeout=60), "create_prediction")
         return r.json()
 
+    def get_task(self, task_id: int) -> dict:
+        """GET 单个 task（含 predictions/annotations，回填扫描用）。"""
+        return self._check(self.s.get(
+            f"{self.url}/api/tasks/{task_id}", timeout=60), "get_task").json()
+
+    def fetch_file(self, path_or_url: str) -> bytes:
+        """带鉴权下载 LS 托管文件（data.image 相对路径或绝对 URL）。"""
+        url = path_or_url if path_or_url.startswith("http") else f"{self.url}{path_or_url}"
+        return self._check(self.s.get(url, timeout=120), "fetch_file").content
+
     def export(self, pid: int, export_type: str = "JSON") -> list[dict]:
         r = self._check(self.s.get(
             f"{self.url}/api/projects/{pid}/export",
