@@ -13,6 +13,7 @@ import {
   fetchTrainingRuns,
   fetchTrainingSnapshots,
 } from "../api";
+import TrainingControlPanel from "./TrainingControl";
 
 type Snap = Record<string, unknown>;
 type Job = Record<string, unknown>;
@@ -197,6 +198,13 @@ export default function Training() {
   );
 
   return (
+    <>
+      <TrainingControlPanel />
+      <details style={{ marginTop: 24 }}>
+        <summary>
+          Legacy 训练治理区（单 YOLO snapshot 兼容层；8092
+          旧监控只作只读参考，不再是统一进度事实源）
+        </summary>
     <section>
       <h2>训练模型（M5 治理 · UMT 修正版）</h2>
       <p className="muted">
@@ -359,5 +367,7 @@ export default function Training() {
         旧 /retrain auto_switch=true 不进新平台。
       </p>
     </section>
+      </details>
+    </>
   );
 }

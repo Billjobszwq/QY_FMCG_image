@@ -840,3 +840,78 @@ export async function supersedePackageDecision(body: {
   if (!r.ok) throw await parseError(r, "packaging supersede");
   return r.json();
 }
+
+// ---------- GLTC：四训练通道统一控制面 ----------
+
+export interface LaneBlocker {
+  code: string;
+  detail: string;
+}
+
+export interface LaneReadiness {
+  lane: string;
+  lineage_family: string;
+  ready: boolean;
+  blockers: LaneBlocker[];
+  gold_regions: number;
+  runs?: unknown[];
+  latest_candidate?: unknown;
+}
+
+export interface TrainingLanesBody {
+  production: {
+    bundle_id: string;
+    status: string;
+    serving: boolean;
+    lineage: string;
+  };
+  lanes: Record<string, LaneReadiness>;
+  note: string;
+}
+
+export interface TrainingOverviewBody {
+  production: TrainingLanesBody["production"];
+  lanes: Record<string, boolean>;
+  gold: { usable_regions: number; statuses: string[] };
+  leases: { run_id: string; resource: string; mode: string }[];
+  training_authorized: boolean;
+}
+
+export interface LegacyModelRow {
+  model_id: string;
+  path: string;
+  status: string;
+  weights_json: string;
+  git_commit: string;
+  registered_at: string;
+}
+
+export async function fetchTrainingLanes(): Promise<TrainingLanesBody> {
+  const r = await fetch("/api/v1/training/lanes");
+  if (!r.ok) throw new Error(`training lanes HTTP ${r.status}`);
+  return r.json();
+}
+
+export async function fetchTrainingOverview(): Promise<TrainingOverviewBody> {
+  const r = await fetch("/api/v1/training/overview");
+  if (!r.ok) throw new Error(`training overview HTTP ${r.status}`);
+  return r.json();
+}
+
+export async function fetchLegacyModels(): Promise<{
+  count: number;
+  models: LegacyModelRow[];
+}> {
+  const r = await fetch("/api/v1/training/legacy-models");
+  if (!r.ok) throw new Error(`legacy models HTTP ${r.status}`);
+  return r.json();
+}
+
+export async function fetchTrainingRunsV2(): Promise<{
+  count: number;
+  runs: Record<string, unknown>[];
+}> {
+  const r = await fetch("/api/v1/training/runs-v2");
+  if (!r.ok) throw new Error(`training runs-v2 HTTP ${r.status}`);
+  return r.json();
+}
