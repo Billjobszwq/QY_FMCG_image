@@ -178,8 +178,22 @@ def predictions_from_recognition(
                     "width": rect["value"]["width"],
                     "height": rect["value"]["height"], "rotation": 0,
                 }
-                regions: list[dict[str, Any]] = [rect]
+                regions: list[dict[str, Any]] = []
                 suggested = _resolve_suggested_sku(p, registry, by_sku_id)
+                region_meta = {
+                    "source": p.get("source", "classifier"),
+                    "sku_id": str(p.get("sku_id") or "") or None,
+                    "suggested_sku": suggested,
+                    "confidence": float(p.get("confidence") or 0.0),
+                    "margin": p.get("margin"),
+                    "model_version": model_version,
+                    "needs_manual_sku": suggested is None,
+                    "is_final_annotation": False,
+                }
+                # 区域级 meta：LS 1.23 不支持 prediction 顶层 meta，
+                # 但 region result 的 meta 键可原样保存回读（已实测）。
+                rect["meta"] = region_meta
+                regions.append(rect)
                 if suggested is not None:
                     regions.append({
                         "id": region_id,
@@ -200,16 +214,7 @@ def predictions_from_recognition(
                         "score": float(p.get("confidence") or 0.0),
                         "model_version": model_version,
                         "result": regions,
-                        "metadata": {
-                            "source": p.get("source", "classifier"),
-                            "sku_id": str(p.get("sku_id") or "") or None,
-                            "suggested_sku": suggested,
-                            "confidence": float(p.get("confidence") or 0.0),
-                            "margin": p.get("margin"),
-                            "model_version": model_version,
-                            "needs_manual_sku": suggested is None,
-                            "is_final_annotation": False,
-                        },
+                        "metadata": region_meta,
                     }
                 )
             if results:
