@@ -1973,6 +1973,39 @@ class PlatformStore:
         except sqlite3.IntegrityError:
             return False  # 同一审核员对同一 region 重复提交 → 幂等跳过
 
+    def add_gold_regions_atomic(self, regions: list[dict[str, Any]]) -> bool:
+        """单事务批量追加区域级人工真值（任务书§十一.1 原子性）：
+        全部成功才 COMMIT；任一条冲突（如 (task_id, region_id, actor)
+        重复）→ 整批 ROLLBACK，返回 False，保证整次审核零落账。"""
+        if not regions:
+            return True
+        conn = self._conn
+        try:
+            conn.execute("BEGIN")
+            for rg in regions:
+                conn.execute(
+                    "INSERT INTO gold_region_v1"
+                    "(task_id, region_id, photo_id, sha256, box_json, sku_id,"
+                    " sku_name, package_version_id, review_status, actor,"
+                    " role, evidence_json, group_store, group_session,"
+                    " near_dup_group, created_at)"
+                    " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                    (rg["task_id"], rg["region_id"], rg["photo_id"],
+                     rg["sha256"],
+                     json.dumps([float(v) for v in rg["box"]]),
+                     rg["sku_id"], rg["sku_name"],
+                     rg.get("package_version_id", ""),
+                     rg.get("review_status", "submitted"), rg["actor"],
+                     rg.get("role", "annotator"),
+                     json.dumps(rg.get("evidence") or {}, ensure_ascii=False),
+                     rg.get("group_store", ""), rg.get("group_session", ""),
+                     rg.get("near_dup_group", ""), _utcnow()))
+            conn.execute("COMMIT")
+            return True
+        except sqlite3.Error:
+            conn.execute("ROLLBACK")
+            return False  # 整批回滚 → 半次审核不落账
+
     def list_gold_regions(self, task_id: str | None = None) -> list[dict[str, Any]]:
         if task_id is None:
             rows = self._conn.execute(

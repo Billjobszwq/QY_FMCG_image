@@ -22,6 +22,8 @@ REVIEW_MODES = ("double_review", "blind_review", "blind_manual")
 VERDICTS = ("accepted", "rejected", "adjudicated")
 # 区域级真值的非 SKU 结论（unknown=无法识别；new_packaging=新包装未入 Registry）
 REGION_ABSTAIN_LABELS = ("unknown", "new_packaging")
+# 双审区域一致判定：两框 one-to-one 几何匹配的 IoU 阈值（任务书§十一.3）
+DOUBLE_REVIEW_IOU_THRESHOLD = 0.75
 
 
 _DEFAULT_REGISTRY_PATH = (
@@ -151,12 +153,18 @@ def submit_review(store, *, task_id: str, actor: str, verdict: str,
                   box: tuple | list,
                   role: str = "annotator",
                   regions: list[dict[str, Any]] | None = None,
-                  registry: dict[str, dict] | None = None) -> dict[str, Any]:
+                  registry: dict[str, dict] | None = None,
+                  width: float | None = None,
+                  height: float | None = None) -> dict[str, Any]:
     """提交人工审核结论（唯一可产生 final_box / 区域 human_final 的途径）。
 
     regions 可选：区域级真值（region_id/box/sku 标签或 unknown/new_packaging/
     package_version_id/evidence/门店-session-近重复分组）。只有经人工提交
-    的区域才可能进入 human_final/gold_verified，prediction 永不进入。"""
+    的区域才可能进入 human_final/gold_verified，prediction 永不进入。
+
+    原子性（任务书§十一.1）：先全量校验所有区域并收集，再单事务落账；
+    任一区域非法或重复 → 整次提交零落账，review 事件也不记录。
+    width/height 可选：提供时额外校验 region box 不越出图片边界。"""
     row = store.find_review_task_by_id(task_id)
     if row is None:
         raise ValueError(f"task_id 不存在: {task_id}")
@@ -175,10 +183,16 @@ def submit_review(store, *, task_id: str, actor: str, verdict: str,
     n_regions = 0
     if regions:
         reg = registry if registry is not None else load_registry_for_review()
-        for r in regions:
-            _validate_and_store_region(
-                store, row, r, actor=actor, role=role, registry=reg)
-            n_regions += 1
+        # 1) 先全量校验+收集（不写库）：任一失败 → 抛错零落账
+        prepared = [_prepare_region(row, r, actor=actor, role=role,
+                                    registry=reg, width=width, height=height)
+                    for r in regions]
+        # 2) 单事务原子落账：整批成功或整批回滚
+        if not store.add_gold_regions_atomic(prepared):
+            raise ValueError(
+                f"{actor} 区域提交落账失败（疑似对同一 region 重复提交），"
+                "整次提交零落账")
+        n_regions = len(prepared)
     store.add_review_event(task_id=task_id, kind="review", actor=actor,
                            role=role, verdict=verdict, box=box)
     out = _finalize_result(store, row)
@@ -187,16 +201,17 @@ def submit_review(store, *, task_id: str, actor: str, verdict: str,
     return out
 
 
-def _validate_and_store_region(store, row: dict[str, Any], r: dict[str, Any],
-                               *, actor: str, role: str,
-                               registry: dict[str, dict]) -> None:
-    """区域级真值校验 + 追加落账（fail-closed，不允许猜测 SKU）。"""
+def _prepare_region(row: dict[str, Any], r: dict[str, Any], *, actor: str,
+                    role: str, registry: dict[str, dict],
+                    width: float | None = None,
+                    height: float | None = None) -> dict[str, Any]:
+    """区域级真值校验（fail-closed，不允许猜测 SKU）；只校验不落账，
+    返回可写入 gold_region_v1 的载荷，原子性由 add_gold_regions_atomic 保证。"""
     region_id = str(r.get("region_id") or "").strip()
     if not region_id:
         raise ValueError("region 缺少 region_id")
-    box = r.get("box")
-    if not box or len(box) != 4 or any(float(v) <= 0 for v in _safe_floats(box)):
-        raise ValueError(f"region {region_id} box 非法（需 4 个正数）")
+    box = _validate_box(r.get("box"), context=f"region {region_id} box",
+                        width=width, height=height)
     label = str(r.get("sku_label") or "").strip()
     if not label:
         raise ValueError(f"region {region_id} 缺少 sku_label")
@@ -211,19 +226,38 @@ def _validate_and_store_region(store, row: dict[str, Any], r: dict[str, Any],
         sku_id, sku_name = str(entry.get("sku_id") or ""), label
         if not sku_id:
             raise ValueError(f"Registry 条目缺 sku_id: {label}")
-    ok = store.add_gold_region(
-        task_id=row["task_id"], region_id=region_id,
-        photo_id=row["photo_id"], sha256=row["sha256"],
-        box=box, sku_id=sku_id, sku_name=sku_name,
-        package_version_id=str(r.get("package_version_id") or ""),
-        review_status="submitted", actor=actor, role=role,
-        evidence=r.get("evidence") or {},
-        group_store=str(r.get("group_store") or ""),
-        group_session=str(r.get("group_session") or ""),
-        near_dup_group=str(r.get("near_dup_group") or ""))
-    if not ok:
-        raise ValueError(
-            f"{actor} 已对 region {region_id} 提交过，不得重复提交")
+    return {"task_id": row["task_id"], "region_id": region_id,
+            "photo_id": row["photo_id"], "sha256": row["sha256"],
+            "box": box, "sku_id": sku_id, "sku_name": sku_name,
+            "package_version_id": str(r.get("package_version_id") or ""),
+            "review_status": "submitted", "actor": actor, "role": role,
+            "evidence": r.get("evidence") or {},
+            "group_store": str(r.get("group_store") or ""),
+            "group_session": str(r.get("group_session") or ""),
+            "near_dup_group": str(r.get("near_dup_group") or "")}
+
+
+def _validate_box(box, *, context: str = "box",
+                  width: float | None = None,
+                  height: float | None = None) -> list[float]:
+    """bbox 合法性（任务书§十一.2）：x1/y1=0 是合法坐标（图片左上角）。
+    拒绝：长度≠4、非数字、负坐标、x2<=x1、y2<=y1；
+    提供 width/height 时额外拒绝越出图片边界的坐标。"""
+    if box is None or len(box) != 4:
+        raise ValueError(f"{context} 必须是 4 元组 (x1,y1,x2,y2)")
+    vals = _safe_floats(box)
+    if len(vals) != 4:
+        raise ValueError(f"{context} 含非数字坐标: {list(box)!r}")
+    x1, y1, x2, y2 = vals
+    if min(vals) < 0:
+        raise ValueError(f"{context} 不得含负坐标: {vals}")
+    if x2 <= x1 or y2 <= y1:
+        raise ValueError(f"{context} 必须满足 x2>x1 且 y2>y1: {vals}")
+    if width is not None and (x1 > width or x2 > width):
+        raise ValueError(f"{context} 越出图片宽度 {width}: {vals}")
+    if height is not None and (y1 > height or y2 > height):
+        raise ValueError(f"{context} 越出图片高度 {height}: {vals}")
+    return vals
 
 
 def _safe_floats(box) -> list[float]:
@@ -233,14 +267,56 @@ def _safe_floats(box) -> list[float]:
         return []
 
 
-def _region_key(r: dict[str, Any]) -> tuple:
-    """双人一致性键：region_id + SKU 结论（框以同 region 提交为准）。"""
-    return (r["region_id"], r["sku_id"], r["sku_name"])
+def _iou(b1, b2) -> float:
+    """两个 (x1,y1,x2,y2) 框的交并比 IoU。"""
+    ax1, ay1, ax2, ay2 = (float(v) for v in b1)
+    bx1, by1, bx2, by2 = (float(v) for v in b2)
+    iw = max(0.0, min(ax2, bx2) - max(ax1, bx1))
+    ih = max(0.0, min(ay2, by2) - max(ay1, by1))
+    inter = iw * ih
+    if inter <= 0:
+        return 0.0
+    union = (ax2 - ax1) * (ay2 - ay1) + (bx2 - bx1) * (by2 - by1) - inter
+    return inter / union if union > 0 else 0.0
+
+
+def _sku_conclusion(r: dict[str, Any]) -> str:
+    """SKU 结论的可比形式：有 sku_id 比 sku_id；弃权标签
+    （unknown/new_packaging）sku_id 为空，按 sku_name 比。"""
+    return r["sku_id"] if r["sku_id"] else r["sku_name"]
+
+
+def _match_regions_one_to_one(list_a: list[dict], list_b: list[dict],
+                              threshold: float):
+    """贪心 one-to-one 几何匹配：IoU>=threshold 的区域对按 IoU 降序
+    选取（同分按索引序，确定性）；返回 (匹配对, 已用a索引, 已用b索引)。"""
+    cand = []
+    for i, ra in enumerate(list_a):
+        for j, rb in enumerate(list_b):
+            v = _iou(ra["box"], rb["box"])
+            if v >= threshold:
+                cand.append((-v, i, j))
+    cand.sort()
+    used_a: set[int] = set()
+    used_b: set[int] = set()
+    pairs: list[tuple[int, int]] = []
+    for _, i, j in cand:
+        if i in used_a or j in used_b:
+            continue
+        used_a.add(i)
+        used_b.add(j)
+        pairs.append((i, j))
+    return pairs, used_a, used_b
 
 
 def gold_region_report(store) -> dict[str, Any]:
     """区域级 gold 汇总：只有双审一致/仲裁终结的区域才是 human_final/
-    gold_verified；submitted 与 conflict 一律不得进入训练集。"""
+    gold_verified；submitted 与 conflict 一律不得进入训练集。
+
+    任务书§十一.3/4：双审一致按区域 one-to-one 几何匹配
+    （IoU>=DOUBLE_REVIEW_IOU_THRESHOLD）后再比 SKU 结论，未匹配视为分歧；
+    仲裁只作用于发生分歧的区域组，未分歧区域不受仲裁影响；
+    gold 按 task_id 分组，不做跨任务合并（同图 assisted/blind 互不污染）。"""
     tasks = {t["task_id"]: t for t in store.list_review_tasks()}
     by_task: dict[str, list[dict]] = {}
     for r in store.list_gold_regions():
@@ -256,31 +332,64 @@ def gold_region_report(store) -> dict[str, Any]:
         requires_second = bool(t["requires_second_review"])
         annot = [r for r in recs if r["role"] != "arbiter"]
         arbs = [r for r in recs if r["role"] == "arbiter"]
-        by_key: dict[tuple, list[dict]] = {}
-        for r in annot:
-            by_key.setdefault(_region_key(r), []).append(r)
-        actors = {r["actor"] for r in annot}
-        for key, group in by_key.items():
-            r0 = group[0]
-            if arbs:
-                # 仲裁轨道：人工分歧已由仲裁终结，原提交记录仅留痕不计数
-                out_regions.append({**r0, "final_status": "superseded",
-                                    "n_agree": len(group)})
-                continue
-            if not requires_second:
-                status = "human_final"
-            elif len({g["actor"] for g in group}) >= 2:
-                status = "human_final"  # 双人独立一致
-            elif len(actors) >= 2:
-                status = "conflict"  # 双人已审但结论不一致 → 待仲裁
-            else:
-                status = "submitted"  # 仅一人提交，等二审
-            counts[status] += 1
-            if status == "human_final":
+        actors = sorted({r["actor"] for r in annot})
+        # 分歧组（输出条目引用，供仲裁逐组 supersede）
+        conflict_entries: list[list[dict[str, Any]]] = []
+        if not requires_second:
+            for r in annot:
+                counts["human_final"] += 1  # 单审一次提交即终态
                 photos_final.add(t["photo_id"])
-            out_regions.append({**r0, "final_status": status,
-                                "n_agree": len(group)})
+                out_regions.append({**r, "final_status": "human_final",
+                                    "n_agree": 1})
+        elif len(actors) < 2:
+            for r in annot:
+                counts["submitted"] += 1  # 仅一人提交，等二审
+                out_regions.append({**r, "final_status": "submitted",
+                                    "n_agree": 1})
+        else:
+            ra = [r for r in annot if r["actor"] == actors[0]]
+            rb = [r for r in annot if r["actor"] == actors[1]]
+            pairs, used_a, used_b = _match_regions_one_to_one(
+                ra, rb, DOUBLE_REVIEW_IOU_THRESHOLD)
+            for i, j in pairs:
+                if _sku_conclusion(ra[i]) == _sku_conclusion(rb[j]):
+                    counts["human_final"] += 1  # 双人独立一致
+                    photos_final.add(t["photo_id"])
+                    out_regions.append({**ra[i],
+                                        "final_status": "human_final",
+                                        "n_agree": 2})
+                else:
+                    conflict_entries.append(
+                        [{**ra[i], "final_status": "conflict", "n_agree": 1},
+                         {**rb[j], "final_status": "conflict",
+                          "n_agree": 1}])
+                    counts["conflict"] += 2  # 几何匹配但 SKU 结论不一致
+            for i, r in enumerate(ra):
+                if i not in used_a:
+                    conflict_entries.append(
+                        [{**r, "final_status": "conflict", "n_agree": 1}])
+                    counts["conflict"] += 1  # 未匹配 → 几何分歧
+            for j, r in enumerate(rb):
+                if j not in used_b:
+                    conflict_entries.append(
+                        [{**r, "final_status": "conflict", "n_agree": 1}])
+                    counts["conflict"] += 1
+            for entries in conflict_entries:
+                out_regions.extend(entries)
+        # 仲裁轨道：逐区域 gold_verified；仅把与仲裁框几何匹配
+        # （IoU>=阈值）的分歧组 superseded，未分歧区域保持原状态
         for a in arbs:
+            best_idx, best_iou = -1, 0.0
+            for gi, entries in enumerate(conflict_entries):
+                m = max((_iou(a["box"], e["box"]) for e in entries),
+                        default=0.0)
+                if m >= DOUBLE_REVIEW_IOU_THRESHOLD and m > best_iou:
+                    best_idx, best_iou = gi, m
+            if best_idx >= 0:
+                for e in conflict_entries[best_idx]:
+                    if e["final_status"] == "conflict":
+                        e["final_status"] = "superseded"  # 原提交仅留痕
+                        counts["conflict"] -= 1
             counts["gold_verified"] += 1
             photos_final.add(t["photo_id"])
             out_regions.append({**a, "final_status": "gold_verified",
