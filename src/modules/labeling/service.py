@@ -12,6 +12,7 @@ import hashlib
 import io
 import json
 import uuid
+from pathlib import Path
 from typing import Any, Iterable
 
 WEBHOOK_ACTIONS = [
@@ -85,15 +86,78 @@ def image_size(data: bytes) -> tuple[int, int]:
         return im.width, im.height
 
 
+_DEFAULT_REGISTRY_PATH = (
+    Path(__file__).resolve().parents[3] / "data" / "sku_registry.json"
+)
+
+
+def load_default_registry(path: Path | None = None) -> dict[str, dict]:
+    """加载 SKU Registry（name → {sku_id, name, class_id}）；缺失时空 dict。"""
+    p = Path(path) if path else _DEFAULT_REGISTRY_PATH
+    if not p.is_file():
+        return {}
+    return json.loads(p.read_text(encoding="utf-8"))
+
+
+def _sku_id_index(registry: dict[str, dict]) -> dict[str, str]:
+    """sku_id → Registry key（taxonomy 用名称）的反向索引。"""
+    idx: dict[str, str] = {}
+    for key, info in registry.items():
+        sid = (info or {}).get("sku_id")
+        if sid:
+            idx[str(sid)] = key
+    return idx
+
+
+def _resolve_suggested_sku(
+    product: dict[str, Any],
+    registry: dict[str, dict],
+    by_sku_id: dict[str, str],
+) -> str | None:
+    """只有同时满足才返回建议 SKU（taxonomy 值），否则 None（不伪造）：
+
+    - status == accepted（rejected/unknown/manual_review 一律拒绝）；
+    - sku_id 非空且能映射到当前 Registry；
+    - 识别返回的名称与 Registry key 一致（防名称冲突）；
+    - 该名称存在于 Label Studio Taxonomy 配置（即 Registry key 集合）。
+    仅有检测类别而无最终分类结论（sku_id 空）同样拒绝。"""
+    status = product.get("status")
+    if status is None:
+        status = "rejected" if product.get("needs_review") else "accepted"
+    if status != "accepted":
+        return None
+    sku_id = str(product.get("sku_id") or "").strip()
+    if not sku_id:
+        return None
+    reg_key = by_sku_id.get(sku_id)
+    if reg_key is None or reg_key not in registry:
+        return None
+    name = product.get("name") or ""
+    if name != reg_key:
+        return None
+    return reg_key
+
+
 def predictions_from_recognition(
     recognition: Any,
     photos: list[tuple[str, bytes]],
     *,
     model_version: str,
+    registry: dict[str, dict] | None = None,
 ) -> tuple[dict[str, list[dict[str, Any]]], int]:
     """用识别能力（8091）为 assisted 项目生成预标注（真实模型，非 mock）。
 
+    每个有效区域生成同 region id 的关联结果：
+    1. rectanglelabels（from_name=box）：商品框；
+    2. taxonomy（from_name=sku）：系统建议 SKU——仅当 Registry 映射成立；
+    3. choices（from_name=status）：初始状态固定 unreviewed，
+       matched 只能由人工选择，prediction 绝不自动写入；
+    4. metadata：sku_id/suggested_sku/confidence/margin/source/model_version。
+
     单图失败不阻塞整体；返回 (按文件名的 prediction 列表, 失败数)。"""
+    if registry is None:
+        registry = load_default_registry()
+    by_sku_id = _sku_id_index(registry)
     out: dict[str, list[dict[str, Any]]] = {}
     failures = 0
     for name, data in photos:
@@ -105,15 +169,47 @@ def predictions_from_recognition(
                 box = p.get("box")
                 if not box or len(box) != 4:
                     continue
+                region_id = f"pred_{uuid.uuid4().hex[:12]}"
+                rect = box_px_to_ls_result(
+                    tuple(float(v) for v in box), width, height,
+                    region_id=region_id)
+                geom = {
+                    "x": rect["value"]["x"], "y": rect["value"]["y"],
+                    "width": rect["value"]["width"],
+                    "height": rect["value"]["height"], "rotation": 0,
+                }
+                regions: list[dict[str, Any]] = [rect]
+                suggested = _resolve_suggested_sku(p, registry, by_sku_id)
+                if suggested is not None:
+                    regions.append({
+                        "id": region_id,
+                        "from_name": "sku",
+                        "to_name": "image",
+                        "type": "taxonomy",
+                        "value": {**geom, "taxonomy": [[suggested]]},
+                    })
+                regions.append({
+                    "id": region_id,
+                    "from_name": "status",
+                    "to_name": "image",
+                    "type": "choices",
+                    "value": {**geom, "choices": ["unreviewed"]},
+                })
                 results.append(
                     {
                         "score": float(p.get("confidence") or 0.0),
                         "model_version": model_version,
-                        "result": [
-                            box_px_to_ls_result(
-                                tuple(float(v) for v in box), width, height
-                            )
-                        ],
+                        "result": regions,
+                        "metadata": {
+                            "source": p.get("source", "classifier"),
+                            "sku_id": str(p.get("sku_id") or "") or None,
+                            "suggested_sku": suggested,
+                            "confidence": float(p.get("confidence") or 0.0),
+                            "margin": p.get("margin"),
+                            "model_version": model_version,
+                            "needs_manual_sku": suggested is None,
+                            "is_final_annotation": False,
+                        },
                     }
                 )
             if results:
@@ -219,17 +315,24 @@ class LabelingService:
                         # 展平：每项可能是单个 region dict 或 region 列表；
                         # 直接嵌套列表会被 LS 校验拒绝（实测 400 Validation error）。
                         flat: list[dict[str, Any]] = []
+                        region_meta: list[dict[str, Any]] = []
                         for r in results:
                             part = r["result"] if "result" in r else r
                             if isinstance(part, list):
                                 flat.extend(part)
                             else:
                                 flat.append(part)
+                            if isinstance(r, dict) and r.get("metadata"):
+                                region_meta.append(r["metadata"])
+                        meta = ({"regions": region_meta,
+                                 "is_final_annotation": False}
+                                if region_meta else None)
                         self.ls.create_prediction(
                             int(task["id"]),
                             flat,
                             score=score,
                             model_version=model_version,
+                            meta=meta,
                         )
                         pred_written += 1
 

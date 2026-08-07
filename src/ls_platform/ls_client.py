@@ -121,10 +121,15 @@ class LSClient:
             params={"page": page, "page_size": page_size}, timeout=60), "list_tasks")
         return r.json()
 
-    def create_prediction(self, task_id: int, result: list[dict], score: float = 0.5, model_version: str = "yolo") -> dict:
+    def create_prediction(self, task_id: int, result: list[dict], score: float = 0.5,
+                          model_version: str = "yolo", meta: dict | None = None) -> dict:
+        payload = {"task": task_id, "result": result, "score": score,
+                   "model_version": model_version}
+        if meta:
+            payload["meta"] = meta
         r = self._check(self.s.post(
             f"{self.url}/api/predictions/",
-            json={"task": task_id, "result": result, "score": score, "model_version": model_version},
+            json=payload,
             timeout=60), "create_prediction")
         return r.json()
 
