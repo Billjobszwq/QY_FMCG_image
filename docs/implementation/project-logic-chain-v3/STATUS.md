@@ -5,14 +5,14 @@
 
 | 项 | 值（2026-08-07 现场重验） |
 |---|---|
-| 当前状态 | S1 文档基线建立；P0 根因现场复现完成；等待红测试 → 修复序列 |
-| HEAD | `7b2e268`，分支 `feat/unified-workbench-training-readiness` |
-| 测试基线 | 819 passed, 1 skipped（miniconda python3，21.33s） |
+| 当前状态 | S7 完成：统一状态源 + gold_region 状态机修复（commit 5/6/7）；下一步 Label Studio V2 接入 |
+| HEAD | `5537af5`，分支 `feat/unified-workbench-training-readiness` |
+| 测试基线 | 871 passed, 1 skipped（miniconda python3） |
 | 生产 bundle | `prod_20260804_v4_r2` 未切换（production_switch=false） |
 | 训练 | 未启动任何重训练；无 YOLO/QLoRA/classifier 进程 |
 | 服务 | 8092 ✅ / 8400 ✅ / 8300 ✅（LS）/ 8091 存活（/health 返回 not found，健康端点待核） |
-| DB | .platform/platform.sqlite integrity_check=ok；migration 001–018 齐全 |
-| 审核现状 | review_task_v1 = 250（rq_v1，**ID/SHA 配对 0/250 错误**）；review_event_v1 = 1（1 claim）；gold_region_v1 = 0 |
+| DB | .platform/platform.sqlite integrity_check=ok；migration 001–019 齐全；备份 `.platform/backups/platform_before_rq_v1_invalidation.sqlite`（integrity ok） |
+| 审核现状 | review_task_v1 = 500（rq_v1 250 **invalid 保留** + rq_v2 250 **active，250/250 配对**）；队列账本 rq_v1=invalid/rq_v2=active；gold_region_v1 = 0 |
 
 ## 本轮核心目标
 
@@ -32,4 +32,4 @@
 
 ## Gate
 
-当前 Gate = **P0 错配修复 + rq_v2 发布**；人工 250 审核放行前必须先过 5+5 小规模验收。
+当前 Gate = **Label Studio V2 接入 + truebox 导出器**；人工 250 审核放行前必须先过 5+5 小规模验收。

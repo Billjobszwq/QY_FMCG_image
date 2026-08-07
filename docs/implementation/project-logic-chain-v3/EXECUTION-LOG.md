@@ -20,3 +20,34 @@
   sam-reannotation/STATUS.md、protocol_sets.py、build_review_queue.py、human_review_queue.py、
   import_u4_review_queue.py、review.py、store.py。
 - 建立本档案目录与实施计划（纯文档基线，随后提交）。
+
+## 2026-08-07 S2–S5（commit 2/3/4）
+
+- **Commit 2** `ea3d69b` test: reproduce diagnostic photo sha mismatch（tests/unit/test_protocol_photo_identity.py，9 条红测试）。
+- **Commit 3** `78b567b` fix: build canonical protocol photo identity mapping
+  - 新增 `src/data/photo_identity.py`：canonical_mapping/validate_pairing/validate_queue_items/canonical_assets；fail-closed，allow_partial_import 恒 False。
+  - `src/data/protocol_sets.py` freeze/make_dev_v2 输出追加 `photo_sha256_map`（按 ID 查询生成）。
+  - 9/9 绿；tests/unit 237 全绿。
+- **S4 队列失效 + V2 发布（Commit 4 `fa8eec1`）** feat: invalidate rq_v1 and publish review queue v2
+  - migration 019：`review_queue_ledger_v1` + `review_queue_invalidation_v1`（触发器禁删改，追加式不可变）；store 增 register/invalidate/list_queue_ledger/list_review_tasks_active/review_task_stats。
+  - `src/review/review_queue_v2.py`：ID→SHA 一律按 photo_id 查 clean_manifest，禁位置 zip；发布门禁（映射/配对/blob 存在/现场 SHA）任一失败不发布。
+  - 真实构建 `.review_queue/review_queue_diag_v2.json`：**500/500 映射、250/250 配对、226/226 原图、226/226 现场 SHA**，分布 double 200 + blind 50（seed=20260804），重叠 24。
+  - 失效驱动：sqlite backup API 备份 + 双向 integrity_check=ok → register rq_v1/rq_v2 → invalidate rq_v1（reason=invalid_id_sha_mapping，superseded_by=rq_v2）→ 证据 `.review_queue/rq_v1_invalidation_evidence.json`。
+  - U5 导入：导入前 validate_queue_items 250/250 → imported=250，幂等重跑=0；task_stats active=250 / invalid=250 / total=500。
+  - 全量测试 845 passed（基线 819 + 新增 26）。
+
+## 2026-08-07 S6–S7（commit 5/6/7）
+
+- **Commit 5a** `a5d82c7` test: require database as single review status source（8 条红测试）。
+- **Commit 5** `a6bc48a` fix: use database review state as single source
+  - `review.py` 新增 `review_progress(store)`：状态完全由 review_task_v1 + review_event_v1 + 队列账本推导；active/invalid 分开统计。
+  - `workitems.py` 删除 `_load_review_queue` 静态 JSON 读取，WorkItems 走同一 DB 推导服务；`pending_review` 只计 status=pending。
+  - `vocabulary.py` 增加 claimed/awaiting_second/awaiting_arbitration/finalized。
+  - 3 个旧 U2 测试迁移为 DB 种子（JSON env 保留作为"被忽略"证据）。
+- **Commit 6** `5468423` test: define region-level double review contracts（19 条，15 红）。
+- **Commit 7** `5537af5` fix: make gold submission atomic and geometry-aware
+  - 原子提交：`_prepare_region` 全量校验 + `store.add_gold_regions_atomic`（BEGIN/COMMIT，失败整批 ROLLBACK，review 事件也不落）。
+  - bbox：x1/y1=0 合法；拒长度≠4/非数字/负坐标/x2<=x1/y2<=y1；width/height 可选越界校验。
+  - 双审 one-to-one IoU 匹配（DOUBLE_REVIEW_IOU_THRESHOLD=0.75，降序贪心），匹配对再比 SKU；未匹配=分歧。
+  - 仲裁只覆盖 IoU 匹配的分歧组；未分歧区域保持 human_final；仲裁逐区域 gold_verified。
+  - 全量 871 passed, 1 skipped（基线 852 + 新增 19，零回归、零旧测试迁移）。
