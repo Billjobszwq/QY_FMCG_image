@@ -1,0 +1,69 @@
+{
+  "ts": "2026-08-07T15:31:35+0800",
+  "projects": {
+    "10": {
+      "status": "UPDATED",
+      "before": {
+        "tasks": 10,
+        "predictions": 9,
+        "annotations": 0,
+        "unreviewed_in_cfg": false
+      },
+      "after": {
+        "tasks": 10,
+        "predictions": 9,
+        "annotations": 0,
+        "unreviewed_in_cfg": true
+      },
+      "backup": "reports/ls_config_backup/project_10_label_config_backup.xml"
+    },
+    "11": {
+      "status": "UPDATED",
+      "before": {
+        "tasks": 10,
+        "predictions": 0,
+        "annotations": 0,
+        "unreviewed_in_cfg": false
+      },
+      "after": {
+        "tasks": 10,
+        "predictions": 0,
+        "annotations": 0,
+        "unreviewed_in_cfg": true
+      },
+      "backup": "reports/ls_config_backup/project_11_label_config_backup.xml"
+    },
+    "12": {
+      "status": "UPDATED",
+      "before": {
+        "tasks": 50,
+        "predictions": 9,
+        "annotations": 0,
+        "unreviewed_in_cfg": false
+      },
+      "after": {
+        "tasks": 50,
+        "predictions": 9,
+        "annotations": 0,
+        "unreviewed_in_cfg": true
+      },
+      "backup": "reports/ls_config_backup/project_12_label_config_backup.xml"
+    },
+    "13": {
+      "status": "UPDATED",
+      "before": {
+        "tasks": 50,
+        "predictions": 0,
+        "annotations": 0,
+        "unreviewed_in_cfg": false
+      },
+      "after": {
+        "tasks": 50,
+        "predictions": 0,
+        "annotations": 0,
+        "unreviewed_in_cfg": true
+      },
+      "backup": "reports/ls_config_backup/project_13_label_config_backup.xml"
+    }
+  }
+}

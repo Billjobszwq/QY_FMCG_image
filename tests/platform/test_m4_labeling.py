@@ -439,3 +439,32 @@ def test_assisted_import_shows_visible_sku(service) -> None:
     assert all(t["total_predictions"] == 0
                for t in ls.tasks[out["blind_project_id"]])
 
+
+# ---------- Web 页面 assisted/blind 入口区分 ----------
+
+def test_annotation_page_distinguishes_assisted_and_blind() -> None:
+    """统一 Web 标注页面必须明确项目类型，避免标注员误入 blind 项目。"""
+    src = (Path(__file__).resolve().parents[2] / "web" / "src" / "pages"
+           / "Annotation.tsx").read_text(encoding="utf-8")
+    assert "项目类型说明" in src
+    assert "辅助标注" in src and "盲审" in src
+    assert "进入辅助标注" in src  # 主人工标注入口默认进 assisted
+    assert "仅指派盲审人员" in src  # blind 不面向普通标注员
+    # blind 0 prediction 是正确设计，页面必须显式告知（非标签生成失败）
+    assert "0 prediction 是正确设计" in src
+
+
+# ---------- Web 页面 assisted/blind 入口区分 ----------
+
+def test_annotation_page_distinguishes_assisted_and_blind() -> None:
+    """统一 Web 标注页面必须明确项目类型，避免标注员误入 blind 项目：
+    顶部项目类型说明；assisted 为主入口；blind 标记仅限指派人员。"""
+    src = (Path(__file__).resolve().parents[2] / "web" / "src" / "pages"
+           / "Annotation.tsx").read_text(encoding="utf-8")
+    assert "项目类型说明" in src
+    assert "辅助标注" in src and "盲审" in src
+    assert "进入辅助标注" in src  # 主人工标注入口默认进 assisted
+    assert "仅指派盲审人员" in src  # blind 不面向普通标注员
+    # blind 0 prediction 是正确设计，页面必须显式告知（非标签生成失败）
+    assert "0 prediction 是正确设计" in src
+

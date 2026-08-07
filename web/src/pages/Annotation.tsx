@@ -88,6 +88,11 @@ export default function Annotation({ health }: { health: HealthBody | null }) {
   return (
     <section>
       <h2>标注审核（M4）</h2>
+      <div className="banner">
+        <strong>项目类型说明：</strong>每个批次包含两个 Label Studio 项目——
+        <strong>辅助标注 [assisted]</strong>：显示自动方框与系统建议 SKU，是主人工标注入口；
+        <strong>盲审抽检 [blind]</strong>：不显示任何模型 prediction（0 prediction 是正确设计，不是标签生成失败），仅供被指派的盲审人员进入。
+      </div>
       {!health && <p className="muted">正在加载…</p>}
       {health && !up && (
         <div className="banner banner-degraded">
@@ -134,16 +139,30 @@ export default function Annotation({ health }: { health: HealthBody | null }) {
                 <td className="muted">{b.batch_id.slice(0, 8)}…</td>
                 <td>
                   {b.assisted_project_id !== null && (
-                    <a href={`http://127.0.0.1:8300/projects/${b.assisted_project_id}`} target="_blank" rel="noreferrer">
-                      #{b.assisted_project_id}
-                    </a>
+                    <>
+                      <a href={`http://127.0.0.1:8300/projects/${b.assisted_project_id}`} target="_blank" rel="noreferrer">
+                        #{b.assisted_project_id} 辅助标注
+                      </a>{" "}
+                      <a
+                        href={`http://127.0.0.1:8300/projects/${b.assisted_project_id}/data`}
+                        target="_blank" rel="noreferrer"
+                        title="主人工标注入口：自动方框 + 建议 SKU"
+                      >
+                        ▶ 进入辅助标注
+                      </a>
+                    </>
                   )}
                 </td>
                 <td>
                   {b.blind_project_id !== null && (
-                    <a href={`http://127.0.0.1:8300/projects/${b.blind_project_id}`} target="_blank" rel="noreferrer">
-                      #{b.blind_project_id}
-                    </a>
+                    <>
+                      <a href={`http://127.0.0.1:8300/projects/${b.blind_project_id}`} target="_blank" rel="noreferrer">
+                        #{b.blind_project_id} 盲审抽检
+                      </a>{" "}
+                      <span className="muted" title="盲审不显示任何模型 prediction，仅供被指派人员进入">
+                        （仅指派盲审人员）
+                      </span>
+                    </>
                   )}
                 </td>
                 <td>{b.task_count}</td>
