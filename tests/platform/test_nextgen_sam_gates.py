@@ -59,7 +59,7 @@ class TestGeometricGates:
 
     def test_overlap_with_neighbor_rejected(self):
         m = _mask([(10, 10, 100, 100)])
-        neighbor = _mask([(60, 60, 150, 150)])
+        neighbor = _mask([(50, 50, 150, 150)])
         with pytest.raises(GateRejection, match="overlap"):
             validate_mask(m, positive=(20, 20), other_positives=[],
                           width=200, height=200,
