@@ -13,6 +13,7 @@ from __future__ import annotations
 from typing import Any, Iterable, Mapping
 
 EVALUATION_VERSION = "vlm-evaluation.v1"
+EVALUATION_V2_VERSION = "vlm-evaluation.v2"
 
 
 def record(
@@ -139,4 +140,106 @@ def evaluate_records(
         "error_ledger": error_ledger,
         "min_accepted_precision": min_accepted_precision,
         "gate_pass": gate_pass,
+    }
+
+
+def evaluate_records_v2(
+    records: Iterable[Mapping[str, Any]],
+    *,
+    min_accepted_precision: float = 0.9,
+    wall_seconds: float | None = None,
+) -> dict[str, Any]:
+    """V2 评估（方法修正版，用户指令第十节）。
+
+    与 V1 的区别：
+    - candidate_recall_at_1/5/8 基于 retrieval_ranking 的真实前 k 个
+      （predicted ranking），不再是 'gt ∈ 完整 K 列表'；候选不足 k
+      自然截断，不得伪造；分母为 gt_in_registry 的记录；
+    - 新增 registry_escape（GT 不在 KB/Registry）、kb_coverage_of_sample、
+      abstain_rate、auto_coverage、每区域成本；
+    - 分母为 0 的指标一律 None（不得伪造 1.0）。
+
+    记录必需字段：gt/decision/pred/retrieval_ranking/n_candidates/
+    gt_in_registry/schema_ok/candidate_escape/latency_ms/
+    prompt_tokens/completion_tokens/error/source/photo_id/store/session。
+    """
+    recs = list(records)
+    total = len(recs)
+    if total == 0:
+        return {"evaluation_version": EVALUATION_V2_VERSION, "total": 0,
+                "auto_coverage": 0.0, "accepted_precision": None,
+                "candidate_recall_at_1": None,
+                "candidate_recall_at_5": None,
+                "candidate_recall_at_8": None,
+                "gate_pass": False, "reason": "no_records"}
+
+    def _recall_at(k: int) -> float | None:
+        eligible = [r for r in recs if r["gt_in_registry"]]
+        if not eligible:
+            return None
+        hits = sum(1 for r in eligible
+                   if r["gt"] in list(r["retrieval_ranking"])[:k])
+        return hits / len(eligible)
+
+    accepted = [r for r in recs if r["decision"] == "accepted"]
+    accepted_correct = sum(1 for r in accepted if r["pred"] == r["gt"])
+    accepted_precision = _ratio(accepted_correct, len(accepted))
+    auto_coverage = len(accepted) / total
+    abstain_rate = sum(1 for r in recs
+                       if r["decision"] == "abstain") / total
+    registry_escape = sum(1 for r in recs if not r["gt_in_registry"])
+    kb_coverage = _ratio(total - registry_escape, total)
+    unknown_cnt = sum(1 for r in recs if r["decision"] in
+                      ("unknown", "new_package", "new_packaging"))
+
+    schema_compliance = sum(1 for r in recs if r["schema_ok"]) / total
+    escapes = sum(1 for r in recs if r["candidate_escape"])
+    latencies = sorted(float(r["latency_ms"]) for r in recs)
+    total_tokens = sum(int(r["prompt_tokens"]) + int(r["completion_tokens"])
+                       for r in recs)
+    cost_per_region = {
+        "avg_latency_ms": sum(latencies) / total,
+        "avg_tokens": total_tokens / total,
+        "wall_seconds_per_region": (wall_seconds / total
+                                    if wall_seconds else None),
+    }
+
+    error_ledger = [{"index": i, "source": r.get("source"),
+                     "photo_id": r.get("photo_id"),
+                     "error": r["error"], "decision": r["decision"]}
+                    for i, r in enumerate(recs) if r["error"]]
+
+    gate_pass = (
+        auto_coverage > 0.0
+        and accepted_precision is not None
+        and accepted_precision >= min_accepted_precision
+        and escapes == 0
+        and schema_compliance == 1.0
+    )
+
+    return {
+        "evaluation_version": EVALUATION_V2_VERSION,
+        "total": total,
+        "photos": len({r.get("photo_id") for r in recs}),
+        "stores": len({r.get("store") for r in recs}),
+        "sessions": len({r.get("session") for r in recs}),
+        "candidate_recall_at_1": _recall_at(1),
+        "candidate_recall_at_5": _recall_at(5),
+        "candidate_recall_at_8": _recall_at(8),
+        "accepted_precision": accepted_precision,
+        "auto_coverage": auto_coverage,
+        "abstain_rate": abstain_rate,
+        "unknown_or_new_packaging_count": unknown_cnt,
+        "registry_escape": registry_escape,
+        "kb_coverage_of_sample": kb_coverage,
+        "schema_compliance": schema_compliance,
+        "candidate_escape": escapes,
+        "p50_latency_ms": _percentile(latencies, 0.50),
+        "p95_latency_ms": _percentile(latencies, 0.95),
+        "cost_per_region": cost_per_region,
+        "error_ledger": error_ledger,
+        "min_accepted_precision": min_accepted_precision,
+        "gate_pass": gate_pass,
+        "note": "recall@k 基于真实检索 ranking 前 k；候选不得注入 GT；"
+                "分母为 0 的指标为 None，不得伪造",
     }
