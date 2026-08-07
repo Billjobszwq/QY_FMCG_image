@@ -785,6 +785,128 @@ BEGIN
 END;
 """
 
+_M023 = """
+CREATE TABLE IF NOT EXISTS training_cycle_v1 (
+    cycle_id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'DRAFT',
+    version INTEGER NOT NULL DEFAULT 1,
+    waiting_for TEXT NOT NULL DEFAULT '',
+    created_by TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS training_cycle_event_v1 (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    cycle_id TEXT NOT NULL,
+    seq INTEGER NOT NULL,
+    kind TEXT NOT NULL,
+    payload_json TEXT NOT NULL DEFAULT '{}',
+    created_at TEXT NOT NULL,
+    UNIQUE(cycle_id, seq)
+);
+CREATE TRIGGER training_cycle_event_v1_no_delete
+    BEFORE DELETE ON training_cycle_event_v1
+BEGIN
+    SELECT RAISE(ABORT, 'training_cycle_event_v1 不可变：禁止 DELETE');
+END;
+CREATE TRIGGER training_cycle_event_v1_no_update
+    BEFORE UPDATE ON training_cycle_event_v1
+BEGIN
+    SELECT RAISE(ABORT, 'training_cycle_event_v1 不可变：禁止 UPDATE');
+END;
+CREATE TABLE IF NOT EXISTS training_cycle_node_v1 (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    cycle_id TEXT NOT NULL,
+    node TEXT NOT NULL,
+    status TEXT NOT NULL,
+    idempotency_key TEXT UNIQUE,
+    evidence_json TEXT NOT NULL DEFAULT '{}',
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS nextgen_plan_v1 (
+    plan_id TEXT PRIMARY KEY,
+    cycle_id TEXT NOT NULL,
+    lane TEXT NOT NULL,
+    hypothesis TEXT NOT NULL DEFAULT '',
+    base_revision TEXT NOT NULL DEFAULT '',
+    dataset_hash TEXT NOT NULL DEFAULT '',
+    budget_json TEXT NOT NULL DEFAULT '{}',
+    stop_lines_json TEXT NOT NULL DEFAULT '[]',
+    eval_set_hash TEXT NOT NULL DEFAULT '',
+    status TEXT NOT NULL DEFAULT 'DRAFT',
+    approved_by TEXT NOT NULL DEFAULT '',
+    approved_count INTEGER NOT NULL DEFAULT 0,
+    created_by TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS nextgen_plan_approval_v1 (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    plan_id TEXT NOT NULL,
+    approval_key TEXT NOT NULL UNIQUE,
+    actor TEXT NOT NULL,
+    created_at TEXT NOT NULL
+);
+CREATE TRIGGER nextgen_plan_approval_v1_no_delete
+    BEFORE DELETE ON nextgen_plan_approval_v1
+BEGIN
+    SELECT RAISE(ABORT, 'nextgen_plan_approval_v1 不可变：禁止 DELETE');
+END;
+CREATE TABLE IF NOT EXISTS nextgen_run_attempt_v1 (
+    run_id TEXT PRIMARY KEY,
+    plan_id TEXT NOT NULL,
+    attempt INTEGER NOT NULL,
+    command_hash TEXT NOT NULL DEFAULT '',
+    env_hash TEXT NOT NULL DEFAULT '',
+    status TEXT NOT NULL DEFAULT 'REGISTERED',
+    pid INTEGER,
+    lease_json TEXT NOT NULL DEFAULT '[]',
+    heartbeat_at TEXT,
+    output_dir TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS training_artifact_v2 (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    run_id TEXT NOT NULL,
+    artifact_type TEXT NOT NULL,
+    path TEXT NOT NULL,
+    sha256 TEXT NOT NULL,
+    lineage_json TEXT NOT NULL DEFAULT '{}',
+    created_at TEXT NOT NULL
+);
+CREATE TRIGGER training_artifact_v2_no_delete
+    BEFORE DELETE ON training_artifact_v2
+BEGIN
+    SELECT RAISE(ABORT, 'training_artifact_v2 不可变：禁止 DELETE');
+END;
+CREATE TRIGGER training_artifact_v2_no_update
+    BEFORE UPDATE ON training_artifact_v2
+BEGIN
+    SELECT RAISE(ABORT, 'training_artifact_v2 不可变：禁止 UPDATE');
+END;
+CREATE TABLE IF NOT EXISTS resource_benchmark_v1 (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    scenario TEXT NOT NULL,
+    lane_combo TEXT NOT NULL,
+    metrics_json TEXT NOT NULL DEFAULT '{}',
+    verdict TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS recognition_profile_v1 (
+    profile_id TEXT PRIMARY KEY,
+    display_name TEXT NOT NULL,
+    components_json TEXT NOT NULL DEFAULT '{}',
+    status TEXT NOT NULL DEFAULT 'disabled',
+    blockers_json TEXT NOT NULL DEFAULT '[]',
+    policy_version TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+"""
+
 MIGRATIONS: tuple[tuple[str, str], ...] = (
     ("001_platform_init", _M001),
     ("002_labeling_inbox", _M002),
@@ -808,6 +930,7 @@ MIGRATIONS: tuple[tuple[str, str], ...] = (
     ("020_training_run_supersession_v1", _M020),
     ("021_training_control_v2", _M021),
     ("022_legacy_model_registry_v1", _M022),
+    ("023_nextgen_training_cycle_v1", _M023),
 )
 
 
