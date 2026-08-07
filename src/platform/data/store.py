@@ -688,6 +688,82 @@ BEGIN
 END;
 """
 
+_M021 = """
+CREATE TABLE IF NOT EXISTS training_plan_v2 (
+    plan_id TEXT PRIMARY KEY,
+    lane TEXT NOT NULL,
+    plan_json TEXT NOT NULL,
+    lineage_json TEXT NOT NULL DEFAULT '{}',
+    status TEXT NOT NULL DEFAULT 'DRAFT',
+    created_by TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS training_run_v2 (
+    run_id TEXT PRIMARY KEY,
+    plan_id TEXT NOT NULL,
+    lane TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'DRAFT',
+    worker TEXT NOT NULL DEFAULT '',
+    pid INTEGER,
+    attempt INTEGER NOT NULL DEFAULT 0,
+    job_id TEXT NOT NULL DEFAULT '',
+    lease_json TEXT NOT NULL DEFAULT '[]',
+    heartbeat_at TEXT,
+    created_at TEXT NOT NULL DEFAULT '',
+    updated_at TEXT NOT NULL DEFAULT ''
+);
+CREATE TABLE IF NOT EXISTS training_event_v1 (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    run_id TEXT NOT NULL,
+    seq INTEGER NOT NULL,
+    kind TEXT NOT NULL,
+    payload_json TEXT NOT NULL DEFAULT '{}',
+    created_at TEXT NOT NULL,
+    UNIQUE(run_id, seq)
+);
+CREATE TRIGGER training_event_v1_no_delete
+    BEFORE DELETE ON training_event_v1
+BEGIN
+    SELECT RAISE(ABORT, 'training_event_v1 不可变：禁止 DELETE');
+END;
+CREATE TRIGGER training_event_v1_no_update
+    BEFORE UPDATE ON training_event_v1
+BEGIN
+    SELECT RAISE(ABORT, 'training_event_v1 不可变：禁止 UPDATE');
+END;
+CREATE TABLE IF NOT EXISTS training_artifact_v1 (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    run_id TEXT NOT NULL,
+    lane TEXT NOT NULL,
+    artifact_type TEXT NOT NULL,
+    path TEXT NOT NULL,
+    sha256 TEXT NOT NULL,
+    lineage_json TEXT NOT NULL DEFAULT '{}',
+    created_at TEXT NOT NULL
+);
+CREATE TRIGGER training_artifact_v1_no_delete
+    BEFORE DELETE ON training_artifact_v1
+BEGIN
+    SELECT RAISE(ABORT, 'training_artifact_v1 不可变：禁止 DELETE');
+END;
+CREATE TRIGGER training_artifact_v1_no_update
+    BEFORE UPDATE ON training_artifact_v1
+BEGIN
+    SELECT RAISE(ABORT, 'training_artifact_v1 不可变：禁止 UPDATE');
+END;
+CREATE TABLE IF NOT EXISTS resource_lease_v1 (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    run_id TEXT NOT NULL,
+    resource TEXT NOT NULL,
+    mode TEXT NOT NULL DEFAULT 'exclusive',
+    acquired_at TEXT NOT NULL,
+    released_at TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_resource_lease_active
+    ON resource_lease_v1(resource, released_at);
+"""
+
 MIGRATIONS: tuple[tuple[str, str], ...] = (
     ("001_platform_init", _M001),
     ("002_labeling_inbox", _M002),
@@ -709,6 +785,7 @@ MIGRATIONS: tuple[tuple[str, str], ...] = (
     ("018_gold_region_v1", _M018),
     ("019_review_queue_ledger_v1", _M019),
     ("020_training_run_supersession_v1", _M020),
+    ("021_training_control_v2", _M021),
 )
 
 
@@ -2157,6 +2234,49 @@ class PlatformStore:
         rows = self._conn.execute(
             "SELECT * FROM training_run_supersession_v1"
             " ORDER BY id").fetchall()
+        return [dict(r) for r in rows]
+
+    # ---------- 资源租约（GLTC Task 1/7：heavy 并发 1，MPS/MLX 互斥） ----------
+
+    _HEAVY_RESOURCES = ("mps", "mlx")
+
+    def acquire_resource_lease(self, *, run_id: str, resource: str,
+                               mode: str = "exclusive") -> None:
+        """获取租约：heavy 资源全局并发上限 1；mps/mlx 互斥（含同 run）。"""
+        if resource in self._HEAVY_RESOURCES:
+            active = self._conn.execute(
+                "SELECT run_id, resource FROM resource_lease_v1"
+                " WHERE released_at IS NULL").fetchall()
+            for row in active:
+                if row["resource"] == resource:
+                    raise StoreError(
+                        f"heavy 租约冲突：{resource} 已被 "
+                        f"{row['run_id']} 持有（并发上限 1）")
+                if row["resource"] in self._HEAVY_RESOURCES:
+                    raise StoreError(
+                        f"MPS/MLX 互斥：{row['resource']} 已被 "
+                        f"{row['run_id']} 持有，不得再持有 {resource}")
+        self._conn.execute(
+            "INSERT INTO resource_lease_v1"
+            " (run_id, resource, mode, acquired_at) VALUES (?,?,?,?)",
+            (run_id, resource, mode, _utcnow()))
+        self._conn.commit()
+
+    def release_resource_lease(self, *, run_id: str,
+                               resource: str) -> None:
+        """释放租约（safe-stop 证据链之一：确认退出后才释放）。"""
+        cur = self._conn.execute(
+            "UPDATE resource_lease_v1 SET released_at=?"
+            " WHERE run_id=? AND resource=? AND released_at IS NULL",
+            (_utcnow(), run_id, resource))
+        self._conn.commit()
+        if cur.rowcount == 0:
+            raise StoreError(f"无活动租约可释放: {run_id}/{resource}")
+
+    def list_active_leases(self) -> list[dict[str, Any]]:
+        rows = self._conn.execute(
+            "SELECT * FROM resource_lease_v1"
+            " WHERE released_at IS NULL ORDER BY id").fetchall()
         return [dict(r) for r in rows]
 
     # ---------- backup ----------
