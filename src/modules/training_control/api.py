@@ -16,7 +16,7 @@ from src.modules.training_control import legacy as legacy_mod
 from src.modules.training_control import vocabulary as V
 from src.modules.training_control.contracts import Blocker
 
-from ..auth import AuthService, require_principal
+from src.platform.auth import AuthService, require_principal
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 

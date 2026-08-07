@@ -42,6 +42,7 @@ def create_app(
     bundle: PlatformBundle | None = None,
     labeling_router=None,
     training_router=None,
+    training_control_router=None,
     jobs_router=None,
     share_router=None,
     cascade_router=None,
@@ -105,12 +106,8 @@ def create_app(
         from src.platform.api.review import create_review_router
         app.include_router(create_review_router(
             bundle.store, auth=AuthService(bundle.store)))
-        # GLTC Task 8：四训练通道统一控制面（lanes/readiness/overview/
-        # legacy 只读投影；dataset build 需 session+CSRF）
-        from src.platform.api.training_control import (
-            create_training_control_router)
-        app.include_router(create_training_control_router(
-            bundle.store, auth=AuthService(bundle.store)))
+        # GLTC Task 8：四训练通道统一控制面 router 由组合根注入
+        # （依赖方向红线：src/platform 不 import src/modules）
         # U5-2/U5-3：Graph+Loop v2 运行（runs/trail 登录只读；
         # start/gate 需 session+CSRF 且仅限 admin）
         from src.platform.api.loops import create_loops_router
@@ -137,6 +134,10 @@ def create_app(
     # ---- M5 训练治理（组合根注入 router 时启用）----
     if training_router is not None:
         app.include_router(training_router)
+
+    # ---- GLTC 四训练通道统一控制面（组合根注入）----
+    if training_control_router is not None:
+        app.include_router(training_control_router)
 
     # ---- M6 可恢复 Job Worker + 分享链接（组合根注入 router 时启用）----
     if jobs_router is not None:

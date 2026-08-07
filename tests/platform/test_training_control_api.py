@@ -15,7 +15,8 @@ from fastapi.testclient import TestClient
 
 
 def _client(tmp_path):
-    from src.composition.build import build_production_bundle
+    from src.composition.build import (build_production_bundle,
+                                     build_training_control_router)
     from src.platform.api.app import create_app
 
     bundle = build_production_bundle(
@@ -23,7 +24,9 @@ def _client(tmp_path):
         recognition_adapter=None, monitor_adapter=None,
         label_studio_adapter=None, probe=lambda spec: None)
     app = create_app(services=(), probe=lambda spec: None, bundle=bundle,
-                     web_dist=tmp_path / "none")
+                     web_dist=tmp_path / "none",
+                     training_control_router=build_training_control_router(
+                         bundle))
     return TestClient(app), bundle
 
 

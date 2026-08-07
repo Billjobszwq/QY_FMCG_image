@@ -103,6 +103,19 @@ def build_training_router(bundle: PlatformBundle, worker=None):
         auth=AuthService(bundle.store), worker=worker)
 
 
+def build_training_control_router(bundle: PlatformBundle):
+    """GLTC Task 8：组合根注入四训练通道统一控制面。
+
+    依赖方向红线：src/platform 不得 import src/modules；
+    router 位于 src/modules/training_control/api.py，仅经组合根装配。"""
+    from src.modules.training_control.api import (
+        create_training_control_router)
+    from src.platform.auth import AuthService
+
+    return create_training_control_router(
+        bundle.store, auth=AuthService(bundle.store))
+
+
 def build_jobs_router(bundle: PlatformBundle):
     """M6：可恢复 Job Worker（platform.echo 内置 handler）+ Jobs router。"""
     from datetime import datetime, timezone
@@ -176,6 +189,7 @@ def build_app_with_bundle(
         bundle=bundle,
         labeling_router=build_labeling_router(bundle) if bundle is not None else None,
         training_router=build_training_router(bundle, _worker) if bundle is not None else None,
+        training_control_router=build_training_control_router(bundle) if bundle is not None else None,
         jobs_router=jobs_router,
         share_router=share_router,
     )
