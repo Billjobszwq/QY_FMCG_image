@@ -48,6 +48,14 @@ def _import_tasks(store, tmp_path: Path, items: list[dict],
     return store.list_review_tasks()
 
 
+def _task_of(store, photo_id: str, mode: str) -> str:
+    row = store.find_review_task(photo_id=photo_id,
+                                 sha256=SHA_P1 if photo_id == "p1" else SHA_P2,
+                                 review_mode=mode)
+    assert row is not None, f"任务不存在: {photo_id}/{mode}"
+    return row["task_id"]
+
+
 def _region(region_id: str, box, label: str = "可口可乐500ml") -> dict:
     return {"region_id": region_id, "box": list(box), "sku_label": label,
             "package_version_id": "pkg_v1", "evidence": {"zoom": 2},
@@ -95,11 +103,13 @@ def _export(store, tmp_path: Path, out: str = "truebox_v2.json", **kw):
         git_commit=kw.pop("git_commit", "c0ffee"), **kw)
 
 
-def _double_agree_plus_arbiter(store, tmp_path: Path) -> str:
+def _double_agree_plus_arbiter(store, tmp_path: Path,
+                               fname: str = "rq.json") -> str:
     """任务1：区域 A 双审一致 human_final；区域 B 分歧 → 仲裁 gold_verified。"""
-    tid = _import_tasks(store, tmp_path, [{
-        "photo_id": "p1", "sha256": SHA_P1, "review_mode": "double_review",
-        "requires_second_review": True}])[0]["task_id"]
+    _import_tasks(store, tmp_path, [{
+        "photo_id": "p2", "sha256": SHA_P2, "review_mode": "double_review",
+        "requires_second_review": True}], fname=fname)
+    tid = _task_of(store, "p2", "double_review")
     _submit(store, tid, "alice",
             [_region("A", [0, 0, 100, 100]),
              _region("B", [200, 0, 300, 100])])
@@ -108,6 +118,7 @@ def _double_agree_plus_arbiter(store, tmp_path: Path) -> str:
              _region("B", [200, 0, 300, 100], label="百事可乐330ml")])
     _submit(store, tid, "admin",
             [_region("B", [200, 0, 300, 100])], role="arbiter")
+    return tid
     return tid
 
 
@@ -134,10 +145,11 @@ def test_human_final_and_gold_verified_enter_export(store, tmp_path):
 def test_strict_mode_rejects_nonterminal_regions(store, tmp_path):
     """submitted/conflict 区域存在 → 默认严格模式拒绝整次导出。"""
     _double_agree_plus_arbiter(store, tmp_path)
-    # 任务2：仅一人提交 → submitted 残留
+    # 任务2（另一任务行）：仅一人提交 → submitted 残留
     t2 = _import_tasks(store, tmp_path, [{
-        "photo_id": "p2", "sha256": SHA_P2, "review_mode": "double_review",
-        "requires_second_review": True}], fname="rq2.json")[0]["task_id"]
+        "photo_id": "p1", "sha256": SHA_P1, "review_mode": "double_review",
+        "requires_second_review": True}], fname="rq2.json")
+    t2 = _task_of(store, "p1", "double_review")
     _submit(store, t2, "carol", [_region("C", [0, 0, 50, 50])])
     with pytest.raises(ValueError, match="submitted|conflict"):
         _export(store, tmp_path)
@@ -147,7 +159,8 @@ def test_strict_mode_rejects_nonterminal_regions(store, tmp_path):
 def test_conflict_without_arbitration_rejected_strict(store, tmp_path):
     tid = _import_tasks(store, tmp_path, [{
         "photo_id": "p1", "sha256": SHA_P1, "review_mode": "double_review",
-        "requires_second_review": True}])[0]["task_id"]
+        "requires_second_review": True}])
+    tid = _task_of(store, "p1", "double_review")
     _submit(store, tid, "alice", [_region("r1", [0, 0, 100, 100])])
     _submit(store, tid, "bob",
             [_region("r1", [0, 0, 100, 100], label="百事可乐330ml")])
@@ -159,8 +172,9 @@ def test_non_strict_exports_only_terminal_regions(store, tmp_path):
     """strict=False：仅输出终态区域，计数正确。"""
     _double_agree_plus_arbiter(store, tmp_path)
     t2 = _import_tasks(store, tmp_path, [{
-        "photo_id": "p2", "sha256": SHA_P2, "review_mode": "double_review",
-        "requires_second_review": True}], fname="rq2.json")[0]["task_id"]
+        "photo_id": "p1", "sha256": SHA_P1, "review_mode": "double_review",
+        "requires_second_review": True}], fname="rq2.json")
+    t2 = _task_of(store, "p1", "double_review")
     _submit(store, t2, "carol", [_region("C", [0, 0, 50, 50])])
     res = _export(store, tmp_path, strict=False)
     assert res["written"] is True
@@ -177,7 +191,8 @@ def test_non_strict_exports_only_terminal_regions(store, tmp_path):
 def test_invalid_queue_regions_rejected(store, tmp_path):
     tid = _import_tasks(store, tmp_path, [{
         "photo_id": "p1", "sha256": SHA_P1, "review_mode": "blind_review",
-        "requires_second_review": False}], queue_version="rq_bad")[0]["task_id"]
+        "requires_second_review": False}], queue_version="rq_bad")
+    tid = _task_of(store, "p1", "blind_review")
     store.register_queue_version(queue_version="rq_bad", n_tasks=1)
     _submit(store, tid, "alice", [_region("r1", [0, 0, 10, 10])])
     store.invalidate_queue_version(queue_version="rq_bad", reason="bad")
@@ -188,17 +203,19 @@ def test_invalid_queue_regions_rejected(store, tmp_path):
     res = _export(store, tmp_path, strict=False)
     assert res["written"] is False  # 无任何可导出 gold → 不写文件
     res2 = _double_agree_plus_bad_queue(store, tmp_path)
-    assert res2["counts"]["rejected_invalid_queue"] == 1
+    # 失效队列区域计数累计 2：本测试前半的 r1 + helper 中的 x
+    assert res2["counts"]["rejected_invalid_queue"] == 2
     assert {r["region_id"] for r in json.loads(
         (tmp_path / "t2.json").read_text(encoding="utf-8"))["records"]} == {"A", "B"}
 
 
 def _double_agree_plus_bad_queue(store, tmp_path: Path) -> dict:
-    _double_agree_plus_arbiter(store, tmp_path)
+    _double_agree_plus_arbiter(store, tmp_path, fname="rq4.json")
     tid = _import_tasks(store, tmp_path, [{
-        "photo_id": "p2", "sha256": SHA_P2, "review_mode": "blind_review",
+        "photo_id": "p1", "sha256": SHA_P1, "review_mode": "blind_review",
         "requires_second_review": False}],
-        queue_version="rq_bad2", fname="rq3.json")[0]["task_id"]
+        queue_version="rq_bad2", fname="rq3.json")
+    tid = _task_of(store, "p1", "blind_review")
     store.register_queue_version(queue_version="rq_bad2", n_tasks=1)
     _submit(store, tid, "dave", [_region("x", [0, 0, 10, 10])])
     store.invalidate_queue_version(queue_version="rq_bad2", reason="bad")
@@ -210,7 +227,8 @@ def _double_agree_plus_bad_queue(store, tmp_path: Path) -> dict:
 def test_record_fields_complete_and_sizes_from_manifest(store, tmp_path):
     tid = _import_tasks(store, tmp_path, [{
         "photo_id": "p1", "sha256": SHA_P1, "review_mode": "blind_review",
-        "requires_second_review": False}])[0]["task_id"]
+        "requires_second_review": False}])
+    tid = _task_of(store, "p1", "blind_review")
     _submit(store, tid, "alice", [_region("r1", [0, 0, 10, 20])])
     _export(store, tmp_path)
     doc = json.loads((tmp_path / "truebox_v2.json").read_text(encoding="utf-8"))
@@ -246,7 +264,8 @@ def test_record_fields_complete_and_sizes_from_manifest(store, tmp_path):
 def test_export_is_immutable(store, tmp_path):
     tid = _import_tasks(store, tmp_path, [{
         "photo_id": "p1", "sha256": SHA_P1, "review_mode": "blind_review",
-        "requires_second_review": False}])[0]["task_id"]
+        "requires_second_review": False}])
+    tid = _task_of(store, "p1", "blind_review")
     _submit(store, tid, "alice", [_region("r1", [0, 0, 10, 10])])
     _export(store, tmp_path)
     with pytest.raises(FileExistsError):
@@ -256,7 +275,8 @@ def test_export_is_immutable(store, tmp_path):
 def test_audit_fields_present_and_consistent(store, tmp_path):
     tid = _import_tasks(store, tmp_path, [{
         "photo_id": "p1", "sha256": SHA_P1, "review_mode": "blind_review",
-        "requires_second_review": False}])[0]["task_id"]
+        "requires_second_review": False}])
+    tid = _task_of(store, "p1", "blind_review")
     _submit(store, tid, "alice", [_region("r1", [0, 0, 10, 10])])
     _export(store, tmp_path, git_commit="abc123")
     raw = (tmp_path / "truebox_v2.json").read_text(encoding="utf-8")
@@ -286,7 +306,8 @@ def test_zero_gold_writes_nothing(store, tmp_path):
 def test_evaluator_gt_loader_accepts_v2_and_legacy_v1(store, tmp_path):
     tid = _import_tasks(store, tmp_path, [{
         "photo_id": "p1", "sha256": SHA_P1, "review_mode": "blind_review",
-        "requires_second_review": False}])[0]["task_id"]
+        "requires_second_review": False}])
+    tid = _task_of(store, "p1", "blind_review")
     _submit(store, tid, "alice",
             [_region("r1", [0, 0, 10, 10]), _region("r2", [30, 30, 40, 40])])
     _export(store, tmp_path)

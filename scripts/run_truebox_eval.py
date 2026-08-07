@@ -5,7 +5,9 @@
 precision、重复框、背景误检与逐实例错误账本（10 类）。
 
 输入（由真实框导出与模型推理先行产出，本脚本不做推理）：
-  --gt     真实框 JSON：[{"image_id","boxes":[[x1,y1,x2,y2]...]}]
+  --gt     真实框 JSON：兼容两种格式（load_gt 自动识别）：
+           v1 列表 [{"image_id","boxes":[[x1,y1,x2,y2]...]}]；
+           v2 正式导出文档（diagnostic_v1_truebox_v2，取 images 视图）
   --preds  预测 JSON：[{"image_id","boxes":[{"box":[x1,y1,x2,y2],"conf":f}]}]
   --out    报告输出路径（原子写，已存在拒绝覆盖）
 
@@ -21,6 +23,14 @@ from pathlib import Path
 from src.eval.truebox_eval import evaluate_truebox
 
 
+def load_gt(path):
+    """加载真实框 GT：v1 列表格式或 v2 正式导出文档（取 images 视图）。"""
+    data = json.loads(Path(path).read_text(encoding="utf-8"))
+    if isinstance(data, dict):  # diagnostic_v1_truebox_v2 导出文档
+        data = data.get("images", [])
+    return {g["image_id"]: [{"box": b} for b in g["boxes"]] for g in data}
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--gt", required=True)
@@ -28,8 +38,7 @@ def main():
     ap.add_argument("--out", required=True)
     a = ap.parse_args()
 
-    gt = {g["image_id"]: [{"box": b} for b in g["boxes"]]
-          for g in json.loads(Path(a.gt).read_text(encoding="utf-8"))}
+    gt = load_gt(a.gt)
     preds = {p["image_id"]: p["boxes"]
              for p in json.loads(Path(a.preds).read_text(encoding="utf-8"))}
     images = [{"gt": gt.get(k, []), "preds": preds.get(k, [])}
