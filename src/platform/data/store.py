@@ -764,6 +764,27 @@ CREATE INDEX IF NOT EXISTS idx_resource_lease_active
     ON resource_lease_v1(resource, released_at);
 """
 
+_M022 = """
+CREATE TABLE IF NOT EXISTS legacy_model_registry_v1 (
+    model_id TEXT PRIMARY KEY,
+    path TEXT NOT NULL,
+    status TEXT NOT NULL,
+    weights_json TEXT NOT NULL DEFAULT '[]',
+    git_commit TEXT NOT NULL DEFAULT '',
+    registered_at TEXT NOT NULL
+);
+CREATE TRIGGER legacy_model_registry_v1_no_delete
+    BEFORE DELETE ON legacy_model_registry_v1
+BEGIN
+    SELECT RAISE(ABORT, 'legacy_model_registry_v1 不可变：禁止 DELETE');
+END;
+CREATE TRIGGER legacy_model_registry_v1_no_update
+    BEFORE UPDATE ON legacy_model_registry_v1
+BEGIN
+    SELECT RAISE(ABORT, 'legacy_model_registry_v1 不可变：禁止 UPDATE');
+END;
+"""
+
 MIGRATIONS: tuple[tuple[str, str], ...] = (
     ("001_platform_init", _M001),
     ("002_labeling_inbox", _M002),
@@ -786,6 +807,7 @@ MIGRATIONS: tuple[tuple[str, str], ...] = (
     ("019_review_queue_ledger_v1", _M019),
     ("020_training_run_supersession_v1", _M020),
     ("021_training_control_v2", _M021),
+    ("022_legacy_model_registry_v1", _M022),
 )
 
 
@@ -2277,6 +2299,24 @@ class PlatformStore:
         rows = self._conn.execute(
             "SELECT * FROM resource_lease_v1"
             " WHERE released_at IS NULL ORDER BY id").fetchall()
+        return [dict(r) for r in rows]
+
+    # ---------- 旧模型登记（GLTC Task 2：追加式不可变账本） ----------
+
+    def register_legacy_model(self, *, model_id: str, path: str,
+                              status: str, weights_json: str = "[]",
+                              git_commit: str = "") -> None:
+        self._conn.execute(
+            "INSERT INTO legacy_model_registry_v1"
+            " (model_id, path, status, weights_json, git_commit,"
+            " registered_at) VALUES (?,?,?,?,?,?)",
+            (model_id, path, status, weights_json, git_commit, _utcnow()))
+        self._conn.commit()
+
+    def list_legacy_models(self) -> list[dict[str, Any]]:
+        rows = self._conn.execute(
+            "SELECT * FROM legacy_model_registry_v1"
+            " ORDER BY model_id").fetchall()
         return [dict(r) for r in rows]
 
     # ---------- backup ----------
