@@ -1,0 +1,24 @@
+{
+ "generated_at": "2026-08-07T19:16:17.304128+00:00",
+ "registry_version": "sku_registry@b007069d3df0f354",
+ "status_counts": {
+  "mapped": 705104,
+  "unknown": 22650,
+  "brand_unknown": 9720,
+  "category_unknown": 8216,
+  "alias_pending": 5
+ },
+ "total_points": 745695,
+ "known_sku_ids": 208,
+ "known_sku_points": 705104,
+ "alias_pending_names": {
+  "24-元气森林-元气自在水-500ml-PET瓶-陈皮山楂水500ml": 4,
+  "怡泉+C500ml柠檬味": 1
+ },
+ "unknown_tiers_note": "other/百事other/可乐other 及 *other 不强映射；进入 unknown/难负样本/拒答训练",
+ "taskbook_expected": {
+  "canonical_points": 745695,
+  "known_sku_points": 705104,
+  "unmapped_other_family": 40591
+ }
+}
