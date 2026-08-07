@@ -85,11 +85,11 @@
 |---|---|---|
 | 契约/Registry/驻留/档位/风控/适配器/graph/billing/API/packaging/Web | implemented + tested | VLM-001～016 逐项见 IMPLEMENTATION-LIST，全 fake backend |
 | VLM 数据链路/preflight/evaluate/benchmark/QLoRA launcher/shadow 评估 | implemented + tested（mock/parse-only） | 5 个 CLI --help parse-only 验证；真实执行全部被门禁阻断 |
-| Qwen 权重下载/MLX 安装 | **未执行**（VLM-ISSUE-005） | 无授权且训练存在 |
-| zero-shot/benchmark/QLoRA/shadow 真实运行 | **未执行**（BLOCKED_BY_ACTIVE_TRAINING + G-APPLE 未通过） | runbook §10 阻断清单 |
+| Qwen 权重下载/MLX 安装 | **执行中**（用户已授权，训练已早停结束，隔离环境 .venv_mlx_vlm） | G-CURRENT 通过后启动 |
+| zero-shot/benchmark/QLoRA/shadow 真实运行 | **未执行**（待 G-APPLE preflight 真实通过） | runbook §2–7 |
 | shadow 晋级 | **not_evaluable**（人工真值不足，不得造 pass） | docs/experiments/qwen3vl-cascade-shadow-report.md |
 | production bundle | `prod_20260804_v4_r2` 未切换，production_switch=false | 8091 口径不变 |
 | 测试基线 | **780 passed，1 skipped**（主机 miniconda python3，Task 18 最终回归，20.5s） | 1 skipped 为既有真实模型相关跳过（mock-only 设计），不影响门禁 |
-| sku_v7_sam | RUNNING_EXPERIMENTAL（对账时 epoch 39/120，mAP50 best=0.6265@ep30），未被判定成功/可发布 | 训练自然结束后补最终评估 |
+| sku_v7_sam | ENDED_EXPERIMENTAL（epoch 50/120 因 patience=10 自然早停，best_mAP50=0.6285@ep44，best.pt sha256 前 16 位 51272c8177809a1b），未被判定成功/可发布；G-CURRENT 已通过，BLOCKED_BY_ACTIVE_TRAINING 解除 | 最终评估与晋级判定待独立执行 |
 
 操作手册：[`docs/runbooks/qwen3vl-cascade-local-runbook.md`](../../runbooks/qwen3vl-cascade-local-runbook.md)（环境/preflight/数据集/zero-shot/benchmark/pilot/shadow/驻留/故障排查，命令均经 --help 验证）。
