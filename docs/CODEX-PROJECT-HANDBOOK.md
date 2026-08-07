@@ -44,15 +44,15 @@
 |---|---|
 | Repository | `/Users/zhangweiqi/Documents/QY/项目/LLM-Image` |
 | Branch | `feat/unified-workbench-training-readiness` |
-| 当前代码基线 HEAD | `c1d1d6fe5980b84bfd85ec851dd7194936205200`；本轮只新增/更新文档，后续以实时 `git rev-parse HEAD` 为准 |
-| 最近交付报告测试 | `914 passed, 1 skipped`；但 2026-08-08 Codex 受限环境 fresh run 为 `904 passed, 10 failed, 1 skipped`，失败集中于宿主 MPS 探针和授权错误优先级，必须在普通 Terminal 复核 |
+| 当前代码基线 HEAD | `ce6f614468f88146d85d23a3ee7bcb5391acfb35`；本轮 Codex 只新增/更新文档，后续以实时 `git rev-parse HEAD` 为准 |
+| 最近交付报告测试 | Agent 报告 `1010 passed, 1 skipped, 5 deselected`；2026-08-08 Codex fresh run 为 **`1002 passed, 8 failed, 1 skipped, 5 deselected`**，说明 hermetic/host MPS 分层尚未真正关闭 |
 | Python | `/Users/zhangweiqi/miniconda3/bin/python3`，3.13.2 |
-| 工作树 | 四个受保护未跟踪目录 `.quality/ .sam_checkpoints/ .sam_runs/ .superpowers/`；不得修改、暂存、清理或删除 |
+| 工作树 | 四个受保护未跟踪目录 `.quality/ .sam_checkpoints/ .sam_runs/ .superpowers/` 不碰；另有 3 个 backfill JSON 与 1 张 Web QA 截图未跟踪，属于待分类证据，不删除 |
 | 当前生产 bundle | `prod_20260805_v5_r1`，继续使用；本轮不得切换 |
 | 人工审核 | rq_v2 active 250；LS 项目 19 assisted / 20 blind；`gold_region_v1=0`；Gate=`AWAITING_HUMAN_ACCEPTANCE` |
 | 训练 | 无活动真实训练；`training_authorized=false`；当前仅有历史 dry-run 和不可训练 E2 snapshot |
 | Foundation 实现 | Platform/Graph+Loop/统一 Web/FMCG cascade/审核链已经有实际代码，不再是“只有文档”；训练控制仍需四通道重构 |
-| 当前工作主题 | 实施 `graph-loop-training-control-v1`：旧模型隔离、四数据集、四训练 lane、统一 Web；机器框架与人工 gold 并行 |
+| 当前工作主题 | `nextgen-four-model-training-loop-v2`：三批照片重建、严格过滤、点提示 SAM、四 snapshots、四模型实验训练、持久化 Graph、统一 Web/API/Profile |
 
 这些值会变化。任何新会话必须先实时验证，不得把快照当作永远有效的事实。
 
@@ -98,7 +98,8 @@
 | 文件 | 作用 |
 |---|---|
 | `docs/implementation/project-logic-chain-v3/` | 当前 22 层运行逻辑、事实源、rq_v2/LS/gold 状态和验收链 |
-| `docs/implementation/graph-loop-training-control-v1/` | 下一阶段旧模型隔离、四数据集、四训练通道、统一控制台实施任务 |
+| `docs/implementation/nextgen-four-model-training-loop-v2/` | 当前唯一实施入口：三批数据、SAM、四训练模型、持久化控制链、Apple 调度和 Recognition Profile |
+| `docs/implementation/graph-loop-training-control-v1/` | V1 契约与历史交付证据；已复核为执行链未闭合，不再是开工入口 |
 | `docs/superpowers/specs/2026-08-06-qwen3-vl-4b-graph-loop-cascade-design.md` | 已批准的 S0–S5 级联、客户档位、Qwen 和 Apple 资源契约 |
 | `.platform/platform.sqlite` | 当前本机运行唯一事实源；文档不得覆盖其事实 |
 
@@ -233,7 +234,7 @@ web/src/platform/
 web/src/modules/<module_id>/
 ~~~
 
-下一阶段以 `docs/implementation/graph-loop-training-control-v1/` 为边界实施训练控制面。必须继续使用 Adapter/Capability/Graph Hook，不能把四条训练逻辑塞回单体 `Training.tsx`、`service.py` 或 shell 分支。
+下一阶段以 `docs/implementation/nextgen-four-model-training-loop-v2/` 为边界实施完整数据与训练闭环。必须继续使用 Adapter/Capability/Graph Hook，不能把四条训练逻辑塞回单体 `Training.tsx`、`service.py` 或 shell 分支。
 
 ## 5. 当前训练状态
 
@@ -547,29 +548,34 @@ Agent 不是万能管理员。Graph 节点必须声明 capability、数据域、
 13. `gold_region_v1=0` 阻止真实数据集/训练，不阻止机器侧 API、Graph、Worker 和 Web 框架建设。
 14. 四训练通道是 detector/classifier/segmenter/VLM，不是客户四档；客户档位由 GraphPolicy 决定服务预算和最大阶段。
 15. SAM 盒提示校准不是 SAM 权重微调；无真实 mask gold 时必须诚实显示 calibration-only。
+16. Label Studio 的 208 个 SKU taxonomy 与 Registry 已三方核对一致；13 个 no-proposal 与 1 个低置信手工 SKU 不等于“标签缺失”，blind 20 必须继续零 prediction。
+17. 三批数据 exact unique 为 29,176，canonical 坐标 745,695；第一/二批 476 张坐标不一致必须建账，第三批 40,591 个 unknown 点不得强映射。
+18. 当前 V2 控制台只有只读卡片，Dataset API 固定空 rows，Graph 是内存态，Recognition 无 profile selector；不能因为契约测试通过就启动真实四模型训练。
+19. 本轮四个训练候选定义为 detector、YOLO-seg student、classifier、Qwen QLoRA；SAM 先作冻结数据教师，禁止用自身伪 mask 证明 SAM 微调成功。
 
 ## 12. 下一次工作的明确切换点
 
-当前唯一机器侧实施入口：`docs/implementation/graph-loop-training-control-v1/AGENT-EXECUTION-PROMPT.md`。
+当前唯一实施入口：`docs/implementation/nextgen-four-model-training-loop-v2/AGENT-EXECUTION-PROMPT.md`。
 
-### Track A：机器侧立即实施
+### Track A：数据与真实控制链
 
-1. 普通 Terminal 复核 10 个 MPS 测试失败，完成 hermetic/host 分层。
-2. 旧模型不可变 inventory 与 nextgen parent 隔离。
-3. assisted 项目 19 接当前生产 proposal，blind 20 零泄漏。
-4. 四 Dataset Factory builder 与统一过滤投影。
-5. 四 lane adapter、TrainingControlGraph、Hook、资源租约和可靠 Worker。
-6. 统一 API/Web、浏览器 QA、故障恢复和机器验收。
+1. 关闭 fresh suite 8 个宿主 MPS 耦合失败，重建可靠基线。
+2. 三批照片从原始输入 exact/near dedupe、严格质量过滤和证据链。
+3. 点提示 SAM 生成 mask/tight box/crops，并完成分层 mask audit。
+4. 建 D1 detector、D2 YOLO-seg、D3 classifier、D4 VLM 四个 snapshot。
+5. 将内存 Graph、空数据 API、只读 Web 补成持久化可恢复真实执行链。
+6. Recognition Profile 在 Web/API/Agent 五入口同口径。
 
-### Track B：真人与真实训练并行等待
+### Track B：有界实验训练与人工门
 
-1. 两位真人完成 5 assisted + 5 blind 验收。
-2. 通过后放量 rq_v2 250；分歧第三人仲裁。
-3. 产生真实 gold 后分别构建 D1–D4，不能用一个数据集冒充四种任务。
-4. 对具体 TrainingPlan 单独授权；一次只跑一个 Apple heavy job。
-5. candidate 评估、shadow、发布仍保持独立门禁。
+1. 质量/mask/gold 的人工审核与机器数据构建并行，人工结果不能由 Agent 伪造。
+2. 本 V2 任务书已授权 Gate 后运行四个有界 experimental candidate；没有 human gold 时结果必须标 interim。
+3. M1/M2/M3 先 benchmark；只有组合吞吐提升 ≥25% 且资源/服务安全才并发 2，不默认并发 3。
+4. Qwen 永远独占 MLX/heavy lease，先 5k–20k、1 epoch、vision frozen pilot。
+5. candidate 评估、shadow、发布仍保持独立门禁，production switch=false。
 
-机器侧完成时只能标记 `FRAMEWORK_READY_AWAITING_GOLD_AND_TRAINING_AUTHORIZATION`，不能写训练完成。
+本轮完成状态由 V2 手册定义；没有 human frozen evaluation 时最多写
+`FOUR_EXPERIMENTAL_CANDIDATES_READY_AWAITING_HUMAN_EVALUATION`，不能写上线就绪。
 
 ## 13. 本手册维护规则
 
@@ -599,3 +605,4 @@ Agent 不是万能管理员。Graph 节点必须声明 capability、数据域、
 |---|---|---|
 | 2026-08-04 | base `4dac8f8` | 创建 Codex 专用接续手册；整合训练门禁、E2 不晋级、统一架构、实施计划、Bug/训练恢复流程和长期方法论 |
 | 2026-08-08 | base `c1d1d6f` | 更新到 logic-chain-v3：rq_v2/LS 19/20/gold=0、production v5_r1、现有 Platform 实现；加入四训练通道、旧模型隔离、机器/人工并行线、MPS 测试漂移和新执行目录 |
+| 2026-08-08 | base `ce6f614` | 复核 V1 交付并重新打开执行链：确认 LS 208 标签完整、三批 29,176 照片/745,695 点、fresh 1002+8 失败；建立 V2 三批过滤+SAM+四模型+Profile 一次性执行手册与训练授权边界 |

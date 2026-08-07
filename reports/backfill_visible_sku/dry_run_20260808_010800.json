@@ -1,0 +1,617 @@
+[
+  {
+    "project_id": 19,
+    "title": "diag_v2_assisted",
+    "stats": {
+      "tasks": 100,
+      "already_backfilled": 0,
+      "no_prediction": 100,
+      "box_only": 0,
+      "sku_out_of_registry": 0,
+      "ok": 0,
+      "will_add_predictions": 100
+    },
+    "detail": [
+      {
+        "task_id": 323,
+        "bucket": "no_prediction",
+        "model_versions": [],
+        "out_of_registry": []
+      },
+      {
+        "task_id": 322,
+        "bucket": "no_prediction",
+        "model_versions": [],
+        "out_of_registry": []
+      },
+      {
+        "task_id": 321,
+        "bucket": "no_prediction",
+        "model_versions": [],
+        "out_of_registry": []
+      },
+      {
+        "task_id": 320,
+        "bucket": "no_prediction",
+        "model_versions": [],
+        "out_of_registry": []
+      },
+      {
+        "task_id": 319,
+        "bucket": "no_prediction",
+        "model_versions": [],
+        "out_of_registry": []
+      },
+      {
+        "task_id": 318,
+        "bucket": "no_prediction",
+        "model_versions": [],
+        "out_of_registry": []
+      },
+      {
+        "task_id": 317,
+        "bucket": "no_prediction",
+        "model_versions": [],
+        "out_of_registry": []
+      },
+      {
+        "task_id": 316,
+        "bucket": "no_prediction",
+        "model_versions": [],
+        "out_of_registry": []
+      },
+      {
+        "task_id": 315,
+        "bucket": "no_prediction",
+        "model_versions": [],
+        "out_of_registry": []
+      },
+      {
+        "task_id": 314,
+        "bucket": "no_prediction",
+        "model_versions": [],
+        "out_of_registry": []
+      },
+      {
+        "task_id": 313,
+        "bucket": "no_prediction",
+        "model_versions": [],
+        "out_of_registry": []
+      },
+      {
+        "task_id": 312,
+        "bucket": "no_prediction",
+        "model_versions": [],
+        "out_of_registry": []
+      },
+      {
+        "task_id": 311,
+        "bucket": "no_prediction",
+        "model_versions": [],
+        "out_of_registry": []
+      },
+      {
+        "task_id": 310,
+        "bucket": "no_prediction",
+        "model_versions": [],
+        "out_of_registry": []
+      },
+      {
+        "task_id": 309,
+        "bucket": "no_prediction",
+        "model_versions": [],
+        "out_of_registry": []
+      },
+      {
+        "task_id": 308,
+        "bucket": "no_prediction",
+        "model_versions": [],
+        "out_of_registry": []
+      },
+      {
+        "task_id": 307,
+        "bucket": "no_prediction",
+        "model_versions": [],
+        "out_of_registry": []
+      },
+      {
+        "task_id": 306,
+        "bucket": "no_prediction",
+        "model_versions": [],
+        "out_of_registry": []
+      },
+      {
+        "task_id": 305,
+        "bucket": "no_prediction",
+        "model_versions": [],
+        "out_of_registry": []
+      },
+      {
+        "task_id": 304,
+        "bucket": "no_prediction",
+        "model_versions": [],
+        "out_of_registry": []
+      },
+      {
+        "task_id": 303,
+        "bucket": "no_prediction",
+        "model_versions": [],
+        "out_of_registry": []
+      },
+      {
+        "task_id": 302,
+        "bucket": "no_prediction",
+        "model_versions": [],
+        "out_of_registry": []
+      },
+      {
+        "task_id": 301,
+        "bucket": "no_prediction",
+        "model_versions": [],
+        "out_of_registry": []
+      },
+      {
+        "task_id": 300,
+        "bucket": "no_prediction",
+        "model_versions": [],
+        "out_of_registry": []
+      },
+      {
+        "task_id": 299,
+        "bucket": "no_prediction",
+        "model_versions": [],
+        "out_of_registry": []
+      },
+      {
+        "task_id": 298,
+        "bucket": "no_prediction",
+        "model_versions": [],
+        "out_of_registry": []
+      },
+      {
+        "task_id": 297,
+        "bucket": "no_prediction",
+        "model_versions": [],
+        "out_of_registry": []
+      },
+      {
+        "task_id": 296,
+        "bucket": "no_prediction",
+        "model_versions": [],
+        "out_of_registry": []
+      },
+      {
+        "task_id": 295,
+        "bucket": "no_prediction",
+        "model_versions": [],
+        "out_of_registry": []
+      },
+      {
+        "task_id": 294,
+        "bucket": "no_prediction",
+        "model_versions": [],
+        "out_of_registry": []
+      },
+      {
+        "task_id": 293,
+        "bucket": "no_prediction",
+        "model_versions": [],
+        "out_of_registry": []
+      },
+      {
+        "task_id": 292,
+        "bucket": "no_prediction",
+        "model_versions": [],
+        "out_of_registry": []
+      },
+      {
+        "task_id": 291,
+        "bucket": "no_prediction",
+        "model_versions": [],
+        "out_of_registry": []
+      },
+      {
+        "task_id": 290,
+        "bucket": "no_prediction",
+        "model_versions": [],
+        "out_of_registry": []
+      },
+      {
+        "task_id": 289,
+        "bucket": "no_prediction",
+        "model_versions": [],
+        "out_of_registry": []
+      },
+      {
+        "task_id": 288,
+        "bucket": "no_prediction",
+        "model_versions": [],
+        "out_of_registry": []
+      },
+      {
+        "task_id": 287,
+        "bucket": "no_prediction",
+        "model_versions": [],
+        "out_of_registry": []
+      },
+      {
+        "task_id": 286,
+        "bucket": "no_prediction",
+        "model_versions": [],
+        "out_of_registry": []
+      },
+      {
+        "task_id": 285,
+        "bucket": "no_prediction",
+        "model_versions": [],
+        "out_of_registry": []
+      },
+      {
+        "task_id": 284,
+        "bucket": "no_prediction",
+        "model_versions": [],
+        "out_of_registry": []
+      },
+      {
+        "task_id": 283,
+        "bucket": "no_prediction",
+        "model_versions": [],
+        "out_of_registry": []
+      },
+      {
+        "task_id": 282,
+        "bucket": "no_prediction",
+        "model_versions": [],
+        "out_of_registry": []
+      },
+      {
+        "task_id": 281,
+        "bucket": "no_prediction",
+        "model_versions": [],
+        "out_of_registry": []
+      },
+      {
+        "task_id": 280,
+        "bucket": "no_prediction",
+        "model_versions": [],
+        "out_of_registry": []
+      },
+      {
+        "task_id": 279,
+        "bucket": "no_prediction",
+        "model_versions": [],
+        "out_of_registry": []
+      },
+      {
+        "task_id": 278,
+        "bucket": "no_prediction",
+        "model_versions": [],
+        "out_of_registry": []
+      },
+      {
+        "task_id": 277,
+        "bucket": "no_prediction",
+        "model_versions": [],
+        "out_of_registry": []
+      },
+      {
+        "task_id": 276,
+        "bucket": "no_prediction",
+        "model_versions": [],
+        "out_of_registry": []
+      },
+      {
+        "task_id": 275,
+        "bucket": "no_prediction",
+        "model_versions": [],
+        "out_of_registry": []
+      },
+      {
+        "task_id": 274,
+        "bucket": "no_prediction",
+        "model_versions": [],
+        "out_of_registry": []
+      },
+      {
+        "task_id": 273,
+        "bucket": "no_prediction",
+        "model_versions": [],
+        "out_of_registry": []
+      },
+      {
+        "task_id": 272,
+        "bucket": "no_prediction",
+        "model_versions": [],
+        "out_of_registry": []
+      },
+      {
+        "task_id": 271,
+        "bucket": "no_prediction",
+        "model_versions": [],
+        "out_of_registry": []
+      },
+      {
+        "task_id": 270,
+        "bucket": "no_prediction",
+        "model_versions": [],
+        "out_of_registry": []
+      },
+      {
+        "task_id": 269,
+        "bucket": "no_prediction",
+        "model_versions": [],
+        "out_of_registry": []
+      },
+      {
+        "task_id": 268,
+        "bucket": "no_prediction",
+        "model_versions": [],
+        "out_of_registry": []
+      },
+      {
+        "task_id": 267,
+        "bucket": "no_prediction",
+        "model_versions": [],
+        "out_of_registry": []
+      },
+      {
+        "task_id": 266,
+        "bucket": "no_prediction",
+        "model_versions": [],
+        "out_of_registry": []
+      },
+      {
+        "task_id": 265,
+        "bucket": "no_prediction",
+        "model_versions": [],
+        "out_of_registry": []
+      },
+      {
+        "task_id": 264,
+        "bucket": "no_prediction",
+        "model_versions": [],
+        "out_of_registry": []
+      },
+      {
+        "task_id": 263,
+        "bucket": "no_prediction",
+        "model_versions": [],
+        "out_of_registry": []
+      },
+      {
+        "task_id": 262,
+        "bucket": "no_prediction",
+        "model_versions": [],
+        "out_of_registry": []
+      },
+      {
+        "task_id": 261,
+        "bucket": "no_prediction",
+        "model_versions": [],
+        "out_of_registry": []
+      },
+      {
+        "task_id": 260,
+        "bucket": "no_prediction",
+        "model_versions": [],
+        "out_of_registry": []
+      },
+      {
+        "task_id": 259,
+        "bucket": "no_prediction",
+        "model_versions": [],
+        "out_of_registry": []
+      },
+      {
+        "task_id": 258,
+        "bucket": "no_prediction",
+        "model_versions": [],
+        "out_of_registry": []
+      },
+      {
+        "task_id": 257,
+        "bucket": "no_prediction",
+        "model_versions": [],
+        "out_of_registry": []
+      },
+      {
+        "task_id": 256,
+        "bucket": "no_prediction",
+        "model_versions": [],
+        "out_of_registry": []
+      },
+      {
+        "task_id": 255,
+        "bucket": "no_prediction",
+        "model_versions": [],
+        "out_of_registry": []
+      },
+      {
+        "task_id": 254,
+        "bucket": "no_prediction",
+        "model_versions": [],
+        "out_of_registry": []
+      },
+      {
+        "task_id": 253,
+        "bucket": "no_prediction",
+        "model_versions": [],
+        "out_of_registry": []
+      },
+      {
+        "task_id": 252,
+        "bucket": "no_prediction",
+        "model_versions": [],
+        "out_of_registry": []
+      },
+      {
+        "task_id": 251,
+        "bucket": "no_prediction",
+        "model_versions": [],
+        "out_of_registry": []
+      },
+      {
+        "task_id": 250,
+        "bucket": "no_prediction",
+        "model_versions": [],
+        "out_of_registry": []
+      },
+      {
+        "task_id": 249,
+        "bucket": "no_prediction",
+        "model_versions": [],
+        "out_of_registry": []
+      },
+      {
+        "task_id": 248,
+        "bucket": "no_prediction",
+        "model_versions": [],
+        "out_of_registry": []
+      },
+      {
+        "task_id": 247,
+        "bucket": "no_prediction",
+        "model_versions": [],
+        "out_of_registry": []
+      },
+      {
+        "task_id": 246,
+        "bucket": "no_prediction",
+        "model_versions": [],
+        "out_of_registry": []
+      },
+      {
+        "task_id": 245,
+        "bucket": "no_prediction",
+        "model_versions": [],
+        "out_of_registry": []
+      },
+      {
+        "task_id": 244,
+        "bucket": "no_prediction",
+        "model_versions": [],
+        "out_of_registry": []
+      },
+      {
+        "task_id": 243,
+        "bucket": "no_prediction",
+        "model_versions": [],
+        "out_of_registry": []
+      },
+      {
+        "task_id": 242,
+        "bucket": "no_prediction",
+        "model_versions": [],
+        "out_of_registry": []
+      },
+      {
+        "task_id": 241,
+        "bucket": "no_prediction",
+        "model_versions": [],
+        "out_of_registry": []
+      },
+      {
+        "task_id": 240,
+        "bucket": "no_prediction",
+        "model_versions": [],
+        "out_of_registry": []
+      },
+      {
+        "task_id": 239,
+        "bucket": "no_prediction",
+        "model_versions": [],
+        "out_of_registry": []
+      },
+      {
+        "task_id": 238,
+        "bucket": "no_prediction",
+        "model_versions": [],
+        "out_of_registry": []
+      },
+      {
+        "task_id": 237,
+        "bucket": "no_prediction",
+        "model_versions": [],
+        "out_of_registry": []
+      },
+      {
+        "task_id": 236,
+        "bucket": "no_prediction",
+        "model_versions": [],
+        "out_of_registry": []
+      },
+      {
+        "task_id": 235,
+        "bucket": "no_prediction",
+        "model_versions": [],
+        "out_of_registry": []
+      },
+      {
+        "task_id": 234,
+        "bucket": "no_prediction",
+        "model_versions": [],
+        "out_of_registry": []
+      },
+      {
+        "task_id": 233,
+        "bucket": "no_prediction",
+        "model_versions": [],
+        "out_of_registry": []
+      },
+      {
+        "task_id": 232,
+        "bucket": "no_prediction",
+        "model_versions": [],
+        "out_of_registry": []
+      },
+      {
+        "task_id": 231,
+        "bucket": "no_prediction",
+        "model_versions": [],
+        "out_of_registry": []
+      },
+      {
+        "task_id": 230,
+        "bucket": "no_prediction",
+        "model_versions": [],
+        "out_of_registry": []
+      },
+      {
+        "task_id": 229,
+        "bucket": "no_prediction",
+        "model_versions": [],
+        "out_of_registry": []
+      },
+      {
+        "task_id": 228,
+        "bucket": "no_prediction",
+        "model_versions": [],
+        "out_of_registry": []
+      },
+      {
+        "task_id": 227,
+        "bucket": "no_prediction",
+        "model_versions": [],
+        "out_of_registry": []
+      },
+      {
+        "task_id": 226,
+        "bucket": "no_prediction",
+        "model_versions": [],
+        "out_of_registry": []
+      },
+      {
+        "task_id": 225,
+        "bucket": "no_prediction",
+        "model_versions": [],
+        "out_of_registry": []
+      },
+      {
+        "task_id": 224,
+        "bucket": "no_prediction",
+        "model_versions": [],
+        "out_of_registry": []
+      }
+    ]
+  }
+]

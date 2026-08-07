@@ -1,5 +1,8 @@
 # Graph+Loop Training Control V1 · IMPLEMENTATION-LIST
 
+> 历史清单：V1 的任务勾选只证明当时契约/测试范围完成，不证明四模型真实执行链完成。
+> 当前缺口和新任务统一转入 `nextgen-four-model-training-loop-v2`。
+
 > 每项：ID / 问题 / 当前事实 / 目标状态 / 前置依赖 / 涉及文件 / 红测试 / 验收证据 / 状态 / commit / 阻断原因。
 
 ## GLTC-000（Task 0）运行事实、测试漂移与执行账本

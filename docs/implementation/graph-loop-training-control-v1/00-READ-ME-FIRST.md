@@ -1,10 +1,15 @@
 # Graph+Loop 四训练通道统一控制方案 V1
 
-> 状态：设计与实施任务书已冻结，尚未实施代码，尚未授权真实训练。
+> 历史状态补充（2026-08-08）：V1 已实施契约、迁移、旧模型隔离、Worker 原语和只读控制台，
+> 但 fresh 复核确认真实数据读取、持久化 Graph、四 Lane 写 API/launcher/evaluation、可操作 Web
+> 与 Recognition Profile 未闭合。新任务不得从本目录直接开工；请转到
+> `docs/implementation/nextgen-four-model-training-loop-v2/README.md`。
+
+> 原冻结状态：设计与实施任务书；当前已作为 V1 历史契约基线保留。
 >
 > 快照：2026-08-08；基线分支 `feat/unified-workbench-training-readiness`；基线 HEAD `c1d1d6f`。
 >
-> 本目录是下一实施 Agent 的唯一新增任务入口。旧文档仍是历史与契约证据，不得删除或覆盖。
+> 本目录不再是下一实施 Agent 的开工入口。旧文档仍是历史与契约证据，不得删除或覆盖。
 
 ## 1. 本次要解决什么
 
