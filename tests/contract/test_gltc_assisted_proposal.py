@@ -6,9 +6,21 @@
 """
 from __future__ import annotations
 
+import io
+
 import pytest
+from PIL import Image
 
 from src.ls_platform import backfill as B
+
+
+def _real_png() -> bytes:
+    buf = io.BytesIO()
+    Image.new("RGB", (16, 16)).save(buf, "PNG")
+    return buf.getvalue()
+
+
+_REAL_PNG = _real_png()
 
 
 class FakeLS:
@@ -33,7 +45,7 @@ class FakeLS:
         return {**t, "predictions": self.predictions.get(tid, [])}
 
     def fetch_file(self, path):
-        return b"\x89PNG fake image"
+        return _REAL_PNG
 
     def create_prediction(self, tid, result, score=0.5, model_version=""):
         self.created.append((tid, model_version))
@@ -43,10 +55,10 @@ class FakeLS:
 
 
 class FakeRecognitionEmpty:
-    """零检出识别桩。"""
+    """零检出识别桩（真实 recognize 返回 {'products': [...]}）。"""
 
     def recognize(self, data):
-        return []
+        return {"products": []}
 
 
 def _assisted_project():
