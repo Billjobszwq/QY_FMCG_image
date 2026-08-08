@@ -84,3 +84,20 @@
 - 组合并发 benchmark 未实测（保持 concurrency=1）。
 - 质量校准门（≥1,000）、mask audit（≥2,000）、5+5 验收、250 放量：全部待人工。
 - 批1/2 原图缺失（N2-ISSUE-004）。
+
+## 2026-08-08 方向切换：用户切分照片（cropped_images）训练线
+
+用户指示：忘记 250 审核队列前置，以 `cropped_images/`（83 SKU 目录 / 20,338 切分图，
+文件名即 SKU 名）为新数据源推进训练。
+
+- 匹配：38 目录精确/规则匹配 registry canonical（含 4 条可复核规则：错字 m1→ml、
+  缺括号、125L→1.25L 类单位写法）；45 目录为 registry 未收录新 SKU/新包装，
+  作独立新类 CROP-NEW-xx 训练，**是否并入 registry 待人工裁决（不猜映射）**。
+  映射账本：reports/nextgen_v2/cropped_sku_mapping.json。
+- M3 classifier 正式训练：d3_cropped_classifier_v1（83 类 / 20,338 crops，
+  train 18,339 / val 1,999），ResNet18 ImageNet base，10 epochs，751.9s，
+  **val_top1 best 83.29%**，artifact sha 993c4127f5f49a27，
+  candidate=pending_business_eval（user_labeled 证据级）。
+- M4 VLM QLoRA pilot：d4_cropped_vlm_v1（3,767 samples，闭集 8 候选裁决格式），
+  1 epoch / bs4 / accum2 / lr1e-4 / rank16，训练中（941 iters）。
+- 250 审核队列不再作为训练前置；其人工 gold 仍用于后续业务冻结集评估。
