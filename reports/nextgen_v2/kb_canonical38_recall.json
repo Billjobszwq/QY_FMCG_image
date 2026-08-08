@@ -1,0 +1,10 @@
+{
+ "kb_size": 38,
+ "coverage": 1.0,
+ "recall@1": 0.895,
+ "recall@5": 1.0,
+ "recall@8": 1.0,
+ "registry_escape": 0,
+ "p95_latency_s": 32.4,
+ "gate_pass": true
+}
