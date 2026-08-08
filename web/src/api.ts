@@ -915,3 +915,26 @@ export async function fetchTrainingRunsV2(): Promise<{
   if (!r.ok) throw new Error(`training runs-v2 HTTP ${r.status}`);
   return r.json();
 }
+
+// ---------- SLTF：Agent / Blackboard / TaskBoard ----------
+export interface AgentInfo {
+  agent_id: string;
+  version: string;
+  domain: string;
+  risk_level: string;
+}
+export async function fetchAgents(): Promise<{ count: number; agents: AgentInfo[] }> {
+  const r = await fetch("/api/v1/agents");
+  if (!r.ok) throw new Error(`agents HTTP ${r.status}`);
+  return r.json();
+}
+export async function fetchBlackboard(): Promise<{ count: number; events: any[] }> {
+  const r = await fetch("/api/v1/blackboard");
+  if (!r.ok) throw new Error(`blackboard HTTP ${r.status}`);
+  return r.json();
+}
+export async function fetchTaskboard(): Promise<{ states: Record<string, any[]> }> {
+  const r = await fetch("/api/v1/taskboard");
+  if (!r.ok) throw new Error(`taskboard HTTP ${r.status}`);
+  return r.json();
+}

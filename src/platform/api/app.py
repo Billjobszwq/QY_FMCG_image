@@ -108,6 +108,10 @@ def create_app(
             bundle.store, auth=AuthService(bundle.store)))
         # GLTC Task 8：四训练通道统一控制面 router 由组合根注入
         # （依赖方向红线：src/platform 不 import src/modules）
+        # SLTF §11/12/13：Agent/Blackboard/TaskBoard API
+        from src.platform.api.agents_api import create_agents_router
+        app.include_router(create_agents_router(
+            bundle.store, auth=AuthService(bundle.store)))
         # U5-2/U5-3：Graph+Loop v2 运行（runs/trail 登录只读；
         # start/gate 需 session+CSRF 且仅限 admin）
         from src.platform.api.loops import create_loops_router

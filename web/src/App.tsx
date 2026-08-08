@@ -11,6 +11,8 @@ import SystemStatus from "./pages/SystemStatus";
 import CascadeTasks from "./pages/CascadeTasks";
 import ModelRuntime from "./pages/ModelRuntime";
 import NewPackaging from "./pages/NewPackaging";
+import SupervisorDrawer from "./pages/SupervisorDrawer";
+import TaskBoard from "./pages/TaskBoard";
 
 const NAV = [
   { to: "/", label: "系统总览" },
@@ -151,11 +153,13 @@ export default function App() {
             <Route path="/annotation" element={<Annotation health={health} />} />
             <Route path="/assets" element={<Assets />} />
             <Route path="/training" element={<Training />} />
+            <Route path="/taskboard" element={<TaskBoard />} />
             <Route path="/cascade" element={<CascadeTasks />} />
             <Route path="/models-runtime" element={<ModelRuntime />} />
             <Route path="/packaging" element={<NewPackaging />} />
             <Route path="/status" element={<SystemStatus health={health} />} />
           </Routes>
+      <SupervisorDrawer />
         </main>
       </div>
     </div>
