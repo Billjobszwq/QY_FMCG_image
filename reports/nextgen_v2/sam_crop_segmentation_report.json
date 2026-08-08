@@ -1,0 +1,9 @@
+{
+ "kind": "sam_full_segmentation_over_user_crops",
+ "model": "sam2.1_hiera_small (frozen teacher)",
+ "images": 20338,
+ "elapsed_min": 47.7,
+ "prompt": "center point + 90% box",
+ "evidence_level": "sam_pseudo（教师输出，非 human gold）",
+ "file": "reports/nextgen_v2/sam_crop_masks.jsonl"
+}

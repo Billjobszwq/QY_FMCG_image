@@ -1,0 +1,20 @@
+{
+ "run": "nextgen_sam_decoder_v2",
+ "kind": "sam_mask_decoder_finetune",
+ "teacher": "sam2.1_hiera_small(frozen encoder)",
+ "label_source": "sam_pseudo_masks（自推理伪标签，非 human gold）",
+ "evidence_level": "pseudo_self_consistency",
+ "samples": 3600,
+ "epochs": 1,
+ "curve": [
+  {
+   "epoch": 1,
+   "train_loss": 0.1145,
+   "val_loss": 0.0988
+  }
+ ],
+ "duration_s": 797.3,
+ "artifact_sha256": "a6d1a52cc2746e990fb616f7db405beeee9695e52a3b2aa54e6553f9a1344246",
+ "candidate": false,
+ "note": "SAM2 mask decoder 微调（encoder/prompt_encoder 冻结），标签 = SAM 自推理伪 mask（self-consistency），非 human gold；业务有效性需人工 mask 抽检"
+}

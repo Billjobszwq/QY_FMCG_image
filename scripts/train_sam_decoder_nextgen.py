@@ -118,9 +118,6 @@ def main() -> int:
         with torch.no_grad():
             backbone_out = model.forward_image(t[None].to("mps"))
             _, vf, _, _ = model._prepare_backbone_features(backbone_out)
-            fsizes = model.image_encoder.neck.feature_sizes \
-                if hasattr(model.image_encoder, "neck") else None
-        # 用 predictor 的 feat sizes（与 set_image 一致）
         return backbone_out, vf, (h, w)
 
     from sam2.sam2_image_predictor import SAM2ImagePredictor
@@ -155,16 +152,16 @@ def main() -> int:
             sparse_prompt_embeddings=se, dense_prompt_embeddings=de,
             multimask_output=True, repeat_image=False,
             high_res_features=high_res)
-        best = ious.argmax(1, keepdim=True)
-        m = low.gather(1, best[:, None])[:, 0]  # (1,256,256)
-        m_up = TF.interpolate(m[None], size=(TARGET, TARGET),
+        idx = int(ious[0].argmax())
+        m = low[0, idx]  # (256,256)
+        m_up = TF.interpolate(m[None, None], size=(TARGET, TARGET),
                               mode="bilinear", align_corners=False)[0, 0]
         gt_t = torch.from_numpy(gt1024).to("mps")
         p = torch.sigmoid(m_up)
         bce = TF.binary_cross_entropy(p, gt_t)
-        inter = (p > 0.5).float() * gt_t
-        union = ((p > 0.5).float() + gt_t).clamp(max=1)
-        dice = 1 - 2 * inter.sum() / (union.sum() + 1e-6)
+        pred_bin = (p > 0.5).float()
+        inter = (pred_bin * gt_t).sum()
+        dice = 1 - (2 * inter + 1e-6) / (pred_bin.sum() + gt_t.sum() + 1e-6)
         return bce + dice
 
     rng = random.Random(7)
