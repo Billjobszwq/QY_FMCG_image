@@ -1,0 +1,1367 @@
+{
+ "policy_version": "sku_data_readiness_policy_v1",
+ "n_classes": 83,
+ "tier_counts": {
+  "B": 31,
+  "C": 7,
+  "D": 45
+ },
+ "classes": {
+  "CROP-NEW-01": {
+   "display": "125L七喜",
+   "kind": "new_class_pending_adjudication",
+   "registry_name": null,
+   "raw_crops": 198,
+   "unique_source_groups": 94,
+   "unique_stores": 77,
+   "unique_sessions": 78,
+   "scenes": [
+    "百事"
+   ],
+   "tier": "D",
+   "advice": "新包装/未知工作流；few-shot prototype；需业务决定补数/合并/保留/舍弃"
+  },
+  "CROP-NEW-02": {
+   "display": "125L百事",
+   "kind": "new_class_pending_adjudication",
+   "registry_name": null,
+   "raw_crops": 223,
+   "unique_source_groups": 54,
+   "unique_stores": 40,
+   "unique_sessions": 44,
+   "scenes": [
+    "百事"
+   ],
+   "tier": "D",
+   "advice": "新包装/未知工作流；few-shot prototype；需业务决定补数/合并/保留/舍弃"
+  },
+  "CROP-NEW-03": {
+   "display": "125L百事新年装",
+   "kind": "new_class_pending_adjudication",
+   "registry_name": null,
+   "raw_crops": 7,
+   "unique_source_groups": 5,
+   "unique_stores": 4,
+   "unique_sessions": 4,
+   "scenes": [
+    "百事"
+   ],
+   "tier": "D",
+   "advice": "新包装/未知工作流；few-shot prototype；需业务决定补数/合并/保留/舍弃"
+  },
+  "CROP-NEW-04": {
+   "display": "125L美年达橙味",
+   "kind": "new_class_pending_adjudication",
+   "registry_name": null,
+   "raw_crops": 253,
+   "unique_source_groups": 131,
+   "unique_stores": 100,
+   "unique_sessions": 109,
+   "scenes": [
+    "百事"
+   ],
+   "tier": "D",
+   "advice": "新包装/未知工作流；few-shot prototype；需业务决定补数/合并/保留/舍弃"
+  },
+  "QY_YL_000006": {
+   "display": "1L七喜",
+   "kind": "mapped",
+   "registry_name": "1L七喜",
+   "raw_crops": 156,
+   "unique_source_groups": 98,
+   "unique_stores": 74,
+   "unique_sessions": 82,
+   "scenes": [
+    "百事"
+   ],
+   "tier": "C",
+   "advice": "metric/prototype/retrieval 优先；禁高置信自动接受"
+  },
+  "CROP-NEW-05": {
+   "display": "1L七喜老包装",
+   "kind": "new_class_pending_adjudication",
+   "registry_name": null,
+   "raw_crops": 59,
+   "unique_source_groups": 45,
+   "unique_stores": 39,
+   "unique_sessions": 41,
+   "scenes": [
+    "百事"
+   ],
+   "tier": "D",
+   "advice": "新包装/未知工作流；few-shot prototype；需业务决定补数/合并/保留/舍弃"
+  },
+  "QY_YL_000007": {
+   "display": "1L百事",
+   "kind": "mapped",
+   "registry_name": "1L百事",
+   "raw_crops": 424,
+   "unique_source_groups": 155,
+   "unique_stores": 114,
+   "unique_sessions": 121,
+   "scenes": [
+    "百事"
+   ],
+   "tier": "B",
+   "advice": "过采样+增强+混淆矩阵补 hard negative；建议补数到 A"
+  },
+  "QY_YL_000008": {
+   "display": "1L百事无糖",
+   "kind": "mapped",
+   "registry_name": "1L百事无糖",
+   "raw_crops": 154,
+   "unique_source_groups": 90,
+   "unique_stores": 67,
+   "unique_sessions": 72,
+   "scenes": [
+    "百事"
+   ],
+   "tier": "C",
+   "advice": "metric/prototype/retrieval 优先；禁高置信自动接受"
+  },
+  "CROP-NEW-06": {
+   "display": "1L百事无糖树莓",
+   "kind": "new_class_pending_adjudication",
+   "registry_name": null,
+   "raw_crops": 282,
+   "unique_source_groups": 156,
+   "unique_stores": 92,
+   "unique_sessions": 106,
+   "scenes": [
+    "生活超市白塘路",
+    "百事"
+   ],
+   "tier": "D",
+   "advice": "新包装/未知工作流；few-shot prototype；需业务决定补数/合并/保留/舍弃"
+  },
+  "CROP-NEW-07": {
+   "display": "1L百事无糖青柠",
+   "kind": "new_class_pending_adjudication",
+   "registry_name": null,
+   "raw_crops": 295,
+   "unique_source_groups": 164,
+   "unique_stores": 106,
+   "unique_sessions": 120,
+   "scenes": [
+    "生活超市白塘路",
+    "百事"
+   ],
+   "tier": "D",
+   "advice": "新包装/未知工作流；few-shot prototype；需业务决定补数/合并/保留/舍弃"
+  },
+  "CROP-NEW-08": {
+   "display": "1L百事无糖黑神话系列",
+   "kind": "new_class_pending_adjudication",
+   "registry_name": null,
+   "raw_crops": 144,
+   "unique_source_groups": 79,
+   "unique_stores": 66,
+   "unique_sessions": 68,
+   "scenes": [
+    "百事"
+   ],
+   "tier": "D",
+   "advice": "新包装/未知工作流；few-shot prototype；需业务决定补数/合并/保留/舍弃"
+  },
+  "QY_YL_000009": {
+   "display": "1L美年达橙味",
+   "kind": "mapped",
+   "registry_name": "1L美年达(橙味)",
+   "raw_crops": 253,
+   "unique_source_groups": 125,
+   "unique_stores": 93,
+   "unique_sessions": 97,
+   "scenes": [
+    "百事"
+   ],
+   "tier": "B",
+   "advice": "过采样+增强+混淆矩阵补 hard negative；建议补数到 A"
+  },
+  "QY_YL_000018": {
+   "display": "2L七喜",
+   "kind": "mapped",
+   "registry_name": "2L七喜",
+   "raw_crops": 226,
+   "unique_source_groups": 103,
+   "unique_stores": 69,
+   "unique_sessions": 70,
+   "scenes": [
+    "百事"
+   ],
+   "tier": "B",
+   "advice": "过采样+增强+混淆矩阵补 hard negative；建议补数到 A"
+  },
+  "QY_YL_000019": {
+   "display": "2L百事",
+   "kind": "mapped",
+   "registry_name": "2L百事",
+   "raw_crops": 246,
+   "unique_source_groups": 92,
+   "unique_stores": 68,
+   "unique_sessions": 69,
+   "scenes": [
+    "百事"
+   ],
+   "tier": "C",
+   "advice": "metric/prototype/retrieval 优先；禁高置信自动接受"
+  },
+  "QY_YL_000020": {
+   "display": "2L百事无糖",
+   "kind": "mapped",
+   "registry_name": "2L百事无糖",
+   "raw_crops": 239,
+   "unique_source_groups": 87,
+   "unique_stores": 78,
+   "unique_sessions": 78,
+   "scenes": [
+    "百事"
+   ],
+   "tier": "C",
+   "advice": "metric/prototype/retrieval 优先；禁高置信自动接受"
+  },
+  "CROP-NEW-09": {
+   "display": "2L百事无糖树莓",
+   "kind": "new_class_pending_adjudication",
+   "registry_name": null,
+   "raw_crops": 354,
+   "unique_source_groups": 177,
+   "unique_stores": 132,
+   "unique_sessions": 168,
+   "scenes": [
+    "主货架",
+    "地堆整体环境照拍摄所有饮料",
+    "拍摄全店饮料陈列的环境照.",
+    "百事",
+    "百事大方货架全店范围",
+    "端架整体环境照拍摄所有饮料"
+   ],
+   "tier": "D",
+   "advice": "新包装/未知工作流；few-shot prototype；需业务决定补数/合并/保留/舍弃"
+  },
+  "QY_YL_000021": {
+   "display": "2L百事无糖青柠",
+   "kind": "mapped",
+   "registry_name": "2L百事无糖青柠",
+   "raw_crops": 329,
+   "unique_source_groups": 174,
+   "unique_stores": 97,
+   "unique_sessions": 97,
+   "scenes": [
+    "百事"
+   ],
+   "tier": "B",
+   "advice": "过采样+增强+混淆矩阵补 hard negative；建议补数到 A"
+  },
+  "QY_YL_000022": {
+   "display": "2L美年达橙味",
+   "kind": "mapped",
+   "registry_name": "2L美年达(橙味)",
+   "raw_crops": 643,
+   "unique_source_groups": 237,
+   "unique_stores": 115,
+   "unique_sessions": 123,
+   "scenes": [
+    "百事"
+   ],
+   "tier": "B",
+   "advice": "过采样+增强+混淆矩阵补 hard negative；建议补数到 A"
+  },
+  "QY_YL_000023": {
+   "display": "2L美年达青苹果",
+   "kind": "mapped",
+   "registry_name": "2L美年达青苹果",
+   "raw_crops": 282,
+   "unique_source_groups": 174,
+   "unique_stores": 118,
+   "unique_sessions": 120,
+   "scenes": [
+    "百事"
+   ],
+   "tier": "B",
+   "advice": "过采样+增强+混淆矩阵补 hard negative；建议补数到 A"
+  },
+  "CROP-NEW-10": {
+   "display": "600ml莹纯0糖盐汽水",
+   "kind": "new_class_pending_adjudication",
+   "registry_name": null,
+   "raw_crops": 533,
+   "unique_source_groups": 208,
+   "unique_stores": 116,
+   "unique_sessions": 135,
+   "scenes": [
+    "百事"
+   ],
+   "tier": "D",
+   "advice": "新包装/未知工作流；few-shot prototype；需业务决定补数/合并/保留/舍弃"
+  },
+  "QY_YL_000048": {
+   "display": "七喜600ml",
+   "kind": "mapped",
+   "registry_name": "七喜600ml",
+   "raw_crops": 225,
+   "unique_source_groups": 128,
+   "unique_stores": 92,
+   "unique_sessions": 96,
+   "scenes": [
+    "百事"
+   ],
+   "tier": "B",
+   "advice": "过采样+增强+混淆矩阵补 hard negative；建议补数到 A"
+  },
+  "QY_YL_000051": {
+   "display": "佳得乐低糖红柚PET瓶600ML",
+   "kind": "mapped",
+   "registry_name": "佳得乐低糖红柚PET瓶 600ML",
+   "raw_crops": 266,
+   "unique_source_groups": 132,
+   "unique_stores": 85,
+   "unique_sessions": 93,
+   "scenes": [
+    "百事"
+   ],
+   "tier": "B",
+   "advice": "过采样+增强+混淆矩阵补 hard negative；建议补数到 A"
+  },
+  "CROP-NEW-11": {
+   "display": "佳得乐低糖红柚PET瓶600ML红盖",
+   "kind": "new_class_pending_adjudication",
+   "registry_name": null,
+   "raw_crops": 32,
+   "unique_source_groups": 23,
+   "unique_stores": 13,
+   "unique_sessions": 14,
+   "scenes": [
+    "百事"
+   ],
+   "tier": "D",
+   "advice": "新包装/未知工作流；few-shot prototype；需业务决定补数/合并/保留/舍弃"
+  },
+  "CROP-NEW-12": {
+   "display": "佳得乐低糖红柚PET瓶600ML黄盖",
+   "kind": "new_class_pending_adjudication",
+   "registry_name": null,
+   "raw_crops": 78,
+   "unique_source_groups": 47,
+   "unique_stores": 35,
+   "unique_sessions": 37,
+   "scenes": [
+    "百事"
+   ],
+   "tier": "D",
+   "advice": "新包装/未知工作流；few-shot prototype；需业务决定补数/合并/保留/舍弃"
+  },
+  "QY_YL_000052": {
+   "display": "佳得乐低糖青柠PET瓶600ML",
+   "kind": "mapped",
+   "registry_name": "佳得乐低糖青柠PET瓶 600ML",
+   "raw_crops": 295,
+   "unique_source_groups": 147,
+   "unique_stores": 96,
+   "unique_sessions": 106,
+   "scenes": [
+    "百事"
+   ],
+   "tier": "B",
+   "advice": "过采样+增强+混淆矩阵补 hard negative；建议补数到 A"
+  },
+  "CROP-NEW-13": {
+   "display": "佳得乐低糖青柠PET瓶600ML红盖",
+   "kind": "new_class_pending_adjudication",
+   "registry_name": null,
+   "raw_crops": 36,
+   "unique_source_groups": 25,
+   "unique_stores": 17,
+   "unique_sessions": 19,
+   "scenes": [
+    "百事"
+   ],
+   "tier": "D",
+   "advice": "新包装/未知工作流；few-shot prototype；需业务决定补数/合并/保留/舍弃"
+  },
+  "CROP-NEW-14": {
+   "display": "佳得乐低糖青柠PET瓶600ML黄盖",
+   "kind": "new_class_pending_adjudication",
+   "registry_name": null,
+   "raw_crops": 73,
+   "unique_source_groups": 38,
+   "unique_stores": 34,
+   "unique_sessions": 34,
+   "scenes": [
+    "百事"
+   ],
+   "tier": "D",
+   "advice": "新包装/未知工作流；few-shot prototype；需业务决定补数/合并/保留/舍弃"
+  },
+  "QY_YL_000053": {
+   "display": "佳得乐无糖白凤蜜桃",
+   "kind": "mapped",
+   "registry_name": "佳得乐无糖白凤蜜桃",
+   "raw_crops": 260,
+   "unique_source_groups": 142,
+   "unique_stores": 104,
+   "unique_sessions": 112,
+   "scenes": [
+    "百事"
+   ],
+   "tier": "B",
+   "advice": "过采样+增强+混淆矩阵补 hard negative；建议补数到 A"
+  },
+  "QY_YL_000054": {
+   "display": "佳得乐柠檬PET瓶600ML",
+   "kind": "mapped",
+   "registry_name": "佳得乐柠檬 PET瓶 600ML",
+   "raw_crops": 192,
+   "unique_source_groups": 109,
+   "unique_stores": 85,
+   "unique_sessions": 92,
+   "scenes": [
+    "百事"
+   ],
+   "tier": "B",
+   "advice": "过采样+增强+混淆矩阵补 hard negative；建议补数到 A"
+  },
+  "CROP-NEW-15": {
+   "display": "佳得乐柠檬PET瓶600ML黄盖",
+   "kind": "new_class_pending_adjudication",
+   "registry_name": null,
+   "raw_crops": 24,
+   "unique_source_groups": 13,
+   "unique_stores": 11,
+   "unique_sessions": 11,
+   "scenes": [
+    "百事"
+   ],
+   "tier": "D",
+   "advice": "新包装/未知工作流；few-shot prototype；需业务决定补数/合并/保留/舍弃"
+  },
+  "QY_YL_000055": {
+   "display": "佳得乐橙PET瓶600ML",
+   "kind": "mapped",
+   "registry_name": "佳得乐橙 PET瓶 600ML",
+   "raw_crops": 202,
+   "unique_source_groups": 104,
+   "unique_stores": 77,
+   "unique_sessions": 82,
+   "scenes": [
+    "百事"
+   ],
+   "tier": "B",
+   "advice": "过采样+增强+混淆矩阵补 hard negative；建议补数到 A"
+  },
+  "CROP-NEW-16": {
+   "display": "佳得乐橙PET瓶600ML黄盖",
+   "kind": "new_class_pending_adjudication",
+   "registry_name": null,
+   "raw_crops": 42,
+   "unique_source_groups": 24,
+   "unique_stores": 22,
+   "unique_sessions": 22,
+   "scenes": [
+    "百事"
+   ],
+   "tier": "D",
+   "advice": "新包装/未知工作流；few-shot prototype；需业务决定补数/合并/保留/舍弃"
+  },
+  "QY_YL_000056": {
+   "display": "佳得乐蓝莓PET瓶600ML",
+   "kind": "mapped",
+   "registry_name": "佳得乐蓝莓 PET瓶 600ML",
+   "raw_crops": 198,
+   "unique_source_groups": 110,
+   "unique_stores": 86,
+   "unique_sessions": 88,
+   "scenes": [
+    "百事"
+   ],
+   "tier": "B",
+   "advice": "过采样+增强+混淆矩阵补 hard negative；建议补数到 A"
+  },
+  "CROP-NEW-17": {
+   "display": "佳得乐蓝莓PET瓶600ML黄盖",
+   "kind": "new_class_pending_adjudication",
+   "registry_name": null,
+   "raw_crops": 41,
+   "unique_source_groups": 23,
+   "unique_stores": 19,
+   "unique_sessions": 21,
+   "scenes": [
+    "百事"
+   ],
+   "tier": "D",
+   "advice": "新包装/未知工作流；few-shot prototype；需业务决定补数/合并/保留/舍弃"
+  },
+  "QY_YL_000057": {
+   "display": "佳得乐西柚PET瓶600ML",
+   "kind": "mapped",
+   "registry_name": "佳得乐西柚 PET瓶 600ML",
+   "raw_crops": 324,
+   "unique_source_groups": 171,
+   "unique_stores": 114,
+   "unique_sessions": 122,
+   "scenes": [
+    "百事"
+   ],
+   "tier": "B",
+   "advice": "过采样+增强+混淆矩阵补 hard negative；建议补数到 A"
+  },
+  "CROP-NEW-18": {
+   "display": "佳得乐西柚PET瓶600ML黄盖",
+   "kind": "new_class_pending_adjudication",
+   "registry_name": null,
+   "raw_crops": 8,
+   "unique_source_groups": 5,
+   "unique_stores": 5,
+   "unique_sessions": 5,
+   "scenes": [
+    "百事"
+   ],
+   "tier": "D",
+   "advice": "新包装/未知工作流；few-shot prototype；需业务决定补数/合并/保留/舍弃"
+  },
+  "QY_YL_000073": {
+   "display": "拉罐330ml七喜",
+   "kind": "mapped",
+   "registry_name": "拉罐330ml七喜",
+   "raw_crops": 353,
+   "unique_source_groups": 154,
+   "unique_stores": 140,
+   "unique_sessions": 140,
+   "scenes": [
+    "百事"
+   ],
+   "tier": "B",
+   "advice": "过采样+增强+混淆矩阵补 hard negative；建议补数到 A"
+  },
+  "QY_YL_000076": {
+   "display": "拉罐330ml百事",
+   "kind": "mapped",
+   "registry_name": "拉罐330ml百事",
+   "raw_crops": 406,
+   "unique_source_groups": 141,
+   "unique_stores": 122,
+   "unique_sessions": 136,
+   "scenes": [
+    "百事"
+   ],
+   "tier": "B",
+   "advice": "过采样+增强+混淆矩阵补 hard negative；建议补数到 A"
+  },
+  "QY_YL_000078": {
+   "display": "拉罐330ml美橙",
+   "kind": "mapped",
+   "registry_name": "拉罐330ml美橙",
+   "raw_crops": 211,
+   "unique_source_groups": 112,
+   "unique_stores": 76,
+   "unique_sessions": 80,
+   "scenes": [
+    "百事"
+   ],
+   "tier": "B",
+   "advice": "过采样+增强+混淆矩阵补 hard negative；建议补数到 A"
+  },
+  "CROP-NEW-19": {
+   "display": "拉罐330ml美葡",
+   "kind": "new_class_pending_adjudication",
+   "registry_name": null,
+   "raw_crops": 280,
+   "unique_source_groups": 163,
+   "unique_stores": 119,
+   "unique_sessions": 159,
+   "scenes": [
+    "主货架",
+    "百事",
+    "百事冰柜环境照1",
+    "百事冰柜环境照2"
+   ],
+   "tier": "D",
+   "advice": "新包装/未知工作流；few-shot prototype；需业务决定补数/合并/保留/舍弃"
+  },
+  "QY_YL_000080": {
+   "display": "拉罐330ml美青苹",
+   "kind": "mapped",
+   "registry_name": "拉罐330ml美青苹",
+   "raw_crops": 218,
+   "unique_source_groups": 102,
+   "unique_stores": 60,
+   "unique_sessions": 69,
+   "scenes": [
+    "百事"
+   ],
+   "tier": "B",
+   "advice": "过采样+增强+混淆矩阵补 hard negative；建议补数到 A"
+  },
+  "CROP-NEW-20": {
+   "display": "拉罐330ml轻怡",
+   "kind": "new_class_pending_adjudication",
+   "registry_name": null,
+   "raw_crops": 217,
+   "unique_source_groups": 122,
+   "unique_stores": 84,
+   "unique_sessions": 98,
+   "scenes": [
+    "百事",
+    "百事冰柜环境照1"
+   ],
+   "tier": "D",
+   "advice": "新包装/未知工作流；few-shot prototype；需业务决定补数/合并/保留/舍弃"
+  },
+  "CROP-NEW-21": {
+   "display": "无糖小柑橘柠檬600ml",
+   "kind": "new_class_pending_adjudication",
+   "registry_name": null,
+   "raw_crops": 241,
+   "unique_source_groups": 155,
+   "unique_stores": 100,
+   "unique_sessions": 111,
+   "scenes": [
+    "百事"
+   ],
+   "tier": "D",
+   "advice": "新包装/未知工作流；few-shot prototype；需业务决定补数/合并/保留/舍弃"
+  },
+  "QY_YL_000114": {
+   "display": "激浪500ml",
+   "kind": "mapped",
+   "registry_name": "激浪500ml",
+   "raw_crops": 413,
+   "unique_source_groups": 239,
+   "unique_stores": 113,
+   "unique_sessions": 129,
+   "scenes": [
+    "百事"
+   ],
+   "tier": "B",
+   "advice": "过采样+增强+混淆矩阵补 hard negative；建议补数到 A"
+  },
+  "QY_YL_000118": {
+   "display": "百事600ml",
+   "kind": "mapped",
+   "registry_name": "百事600ml",
+   "raw_crops": 591,
+   "unique_source_groups": 159,
+   "unique_stores": 117,
+   "unique_sessions": 125,
+   "scenes": [
+    "百事"
+   ],
+   "tier": "B",
+   "advice": "过采样+增强+混淆矩阵补 hard negative；建议补数到 A"
+  },
+  "CROP-NEW-22": {
+   "display": "百事900ml无糖极度",
+   "kind": "new_class_pending_adjudication",
+   "registry_name": null,
+   "raw_crops": 127,
+   "unique_source_groups": 71,
+   "unique_stores": 62,
+   "unique_sessions": 64,
+   "scenes": [
+    "百事"
+   ],
+   "tier": "D",
+   "advice": "新包装/未知工作流；few-shot prototype；需业务决定补数/合并/保留/舍弃"
+  },
+  "CROP-NEW-23": {
+   "display": "百事900ml无糖极度黑神话系列",
+   "kind": "new_class_pending_adjudication",
+   "registry_name": null,
+   "raw_crops": 86,
+   "unique_source_groups": 38,
+   "unique_stores": 33,
+   "unique_sessions": 34,
+   "scenes": [
+    "百事"
+   ],
+   "tier": "D",
+   "advice": "新包装/未知工作流；few-shot prototype；需业务决定补数/合并/保留/舍弃"
+  },
+  "CROP-NEW-24": {
+   "display": "百事900ml百事可乐",
+   "kind": "new_class_pending_adjudication",
+   "registry_name": null,
+   "raw_crops": 285,
+   "unique_source_groups": 97,
+   "unique_stores": 85,
+   "unique_sessions": 86,
+   "scenes": [
+    "百事"
+   ],
+   "tier": "D",
+   "advice": "新包装/未知工作流；few-shot prototype；需业务决定补数/合并/保留/舍弃"
+  },
+  "QY_YL_000120": {
+   "display": "百事无糖500ml黑原味",
+   "kind": "mapped",
+   "registry_name": "百事无糖500ml（黑原味）",
+   "raw_crops": 157,
+   "unique_source_groups": 97,
+   "unique_stores": 85,
+   "unique_sessions": 86,
+   "scenes": [
+    "百事"
+   ],
+   "tier": "C",
+   "advice": "metric/prototype/retrieval 优先；禁高置信自动接受"
+  },
+  "CROP-NEW-25": {
+   "display": "百事无糖500ml黑原味黑神话",
+   "kind": "new_class_pending_adjudication",
+   "registry_name": null,
+   "raw_crops": 166,
+   "unique_source_groups": 93,
+   "unique_stores": 80,
+   "unique_sessions": 83,
+   "scenes": [
+    "百事"
+   ],
+   "tier": "D",
+   "advice": "新包装/未知工作流；few-shot prototype；需业务决定补数/合并/保留/舍弃"
+  },
+  "CROP-NEW-26": {
+   "display": "百事无糖树莓500ml",
+   "kind": "new_class_pending_adjudication",
+   "registry_name": null,
+   "raw_crops": 300,
+   "unique_source_groups": 178,
+   "unique_stores": 103,
+   "unique_sessions": 124,
+   "scenes": [
+    "百事"
+   ],
+   "tier": "D",
+   "advice": "新包装/未知工作流；few-shot prototype；需业务决定补数/合并/保留/舍弃"
+  },
+  "QY_YL_000122": {
+   "display": "百事无糖生可乐500ml",
+   "kind": "mapped",
+   "registry_name": "百事无糖生可乐500ml",
+   "raw_crops": 381,
+   "unique_source_groups": 150,
+   "unique_stores": 94,
+   "unique_sessions": 106,
+   "scenes": [
+    "百事"
+   ],
+   "tier": "B",
+   "advice": "过采样+增强+混淆矩阵补 hard negative；建议补数到 A"
+  },
+  "CROP-NEW-27": {
+   "display": "百事无糖青柠500ml",
+   "kind": "new_class_pending_adjudication",
+   "registry_name": null,
+   "raw_crops": 323,
+   "unique_source_groups": 169,
+   "unique_stores": 109,
+   "unique_sessions": 122,
+   "scenes": [
+    "百事"
+   ],
+   "tier": "D",
+   "advice": "新包装/未知工作流；few-shot prototype；需业务决定补数/合并/保留/舍弃"
+  },
+  "CROP-NEW-28": {
+   "display": "百事桂花500ml",
+   "kind": "new_class_pending_adjudication",
+   "registry_name": null,
+   "raw_crops": 263,
+   "unique_source_groups": 162,
+   "unique_stores": 103,
+   "unique_sessions": 118,
+   "scenes": [
+    "百事"
+   ],
+   "tier": "D",
+   "advice": "新包装/未知工作流；few-shot prototype；需业务决定补数/合并/保留/舍弃"
+  },
+  "CROP-NEW-29": {
+   "display": "百事清柠600ml",
+   "kind": "new_class_pending_adjudication",
+   "registry_name": null,
+   "raw_crops": 215,
+   "unique_source_groups": 105,
+   "unique_stores": 86,
+   "unique_sessions": 90,
+   "scenes": [
+    "百事"
+   ],
+   "tier": "D",
+   "advice": "新包装/未知工作流；few-shot prototype；需业务决定补数/合并/保留/舍弃"
+  },
+  "QY_YL_000124": {
+   "display": "百事生可乐柠檬味330m1细长罐",
+   "kind": "mapped",
+   "registry_name": "百事生可乐柠檬味330ml细长罐",
+   "raw_crops": 198,
+   "unique_source_groups": 94,
+   "unique_stores": 52,
+   "unique_sessions": 64,
+   "scenes": [
+    "百事"
+   ],
+   "tier": "C",
+   "advice": "metric/prototype/retrieval 优先；禁高置信自动接受"
+  },
+  "CROP-NEW-30": {
+   "display": "百事生可乐柠檬味500ml",
+   "kind": "new_class_pending_adjudication",
+   "registry_name": null,
+   "raw_crops": 244,
+   "unique_source_groups": 126,
+   "unique_stores": 84,
+   "unique_sessions": 92,
+   "scenes": [
+    "百事"
+   ],
+   "tier": "D",
+   "advice": "新包装/未知工作流；few-shot prototype；需业务决定补数/合并/保留/舍弃"
+  },
+  "CROP-NEW-31": {
+   "display": "百事白柚青竹500ml",
+   "kind": "new_class_pending_adjudication",
+   "registry_name": null,
+   "raw_crops": 297,
+   "unique_source_groups": 182,
+   "unique_stores": 109,
+   "unique_sessions": 123,
+   "scenes": [
+    "百事"
+   ],
+   "tier": "D",
+   "advice": "新包装/未知工作流；few-shot prototype；需业务决定补数/合并/保留/舍弃"
+  },
+  "CROP-NEW-32": {
+   "display": "百事白桃乌龙500ml",
+   "kind": "new_class_pending_adjudication",
+   "registry_name": null,
+   "raw_crops": 223,
+   "unique_source_groups": 144,
+   "unique_stores": 81,
+   "unique_sessions": 95,
+   "scenes": [
+    "百事"
+   ],
+   "tier": "D",
+   "advice": "新包装/未知工作流；few-shot prototype；需业务决定补数/合并/保留/舍弃"
+  },
+  "CROP-NEW-33": {
+   "display": "纯果乐柠檬派对PET瓶450ML",
+   "kind": "new_class_pending_adjudication",
+   "registry_name": null,
+   "raw_crops": 229,
+   "unique_source_groups": 158,
+   "unique_stores": 128,
+   "unique_sessions": 154,
+   "scenes": [
+    "主货架",
+    "冷风柜环境照拍摄拍摄全部冷风柜环境照",
+    "百事",
+    "百事冰柜环境照1",
+    "端架整体环境照拍摄所有饮料"
+   ],
+   "tier": "D",
+   "advice": "新包装/未知工作流；few-shot prototype；需业务决定补数/合并/保留/舍弃"
+  },
+  "CROP-NEW-34": {
+   "display": "纯果乐热带美味PET瓶450ML",
+   "kind": "new_class_pending_adjudication",
+   "registry_name": null,
+   "raw_crops": 273,
+   "unique_source_groups": 159,
+   "unique_stores": 130,
+   "unique_sessions": 156,
+   "scenes": [
+    "主货架",
+    "拍摄全店饮料陈列的环境照.",
+    "百事",
+    "百事冰柜环境照1",
+    "端架整体环境照拍摄所有饮料"
+   ],
+   "tier": "D",
+   "advice": "新包装/未知工作流；few-shot prototype；需业务决定补数/合并/保留/舍弃"
+  },
+  "CROP-NEW-35": {
+   "display": "纯果乐阳光橙125L",
+   "kind": "new_class_pending_adjudication",
+   "registry_name": null,
+   "raw_crops": 238,
+   "unique_source_groups": 112,
+   "unique_stores": 92,
+   "unique_sessions": 111,
+   "scenes": [
+    "地堆整体环境照拍摄所有饮料",
+    "拍摄全店饮料陈列的环境照.",
+    "百事",
+    "百事冰柜环境照1",
+    "百事大方货架全店范围",
+    "端架整体环境照拍摄所有饮料"
+   ],
+   "tier": "D",
+   "advice": "新包装/未知工作流；few-shot prototype；需业务决定补数/合并/保留/舍弃"
+  },
+  "CROP-NEW-36": {
+   "display": "纯果乐阳光橙2L",
+   "kind": "new_class_pending_adjudication",
+   "registry_name": null,
+   "raw_crops": 324,
+   "unique_source_groups": 149,
+   "unique_stores": 126,
+   "unique_sessions": 146,
+   "scenes": [
+    "主货架",
+    "佳得乐堆箱PC",
+    "地堆整体环境照拍摄所有饮料",
+    "拍摄全店饮料陈列的环境照.",
+    "百事",
+    "百事大方货架全店范围",
+    "端架整体环境照拍摄所有饮料"
+   ],
+   "tier": "D",
+   "advice": "新包装/未知工作流；few-shot prototype；需业务决定补数/合并/保留/舍弃"
+  },
+  "QY_YL_000133": {
+   "display": "纯果乐阳光橙PET瓶450ML",
+   "kind": "mapped",
+   "registry_name": "纯果乐阳光橙 PET瓶 450ML",
+   "raw_crops": 347,
+   "unique_source_groups": 193,
+   "unique_stores": 125,
+   "unique_sessions": 131,
+   "scenes": [
+    "百事"
+   ],
+   "tier": "B",
+   "advice": "过采样+增强+混淆矩阵补 hard negative；建议补数到 A"
+  },
+  "CROP-NEW-37": {
+   "display": "纯果乐阳光蜜桃PET瓶450M",
+   "kind": "new_class_pending_adjudication",
+   "registry_name": null,
+   "raw_crops": 280,
+   "unique_source_groups": 211,
+   "unique_stores": 157,
+   "unique_sessions": 200,
+   "scenes": [
+    "主货架",
+    "拍摄全店饮料陈列的环境照.",
+    "百事",
+    "百事冰柜环境照1",
+    "百事冰柜环境照2",
+    "端架整体环境照拍摄所有饮料"
+   ],
+   "tier": "D",
+   "advice": "新包装/未知工作流；few-shot prototype；需业务决定补数/合并/保留/舍弃"
+  },
+  "QY_YL_000134": {
+   "display": "纯水乐PET瓶550ML",
+   "kind": "mapped",
+   "registry_name": "纯水乐 PET瓶 550ML",
+   "raw_crops": 866,
+   "unique_source_groups": 209,
+   "unique_stores": 96,
+   "unique_sessions": 150,
+   "scenes": [
+    "百事"
+   ],
+   "tier": "B",
+   "advice": "过采样+增强+混淆矩阵补 hard negative；建议补数到 A"
+  },
+  "QY_YL_000136": {
+   "display": "细长罐330ml七喜",
+   "kind": "mapped",
+   "registry_name": "细长罐330ml七喜",
+   "raw_crops": 367,
+   "unique_source_groups": 176,
+   "unique_stores": 107,
+   "unique_sessions": 124,
+   "scenes": [
+    "百事"
+   ],
+   "tier": "B",
+   "advice": "过采样+增强+混淆矩阵补 hard negative；建议补数到 A"
+  },
+  "CROP-NEW-38": {
+   "display": "细长罐330ml无糖小柑橘柠檬",
+   "kind": "new_class_pending_adjudication",
+   "registry_name": null,
+   "raw_crops": 333,
+   "unique_source_groups": 169,
+   "unique_stores": 93,
+   "unique_sessions": 118,
+   "scenes": [
+    "百事",
+    "百事冰柜环境照1",
+    "端架整体环境照拍摄所有饮料"
+   ],
+   "tier": "D",
+   "advice": "新包装/未知工作流；few-shot prototype；需业务决定补数/合并/保留/舍弃"
+  },
+  "QY_YL_000137": {
+   "display": "细长罐330ml百事",
+   "kind": "mapped",
+   "registry_name": "细长罐330ml百事",
+   "raw_crops": 272,
+   "unique_source_groups": 110,
+   "unique_stores": 85,
+   "unique_sessions": 92,
+   "scenes": [
+    "百事"
+   ],
+   "tier": "B",
+   "advice": "过采样+增强+混淆矩阵补 hard negative；建议补数到 A"
+  },
+  "QY_YL_000140": {
+   "display": "细长罐330ml百事无糖生可乐",
+   "kind": "mapped",
+   "registry_name": "细长罐330ml百事无糖生可乐",
+   "raw_crops": 204,
+   "unique_source_groups": 104,
+   "unique_stores": 69,
+   "unique_sessions": 77,
+   "scenes": [
+    "百事"
+   ],
+   "tier": "B",
+   "advice": "过采样+增强+混淆矩阵补 hard negative；建议补数到 A"
+  },
+  "QY_YL_000141": {
+   "display": "细长罐330ml百事无糖青柠",
+   "kind": "mapped",
+   "registry_name": "细长罐330ml百事无糖青柠",
+   "raw_crops": 223,
+   "unique_source_groups": 126,
+   "unique_stores": 59,
+   "unique_sessions": 79,
+   "scenes": [
+    "主货架",
+    "百事",
+    "百事冰柜环境照1"
+   ],
+   "tier": "B",
+   "advice": "过采样+增强+混淆矩阵补 hard negative；建议补数到 A"
+  },
+  "CROP-NEW-39": {
+   "display": "细长罐330ml百事无糖黑原味",
+   "kind": "new_class_pending_adjudication",
+   "registry_name": null,
+   "raw_crops": 145,
+   "unique_source_groups": 91,
+   "unique_stores": 60,
+   "unique_sessions": 67,
+   "scenes": [
+    "百事"
+   ],
+   "tier": "D",
+   "advice": "新包装/未知工作流；few-shot prototype；需业务决定补数/合并/保留/舍弃"
+  },
+  "CROP-NEW-40": {
+   "display": "细长罐330ml百事无糖黑原味黑悟空系列",
+   "kind": "new_class_pending_adjudication",
+   "registry_name": null,
+   "raw_crops": 80,
+   "unique_source_groups": 44,
+   "unique_stores": 36,
+   "unique_sessions": 38,
+   "scenes": [
+    "百事"
+   ],
+   "tier": "D",
+   "advice": "新包装/未知工作流；few-shot prototype；需业务决定补数/合并/保留/舍弃"
+  },
+  "QY_YL_000143": {
+   "display": "细长罐330ml美橙",
+   "kind": "mapped",
+   "registry_name": "细长罐330ml美橙",
+   "raw_crops": 186,
+   "unique_source_groups": 90,
+   "unique_stores": 71,
+   "unique_sessions": 75,
+   "scenes": [
+    "百事"
+   ],
+   "tier": "C",
+   "advice": "metric/prototype/retrieval 优先；禁高置信自动接受"
+  },
+  "CROP-NEW-41": {
+   "display": "细长罐330ml美橙新年装",
+   "kind": "new_class_pending_adjudication",
+   "registry_name": null,
+   "raw_crops": 13,
+   "unique_source_groups": 7,
+   "unique_stores": 5,
+   "unique_sessions": 6,
+   "scenes": [
+    "百事"
+   ],
+   "tier": "D",
+   "advice": "新包装/未知工作流；few-shot prototype；需业务决定补数/合并/保留/舍弃"
+  },
+  "QY_YL_000156": {
+   "display": "美年达600ML白凤蜜桃",
+   "kind": "mapped",
+   "registry_name": "美年达600ML白凤蜜桃",
+   "raw_crops": 261,
+   "unique_source_groups": 127,
+   "unique_stores": 90,
+   "unique_sessions": 94,
+   "scenes": [
+    "百事"
+   ],
+   "tier": "B",
+   "advice": "过采样+增强+混淆矩阵补 hard negative；建议补数到 A"
+  },
+  "QY_YL_000157": {
+   "display": "美年达百香果菠萝600ml",
+   "kind": "mapped",
+   "registry_name": "美年达百香果菠萝600ml",
+   "raw_crops": 415,
+   "unique_source_groups": 224,
+   "unique_stores": 116,
+   "unique_sessions": 134,
+   "scenes": [
+    "百事"
+   ],
+   "tier": "B",
+   "advice": "过采样+增强+混淆矩阵补 hard negative；建议补数到 A"
+  },
+  "QY_YL_000161": {
+   "display": "美橙600ml",
+   "kind": "mapped",
+   "registry_name": "美橙600ml",
+   "raw_crops": 385,
+   "unique_source_groups": 160,
+   "unique_stores": 114,
+   "unique_sessions": 122,
+   "scenes": [
+    "百事"
+   ],
+   "tier": "B",
+   "advice": "过采样+增强+混淆矩阵补 hard negative；建议补数到 A"
+  },
+  "CROP-NEW-42": {
+   "display": "美橙600ml黄盖",
+   "kind": "new_class_pending_adjudication",
+   "registry_name": null,
+   "raw_crops": 12,
+   "unique_source_groups": 4,
+   "unique_stores": 4,
+   "unique_sessions": 4,
+   "scenes": [
+    "百事"
+   ],
+   "tier": "D",
+   "advice": "新包装/未知工作流；few-shot prototype；需业务决定补数/合并/保留/舍弃"
+  },
+  "CROP-NEW-43": {
+   "display": "葡萄600ml",
+   "kind": "new_class_pending_adjudication",
+   "registry_name": null,
+   "raw_crops": 277,
+   "unique_source_groups": 134,
+   "unique_stores": 98,
+   "unique_sessions": 106,
+   "scenes": [
+    "百事"
+   ],
+   "tier": "D",
+   "advice": "新包装/未知工作流；few-shot prototype；需业务决定补数/合并/保留/舍弃"
+  },
+  "CROP-NEW-44": {
+   "display": "西瓜600ml",
+   "kind": "new_class_pending_adjudication",
+   "registry_name": null,
+   "raw_crops": 336,
+   "unique_source_groups": 158,
+   "unique_stores": 116,
+   "unique_sessions": 123,
+   "scenes": [
+    "百事"
+   ],
+   "tier": "D",
+   "advice": "新包装/未知工作流；few-shot prototype；需业务决定补数/合并/保留/舍弃"
+  },
+  "QY_YL_000191": {
+   "display": "轻怡600ml",
+   "kind": "mapped",
+   "registry_name": "轻怡600ml",
+   "raw_crops": 232,
+   "unique_source_groups": 103,
+   "unique_stores": 73,
+   "unique_sessions": 78,
+   "scenes": [
+    "百事"
+   ],
+   "tier": "B",
+   "advice": "过采样+增强+混淆矩阵补 hard negative；建议补数到 A"
+  },
+  "CROP-NEW-45": {
+   "display": "青苹600ml",
+   "kind": "new_class_pending_adjudication",
+   "registry_name": null,
+   "raw_crops": 249,
+   "unique_source_groups": 128,
+   "unique_stores": 95,
+   "unique_sessions": 103,
+   "scenes": [
+    "百事"
+   ],
+   "tier": "D",
+   "advice": "新包装/未知工作流；few-shot prototype；需业务决定补数/合并/保留/舍弃"
+  }
+ },
+ "worst_ten": [
+  {
+   "class_id": "CROP-NEW-42",
+   "display": "美橙600ml黄盖",
+   "kind": "new_class_pending_adjudication",
+   "registry_name": null,
+   "raw_crops": 12,
+   "unique_source_groups": 4,
+   "unique_stores": 4,
+   "unique_sessions": 4,
+   "scenes": [
+    "百事"
+   ],
+   "tier": "D",
+   "advice": "新包装/未知工作流；few-shot prototype；需业务决定补数/合并/保留/舍弃"
+  },
+  {
+   "class_id": "CROP-NEW-03",
+   "display": "125L百事新年装",
+   "kind": "new_class_pending_adjudication",
+   "registry_name": null,
+   "raw_crops": 7,
+   "unique_source_groups": 5,
+   "unique_stores": 4,
+   "unique_sessions": 4,
+   "scenes": [
+    "百事"
+   ],
+   "tier": "D",
+   "advice": "新包装/未知工作流；few-shot prototype；需业务决定补数/合并/保留/舍弃"
+  },
+  {
+   "class_id": "CROP-NEW-18",
+   "display": "佳得乐西柚PET瓶600ML黄盖",
+   "kind": "new_class_pending_adjudication",
+   "registry_name": null,
+   "raw_crops": 8,
+   "unique_source_groups": 5,
+   "unique_stores": 5,
+   "unique_sessions": 5,
+   "scenes": [
+    "百事"
+   ],
+   "tier": "D",
+   "advice": "新包装/未知工作流；few-shot prototype；需业务决定补数/合并/保留/舍弃"
+  },
+  {
+   "class_id": "CROP-NEW-41",
+   "display": "细长罐330ml美橙新年装",
+   "kind": "new_class_pending_adjudication",
+   "registry_name": null,
+   "raw_crops": 13,
+   "unique_source_groups": 7,
+   "unique_stores": 5,
+   "unique_sessions": 6,
+   "scenes": [
+    "百事"
+   ],
+   "tier": "D",
+   "advice": "新包装/未知工作流；few-shot prototype；需业务决定补数/合并/保留/舍弃"
+  },
+  {
+   "class_id": "CROP-NEW-15",
+   "display": "佳得乐柠檬PET瓶600ML黄盖",
+   "kind": "new_class_pending_adjudication",
+   "registry_name": null,
+   "raw_crops": 24,
+   "unique_source_groups": 13,
+   "unique_stores": 11,
+   "unique_sessions": 11,
+   "scenes": [
+    "百事"
+   ],
+   "tier": "D",
+   "advice": "新包装/未知工作流；few-shot prototype；需业务决定补数/合并/保留/舍弃"
+  },
+  {
+   "class_id": "CROP-NEW-11",
+   "display": "佳得乐低糖红柚PET瓶600ML红盖",
+   "kind": "new_class_pending_adjudication",
+   "registry_name": null,
+   "raw_crops": 32,
+   "unique_source_groups": 23,
+   "unique_stores": 13,
+   "unique_sessions": 14,
+   "scenes": [
+    "百事"
+   ],
+   "tier": "D",
+   "advice": "新包装/未知工作流；few-shot prototype；需业务决定补数/合并/保留/舍弃"
+  },
+  {
+   "class_id": "CROP-NEW-17",
+   "display": "佳得乐蓝莓PET瓶600ML黄盖",
+   "kind": "new_class_pending_adjudication",
+   "registry_name": null,
+   "raw_crops": 41,
+   "unique_source_groups": 23,
+   "unique_stores": 19,
+   "unique_sessions": 21,
+   "scenes": [
+    "百事"
+   ],
+   "tier": "D",
+   "advice": "新包装/未知工作流；few-shot prototype；需业务决定补数/合并/保留/舍弃"
+  },
+  {
+   "class_id": "CROP-NEW-16",
+   "display": "佳得乐橙PET瓶600ML黄盖",
+   "kind": "new_class_pending_adjudication",
+   "registry_name": null,
+   "raw_crops": 42,
+   "unique_source_groups": 24,
+   "unique_stores": 22,
+   "unique_sessions": 22,
+   "scenes": [
+    "百事"
+   ],
+   "tier": "D",
+   "advice": "新包装/未知工作流；few-shot prototype；需业务决定补数/合并/保留/舍弃"
+  },
+  {
+   "class_id": "CROP-NEW-13",
+   "display": "佳得乐低糖青柠PET瓶600ML红盖",
+   "kind": "new_class_pending_adjudication",
+   "registry_name": null,
+   "raw_crops": 36,
+   "unique_source_groups": 25,
+   "unique_stores": 17,
+   "unique_sessions": 19,
+   "scenes": [
+    "百事"
+   ],
+   "tier": "D",
+   "advice": "新包装/未知工作流；few-shot prototype；需业务决定补数/合并/保留/舍弃"
+  },
+  {
+   "class_id": "CROP-NEW-14",
+   "display": "佳得乐低糖青柠PET瓶600ML黄盖",
+   "kind": "new_class_pending_adjudication",
+   "registry_name": null,
+   "raw_crops": 73,
+   "unique_source_groups": 38,
+   "unique_stores": 34,
+   "unique_sessions": 34,
+   "scenes": [
+    "百事"
+   ],
+   "tier": "D",
+   "advice": "新包装/未知工作流；few-shot prototype；需业务决定补数/合并/保留/舍弃"
+  }
+ ],
+ "head_tail_gap": 235,
+ "collection_priority": [],
+ "policy_hash": "b95c0a01a227b8fd9216f888d8da5bb283740fc48642b151674ceb39a906fe16"
+}

@@ -907,6 +907,26 @@ CREATE TABLE IF NOT EXISTS recognition_profile_v1 (
 );
 """
 
+_M024 = """
+CREATE TABLE IF NOT EXISTS flow_supersession_v1 (
+    flow_id TEXT PRIMARY KEY,
+    status TEXT NOT NULL,
+    note TEXT NOT NULL DEFAULT '',
+    superseded_by TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL
+);
+CREATE TRIGGER flow_supersession_v1_no_delete
+    BEFORE DELETE ON flow_supersession_v1
+BEGIN
+    SELECT RAISE(ABORT, 'flow_supersession_v1 不可变：禁止 DELETE');
+END;
+CREATE TRIGGER flow_supersession_v1_no_update
+    BEFORE UPDATE ON flow_supersession_v1
+BEGIN
+    SELECT RAISE(ABORT, 'flow_supersession_v1 不可变：禁止 UPDATE');
+END;
+"""
+
 MIGRATIONS: tuple[tuple[str, str], ...] = (
     ("001_platform_init", _M001),
     ("002_labeling_inbox", _M002),
@@ -931,6 +951,7 @@ MIGRATIONS: tuple[tuple[str, str], ...] = (
     ("021_training_control_v2", _M021),
     ("022_legacy_model_registry_v1", _M022),
     ("023_nextgen_training_cycle_v1", _M023),
+    ("024_flow_supersession_v1", _M024),
 )
 
 
