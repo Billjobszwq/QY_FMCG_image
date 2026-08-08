@@ -38,6 +38,11 @@ def _load_records(limit, seed):
     return recs
 
 
+def sam_loss_manifest() -> dict:
+    from src.modules.nextgen_data.sam_losses import sam_mask_loss
+    return sam_mask_loss.manifest_defaults()
+
+
 def _rle_to_mask(rle, h, w):
     import numpy as np
     mask = np.zeros(h * w, dtype=bool)
@@ -157,12 +162,10 @@ def main() -> int:
         m_up = TF.interpolate(m[None, None], size=(TARGET, TARGET),
                               mode="bilinear", align_corners=False)[0, 0]
         gt_t = torch.from_numpy(gt1024).to("mps")
-        p = torch.sigmoid(m_up)
-        bce = TF.binary_cross_entropy(p, gt_t)
-        pred_bin = (p > 0.5).float()
-        inter = (pred_bin * gt_t).sum()
-        dice = 1 - (2 * inter + 1e-6) / (pred_bin.sum() + gt_t.sum() + 1e-6)
-        return bce + dice
+        # SLTF P0-1：可导 soft Dice（sam_losses）；二值 Dice 仅 metric
+        from src.modules.nextgen_data.sam_losses import (
+            binary_dice_metric, sam_mask_loss)
+        return sam_mask_loss(m_up[None, None], gt_t[None, None])
 
     rng = random.Random(7)
     curve = []
@@ -198,7 +201,9 @@ def main() -> int:
     rep = {"run": a.run_name, "kind": "sam_mask_decoder_finetune",
            "teacher": "sam2.1_hiera_small(frozen encoder)",
            "label_source": "sam_pseudo_masks（自推理伪标签，非 human gold）",
-           "evidence_level": "pseudo_self_consistency",
+           "evidence_level": "pseudo_mask_interim",
+           "status": "EXPERIMENTAL_SELF_CONSISTENCY_NOT_CANDIDATE",
+           "loss": sam_loss_manifest(),
            "samples": len(train_recs), "epochs": a.epochs,
            "curve": curve, "duration_s": round(time.time() - t0, 1),
            "artifact_sha256": sha, "candidate": False,
