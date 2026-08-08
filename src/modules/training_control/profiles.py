@@ -124,3 +124,63 @@ class ProfileRegistry:
                 "entry_point": entry_point, "source": source,
                 "components": p["components"],
                 "policy_version": p["policy_version"]}
+
+
+# ---- 纠偏 Task 7：Profile 状态动态派生（不保存过期文本） ----
+
+_PROFILE_DEFS = [
+    ("production_legacy", ["legacy_detector"], [], ["production"]),
+    ("nextgen_m1_pilot", ["nextgen_detector_smoke_v1"], [], []),
+    ("nextgen_m1_m2_pilot", ["nextgen_detector_smoke_v1",
+                             "nextgen_segmenter_smoke_v1"], [], []),
+    ("canonical38_classifier", ["nextgen_classifier_grouped_v1"],
+     ["canonical38"], []),
+    ("canonical38_cascade", ["nextgen_detector_smoke_v1",
+                             "nextgen_classifier_grouped_v1"],
+     ["canonical38"], []),
+    ("research83_classifier", ["nextgen_classifier_grouped_v1"],
+     ["research83"], ["实验，不可商业输出"]),
+    ("research83_full_cascade", ["nextgen_detector_smoke_v1",
+                                 "nextgen_segmenter_smoke_v1",
+                                 "nextgen_classifier_grouped_v1",
+                                 "nextgen_vlm_cropped_v1"],
+     ["research83"], ["实验，不可商业输出"]),
+    ("shadow_compare", ["legacy_detector"], [], ["shadow"]),
+]
+
+
+def derive_profiles(store) -> list[dict]:
+    """从 Artifact Registry 动态派生 status/blockers。"""
+    arts = {r["artifact_id"]: r for r in store._conn.execute(
+        "SELECT artifact_id, candidate_status, blocker FROM"
+        " model_artifact_registry_v1").fetchall()}
+    out = []
+    for pid, needs, scopes, tags in _PROFILE_DEFS:
+        blockers = []
+        if pid == "production_legacy":
+            out.append({"profile_id": pid, "status": "enabled",
+                        "blockers": [], "tags": tags,
+                        "components": needs})
+            continue
+        for aid in needs:
+            a = arts.get(aid)
+            if a is None:
+                blockers.append(f"{aid}: not_registered")
+            elif a["candidate_status"] != "CANDIDATE":
+                blockers.append(
+                    f"{aid}: {a['candidate_status']}（smoke_only/非候选不可选）")
+        # M4 组件：KB 覆盖 0 时禁用
+        if "nextgen_vlm_cropped_v1" in needs:
+            ev = store._conn.execute(
+                "SELECT summary_json FROM evaluation_registry_v1"
+                " WHERE eval_id='qwen_candidate_recall'").fetchone()
+            if ev:
+                import json as _j
+                sm = _j.loads(ev["summary_json"])
+                if sm.get("gt_in_kb", 0) == 0:
+                    blockers.append("KB coverage=0 → M4 组件禁用")
+        out.append({"profile_id": pid,
+                    "status": "enabled" if not blockers else "disabled",
+                    "blockers": blockers, "tags": tags,
+                    "components": needs, "scopes": scopes})
+    return out
