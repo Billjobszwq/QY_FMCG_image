@@ -1,0 +1,22 @@
+# 06 执行计划与门禁
+
+顺序：Task0 现场保护 → P0-1..P0-5 红测试修复 → §5 长尾分层 → §7 250 门 superseded →
+§8 LS 复核 → §9 四 snapshot v3 → §10 排程（benchmark→smoke→pilot→candidate；
+M4 等 M1-3 完成独占）→ §11 Agent → §12 黑板/记忆 → §13 Web → §14 profile → §15 测试/QA。
+
+Graph 状态：AUDIT_VERIFIED → ACTIVE_RUNS_PROTECTED → CRITICAL_TRAINING_BUGS_FIXED →
+SKU_DATA_TIERED → LABEL_STUDIO_VERIFIED → SAM_DATA_PIPELINE_READY → FOUR_SNAPSHOTS_READY →
+RESOURCE_PLAN_READY → M1_M2_M3_EXPERIMENTS_RUNNING → M1_M2_M3_CANDIDATES_READY →
+M4_EXCLUSIVE_RUNNING → FOUR_DEMO_CANDIDATES_READY → AGENT_KERNEL_READY →
+BLACKBOARD_MEMORY_READY → WEB_WORKBENCH_READY → DEMO_ACCEPTANCE_READY →
+AWAITING_INDEPENDENT_EVALUATION → AWAITING_PRODUCTION_DECISION → COMPLETED_NO_PROMOTION。
+
+每节点：Observe→Validate→Plan→Acquire Lease→Execute→Verify→Record→Checkpoint→Decide。
+同错最多重试 2 次，第三次登记 Issue 进 WAITING/FAILED。
+
+停止线：MPS/MLX fallback、OOM、NaN/Inf、swap≥8GB 或恶化、memory pressure red、
+thermal serious/critical、服务错误、磁盘低、loss 异常、输出冲突、manifest 漂移。
+
+完成定义：全部成立才可写 SKU_LONG_TAIL_AGENT_FOUNDATION_V1_COMPLETE；
+缺独立人工真值 → FOUR_DEMO_CANDIDATES_READY_AWAITING_INDEPENDENT_EVALUATION；
+禁写 PROMOTION_READY。
