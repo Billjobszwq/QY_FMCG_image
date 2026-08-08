@@ -971,6 +971,74 @@ CREATE TABLE IF NOT EXISTS memory_entry_v1 (
 );
 """
 
+_M026 = """
+CREATE TABLE IF NOT EXISTS model_artifact_registry_v1 (
+    artifact_id TEXT PRIMARY KEY,
+    kind TEXT NOT NULL,
+    path TEXT NOT NULL,
+    sha256 TEXT NOT NULL,
+    dataset_manifest_sha TEXT NOT NULL DEFAULT '',
+    source_commit TEXT NOT NULL DEFAULT '',
+    dirty_diff_hash TEXT NOT NULL DEFAULT '',
+    model_base TEXT NOT NULL DEFAULT '',
+    label_source TEXT NOT NULL DEFAULT '',
+    evidence_level TEXT NOT NULL DEFAULT '',
+    candidate_status TEXT NOT NULL DEFAULT '',
+    blocker TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL,
+    reconciled_by TEXT NOT NULL DEFAULT '',
+    reconciliation_run_id TEXT NOT NULL DEFAULT ''
+);
+CREATE TABLE IF NOT EXISTS dataset_snapshot_registry_v1 (
+    snapshot_id TEXT PRIMARY KEY,
+    path TEXT NOT NULL,
+    manifest_sha TEXT NOT NULL,
+    label_source TEXT NOT NULL DEFAULT '',
+    evidence_level TEXT NOT NULL DEFAULT '',
+    leakage_policy TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL,
+    reconciled_by TEXT NOT NULL DEFAULT '',
+    reconciliation_run_id TEXT NOT NULL DEFAULT ''
+);
+CREATE TABLE IF NOT EXISTS evaluation_registry_v1 (
+    eval_id TEXT PRIMARY KEY,
+    kind TEXT NOT NULL,
+    report_path TEXT NOT NULL,
+    report_sha TEXT NOT NULL DEFAULT '',
+    summary_json TEXT NOT NULL DEFAULT '{}',
+    evidence_level TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL,
+    reconciled_by TEXT NOT NULL DEFAULT '',
+    reconciliation_run_id TEXT NOT NULL DEFAULT ''
+);
+"""
+
+_M027 = """
+CREATE TABLE IF NOT EXISTS agent_session_v1 (
+    session_id TEXT PRIMARY KEY,
+    created_by TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS agent_session_msg_v1 (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    session_id TEXT NOT NULL,
+    role TEXT NOT NULL,
+    content TEXT NOT NULL,
+    meta_json TEXT NOT NULL DEFAULT '{}',
+    created_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS agent_command_v1 (
+    command_id TEXT PRIMARY KEY,
+    kind TEXT NOT NULL,
+    params_json TEXT NOT NULL DEFAULT '{}',
+    status TEXT NOT NULL DEFAULT 'pending_approval',
+    created_by TEXT NOT NULL DEFAULT '',
+    decided_by TEXT,
+    created_at TEXT NOT NULL,
+    decided_at TEXT
+);
+"""
+
 MIGRATIONS: tuple[tuple[str, str], ...] = (
     ("001_platform_init", _M001),
     ("002_labeling_inbox", _M002),
@@ -997,6 +1065,8 @@ MIGRATIONS: tuple[tuple[str, str], ...] = (
     ("023_nextgen_training_cycle_v1", _M023),
     ("024_flow_supersession_v1", _M024),
     ("025_agent_blackboard_memory_v1", _M025),
+    ("026_reconciliation_registry_v1", _M026),
+    ("027_agent_runtime_v1", _M027),
 )
 
 

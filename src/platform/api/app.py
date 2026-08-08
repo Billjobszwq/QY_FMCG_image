@@ -112,6 +112,12 @@ def create_app(
         from src.platform.api.agents_api import create_agents_router
         app.include_router(create_agents_router(
             bundle.store, auth=AuthService(bundle.store)))
+        from src.platform.api.agent_runtime_api import (
+            create_agent_runtime_router)
+        app.include_router(create_agent_runtime_router(
+            bundle.store, auth=AuthService(bundle.store)))
+        from src.platform.api.recon_api import create_recon_router
+        app.include_router(create_recon_router(bundle.store))
         # U5-2/U5-3：Graph+Loop v2 运行（runs/trail 登录只读；
         # start/gate 需 session+CSRF 且仅限 admin）
         from src.platform.api.loops import create_loops_router
