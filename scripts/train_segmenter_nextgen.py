@@ -19,6 +19,23 @@ sys.path.insert(0, str(ROOT))
 MODELS_DIR = ROOT / ".models"
 
 
+def _snapshot(run_dir: Path) -> None:
+    import hashlib
+    import subprocess
+    head = subprocess.run(["git", "rev-parse", "HEAD"], cwd=ROOT,
+                          capture_output=True, text=True).stdout.strip()
+    dirty = subprocess.run(["git", "diff", "HEAD"], cwd=ROOT,
+                           capture_output=True, text=True).stdout
+    (run_dir / "source_snapshot.json").write_text(json.dumps({
+        "source_commit": head,
+        "dirty_diff_hash": hashlib.sha256(dirty.encode()).hexdigest(),
+        "launcher_source_hash": hashlib.sha256(
+            Path(__file__).read_bytes()).hexdigest(),
+        "resolved_command": sys.argv,
+        "environment_lock": sys.version.split()[0],
+        "seed": 42}, ensure_ascii=False, indent=1), encoding="utf-8")
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--data-yaml", required=True)

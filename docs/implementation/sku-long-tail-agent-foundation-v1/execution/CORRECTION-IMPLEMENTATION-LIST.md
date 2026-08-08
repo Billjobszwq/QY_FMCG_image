@@ -1,0 +1,14 @@
+# CORRECTION-IMPLEMENTATION-LIST
+- [x] T0 基线+Gate 纠正
+- [x] T1 状态纠正（CORRECT_STATUS 冻结+测试）
+- [x] T2 reconciliation+四方对账（4 测试绿）
+- [x] T3 Cycle 19 节点
+- [x] T4 Supervisor runtime（sessions/chat/commands/invoke/health/stream）
+- [x] T5 黑板/记忆/任务板真实数据
+- [x] T6 Web（抽屉对话+审批+任务板卡+训练页对账面板）
+- [x] T7 Profile 动态派生（5 测试绿）
+- [x] T8 canonical38/research83+pending pack
+- [~] T9 M3 消融 E1-E5（运行中）
+- [~] T10 M1 完成/M2 运行中
+- [~] T11 KB 建设→recall→M4
+- [ ] 浏览器验收+39 项报告
