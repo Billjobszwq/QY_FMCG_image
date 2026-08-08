@@ -927,6 +927,50 @@ BEGIN
 END;
 """
 
+_M025 = """
+CREATE TABLE IF NOT EXISTS agent_manifest_v1 (
+    agent_id TEXT PRIMARY KEY,
+    version TEXT NOT NULL,
+    domain TEXT NOT NULL DEFAULT '',
+    manifest_json TEXT NOT NULL,
+    created_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS blackboard_event_v1 (
+    id TEXT PRIMARY KEY,
+    by TEXT NOT NULL,
+    by_kind TEXT NOT NULL DEFAULT 'agent',
+    event_type TEXT NOT NULL,
+    payload_json TEXT NOT NULL DEFAULT '{}',
+    evidence_json TEXT NOT NULL DEFAULT '[]',
+    supersedes TEXT,
+    created_at TEXT NOT NULL
+);
+CREATE TRIGGER blackboard_event_v1_no_delete
+    BEFORE DELETE ON blackboard_event_v1
+BEGIN
+    SELECT RAISE(ABORT, 'blackboard_event_v1 不可变：禁止 DELETE');
+END;
+CREATE TRIGGER blackboard_event_v1_no_update
+    BEFORE UPDATE ON blackboard_event_v1
+BEGIN
+    SELECT RAISE(ABORT, 'blackboard_event_v1 不可变：禁止 UPDATE');
+END;
+CREATE TABLE IF NOT EXISTS memory_entry_v1 (
+    id TEXT PRIMARY KEY,
+    level TEXT NOT NULL,
+    text TEXT NOT NULL,
+    scope TEXT NOT NULL,
+    acl_json TEXT NOT NULL DEFAULT '[]',
+    confidence REAL NOT NULL DEFAULT 0.5,
+    evidence_json TEXT NOT NULL DEFAULT '[]',
+    valid_from TEXT NOT NULL,
+    valid_to TEXT,
+    retention TEXT NOT NULL DEFAULT 'project_lifetime',
+    supersedes TEXT,
+    version INTEGER NOT NULL DEFAULT 1
+);
+"""
+
 MIGRATIONS: tuple[tuple[str, str], ...] = (
     ("001_platform_init", _M001),
     ("002_labeling_inbox", _M002),
@@ -952,6 +996,7 @@ MIGRATIONS: tuple[tuple[str, str], ...] = (
     ("022_legacy_model_registry_v1", _M022),
     ("023_nextgen_training_cycle_v1", _M023),
     ("024_flow_supersession_v1", _M024),
+    ("025_agent_blackboard_memory_v1", _M025),
 )
 
 
