@@ -44,6 +44,8 @@ function cmdOf(r: TrainingRunRow): string {
   }
 }
 
+import ReconciliationPanel from "./ReconciliationPanel";
+
 export default function Training() {
   const [live, setLive] = useState<Record<string, unknown> | null>(null);
   const [overview, setOverview] = useState<Record<string, unknown> | null>(null);
@@ -199,6 +201,7 @@ export default function Training() {
 
   return (
     <>
+      <ReconciliationPanel />
       <TrainingControlPanel />
       <details style={{ marginTop: 24 }}>
         <summary>
