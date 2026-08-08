@@ -138,3 +138,10 @@ python -m pytest tests/unit tests/contract -q     # 不变性/对齐/命名/别�
 - 范围/门槛/治理变更走章程变更流程；技术决策更新 `architecture.md` 的 ADR。
 - 文档与代码现状保持一致；状态变更同步本 README"当前状态"。
 - 版本升级时更新各文档头部版本与日期。
+
+## 2026-08-09 更新
+- 新实施入口：`docs/implementation/sku-long-tail-agent-foundation-v1/`
+  （SKU 长尾治理 + SAM 数据链修正 + 四模型训练闭环 + 主管 Agent/黑板底座 + 统一 Web 工作台）。
+- 状态：`FOUR_DEMO_CANDIDATES_READY_AWAITING_INDEPENDENT_EVALUATION`。
+- 旧入口 superseded 关系：graph-loop-training-control-v1、nextgen-four-model-training-loop-v2
+  仍为历史契约证据；5+5+250 人工门 = SUPERSEDED_FOR_DEMO_TRAINING（不删除）。

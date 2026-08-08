@@ -606,3 +606,10 @@ Agent 不是万能管理员。Graph 节点必须声明 capability、数据域、
 | 2026-08-04 | base `4dac8f8` | 创建 Codex 专用接续手册；整合训练门禁、E2 不晋级、统一架构、实施计划、Bug/训练恢复流程和长期方法论 |
 | 2026-08-08 | base `c1d1d6f` | 更新到 logic-chain-v3：rq_v2/LS 19/20/gold=0、production v5_r1、现有 Platform 实现；加入四训练通道、旧模型隔离、机器/人工并行线、MPS 测试漂移和新执行目录 |
 | 2026-08-08 | base `ce6f614` | 复核 V1 交付并重新打开执行链：确认 LS 208 标签完整、三批 29,176 照片/745,695 点、fresh 1002+8 失败；建立 V2 三批过滤+SAM+四模型+Profile 一次性执行手册与训练授权边界 |
+
+## 2026-08-09 接续更新
+- 当前实施入口：`docs/implementation/sku-long-tail-agent-foundation-v1/AGENT-EXECUTION-PROMPT.md`。
+- 关键事实：grouped split 后分类器真实泛化 30–35%（随机切分 82.4% 为泄漏偏差）；
+  KB 对百事系覆盖 0（recall 分母 0 → null）；四 snapshot v3 已冻结；
+  Agent Kernel/黑板/记忆/黄色抽屉/任务板已上线；production 未切换。
+- Gate：FOUR_DEMO_CANDIDATES_READY_AWAITING_INDEPENDENT_EVALUATION。
