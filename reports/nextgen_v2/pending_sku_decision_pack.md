@@ -1,0 +1,47 @@
+# Pending SKU 裁决包（45 类，自动生成，待人工裁决）
+
+- **125L七喜**（CROP-NEW-01）raw=198 groups=94 最近canonical=['2L七喜', '1L七喜'] sim=0.8 建议=merge_candidate
+- **125L百事**（CROP-NEW-02）raw=223 groups=54 最近canonical=['2L百事', '1L百事'] sim=0.8 建议=merge_candidate
+- **125L百事新年装**（CROP-NEW-03）raw=7 groups=5 最近canonical=['2L百事', '1L百事'] sim=0.615 建议=alias_or_package_version
+- **125L美年达橙味**（CROP-NEW-04）raw=253 groups=131 最近canonical=['2L美年达(橙味)', '1L美年达(橙味)'] sim=0.778 建议=alias_or_package_version
+- **1L七喜老包装**（CROP-NEW-05）raw=59 groups=45 最近canonical=['1L七喜'] sim=0.727 建议=alias_or_package_version
+- **1L百事无糖树莓**（CROP-NEW-06）raw=282 groups=156 最近canonical=['1L百事无糖', '2L百事无糖'] sim=0.857 建议=merge_candidate
+- **1L百事无糖青柠**（CROP-NEW-07）raw=295 groups=164 最近canonical=['2L百事无糖青柠', '1L百事无糖'] sim=0.875 建议=merge_candidate
+- **1L百事无糖黑神话系列**（CROP-NEW-08）raw=144 groups=79 最近canonical=['1L百事无糖', '2L百事无糖'] sim=0.706 建议=alias_or_package_version
+- **2L百事无糖树莓**（CROP-NEW-09）raw=354 groups=177 最近canonical=['2L百事无糖', '2L百事无糖青柠'] sim=0.857 建议=merge_candidate
+- **600ml莹纯0糖盐汽水**（CROP-NEW-10）raw=533 groups=208 最近canonical=无 sim=0.0 建议=new_sku
+- **佳得乐低糖红柚PET瓶600ML红盖**（CROP-NEW-11）raw=32 groups=23 最近canonical=['佳得乐低糖红柚PET瓶 600ML', '佳得乐低糖青柠PET瓶 600ML'] sim=0.914 建议=merge_candidate
+- **佳得乐低糖红柚PET瓶600ML黄盖**（CROP-NEW-12）raw=78 groups=47 最近canonical=['佳得乐低糖红柚PET瓶 600ML', '佳得乐低糖青柠PET瓶 600ML'] sim=0.914 建议=merge_candidate
+- **佳得乐低糖青柠PET瓶600ML红盖**（CROP-NEW-13）raw=36 groups=25 最近canonical=['佳得乐低糖青柠PET瓶 600ML', '佳得乐低糖红柚PET瓶 600ML'] sim=0.914 建议=merge_candidate
+- **佳得乐低糖青柠PET瓶600ML黄盖**（CROP-NEW-14）raw=73 groups=38 最近canonical=['佳得乐低糖青柠PET瓶 600ML', '佳得乐低糖红柚PET瓶 600ML'] sim=0.914 建议=merge_candidate
+- **佳得乐柠檬PET瓶600ML黄盖**（CROP-NEW-15）raw=24 groups=13 最近canonical=['佳得乐柠檬 PET瓶 600ML', '佳得乐低糖青柠PET瓶 600ML'] sim=0.875 建议=merge_candidate
+- **佳得乐橙PET瓶600ML黄盖**（CROP-NEW-16）raw=42 groups=24 最近canonical=['佳得乐橙 PET瓶 600ML', '佳得乐西柚 PET瓶 600ML'] sim=0.867 建议=merge_candidate
+- **佳得乐蓝莓PET瓶600ML黄盖**（CROP-NEW-17）raw=41 groups=23 最近canonical=['佳得乐蓝莓 PET瓶 600ML', '佳得乐橙 PET瓶 600ML'] sim=0.875 建议=merge_candidate
+- **佳得乐西柚PET瓶600ML黄盖**（CROP-NEW-18）raw=8 groups=5 最近canonical=['佳得乐西柚 PET瓶 600ML', '佳得乐低糖红柚PET瓶 600ML'] sim=0.875 建议=merge_candidate
+- **拉罐330ml美葡**（CROP-NEW-19）raw=280 groups=163 最近canonical=['拉罐330ml美橙', '拉罐330ml美青苹'] sim=0.889 建议=merge_candidate
+- **拉罐330ml轻怡**（CROP-NEW-20）raw=217 groups=122 最近canonical=['拉罐330ml美橙', '拉罐330ml百事'] sim=0.778 建议=alias_or_package_version
+- **无糖小柑橘柠檬600ml**（CROP-NEW-21）raw=241 groups=155 最近canonical=['七喜无糖小柑橘柠檬600ml', '百事无糖青柠600ml'] sim=0.923 建议=merge_candidate
+- **百事900ml无糖极度**（CROP-NEW-22）raw=127 groups=71 最近canonical=['百事600ml', '百事青柠600ml'] sim=0.667 建议=alias_or_package_version
+- **百事900ml无糖极度黑神话系列**（CROP-NEW-23）raw=86 groups=38 最近canonical=无 sim=0.0 建议=new_sku
+- **百事900ml百事可乐**（CROP-NEW-24）raw=285 groups=97 最近canonical=['百事600ml', '百事青柠600ml'] sim=0.667 建议=alias_or_package_version
+- **百事无糖500ml黑原味黑神话**（CROP-NEW-25）raw=166 groups=93 最近canonical=['百事无糖500ml（黑原味）', '百事无糖生可乐500ml'] sim=0.828 建议=merge_candidate
+- **百事无糖树莓500ml**（CROP-NEW-26）raw=300 groups=178 最近canonical=['百事无糖树莓600ml', '百事无糖生可乐500ml'] sim=0.909 建议=merge_candidate
+- **百事无糖青柠500ml**（CROP-NEW-27）raw=323 groups=169 最近canonical=['百事无糖青柠600ml', '百事青柠600ml'] sim=0.909 建议=merge_candidate
+- **百事桂花500ml**（CROP-NEW-28）raw=263 groups=162 最近canonical=['百事600ml', '百事青柠600ml'] sim=0.75 建议=alias_or_package_version
+- **百事清柠600ml**（CROP-NEW-29）raw=215 groups=105 最近canonical=['百事青柠600ml', '百事600ml'] sim=0.889 建议=merge_candidate
+- **百事生可乐柠檬味500ml**（CROP-NEW-30）raw=244 groups=126 最近canonical=['百事生可乐柠檬味500ml PET', '百事无糖生可乐500ml'] sim=0.867 建议=merge_candidate
+- **百事白柚青竹500ml**（CROP-NEW-31）raw=297 groups=182 最近canonical=['百事青柠600ml', '百事600ml'] sim=0.7 建议=alias_or_package_version
+- **百事白桃乌龙500ml**（CROP-NEW-32）raw=223 groups=144 最近canonical=['百事600ml', '百事无糖生可乐500ml'] sim=0.667 建议=alias_or_package_version
+- **纯果乐柠檬派对PET瓶450ML**（CROP-NEW-33）raw=229 groups=158 最近canonical=['纯果乐阳光橙 PET瓶 450ML', '纯水乐 PET瓶 550ML'] sim=0.727 建议=alias_or_package_version
+- **纯果乐热带美味PET瓶450ML**（CROP-NEW-34）raw=273 groups=159 最近canonical=['纯果乐阳光橙 PET瓶 450ML', '纯水乐 PET瓶 550ML'] sim=0.727 建议=alias_or_package_version
+- **纯果乐阳光橙125L**（CROP-NEW-35）raw=238 groups=112 最近canonical=['果粒橙1.25L', '纯果乐阳光橙 PET瓶 450ML'] sim=0.667 建议=alias_or_package_version
+- **纯果乐阳光橙2L**（CROP-NEW-36）raw=324 groups=149 最近canonical=['纯果乐阳光橙 PET瓶 450ML'] sim=0.56 建议=new_sku
+- **纯果乐阳光蜜桃PET瓶450M**（CROP-NEW-37）raw=280 groups=211 最近canonical=['纯果乐阳光橙 PET瓶 450ML', '纯水乐 PET瓶 550ML'] sim=0.812 建议=merge_candidate
+- **细长罐330ml无糖小柑橘柠檬**（CROP-NEW-38）raw=333 groups=169 最近canonical=['细长罐330ml百事无糖青柠', '细长罐330ml百事无糖树莓'] sim=0.759 建议=alias_or_package_version
+- **细长罐330ml百事无糖黑原味**（CROP-NEW-39）raw=145 groups=91 最近canonical=['细长罐330ml百事无糖（黑原味）', '细长罐330ml百事无糖青柠'] sim=0.938 建议=merge_candidate
+- **细长罐330ml百事无糖黑原味黑悟空系列**（CROP-NEW-40）raw=80 groups=44 最近canonical=['细长罐330ml百事无糖（黑原味）', '细长罐330ml百事无糖青柠'] sim=0.811 建议=merge_candidate
+- **细长罐330ml美橙新年装**（CROP-NEW-41）raw=13 groups=7 最近canonical=['细长罐330ml美橙', '细长罐330ml美橙6罐装'] sim=0.87 建议=merge_candidate
+- **美橙600ml黄盖**（CROP-NEW-42）raw=12 groups=4 最近canonical=['美橙600ml', '美年达青苹600ml'] sim=0.875 建议=merge_candidate
+- **葡萄600ml**（CROP-NEW-43）raw=277 groups=134 最近canonical=['美年达葡萄600ml', '芬达葡萄500ml'] sim=0.824 建议=merge_candidate
+- **西瓜600ml**（CROP-NEW-44）raw=336 groups=158 最近canonical=['美年达西瓜600ml', '轻怡600ml'] sim=0.824 建议=merge_candidate
+- **青苹600ml**（CROP-NEW-45）raw=249 groups=128 最近canonical=['美年达青苹600ml', '百事青柠600ml'] sim=0.824 建议=merge_candidate

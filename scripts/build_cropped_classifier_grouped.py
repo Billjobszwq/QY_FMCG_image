@@ -32,6 +32,8 @@ def main() -> int:
                                          / "d3_cropped_classifier_v2_grouped"))
     ap.add_argument("--val-ratio", type=float, default=0.15)
     ap.add_argument("--seed", type=int, default=42)
+    ap.add_argument("--scope", choices=["all", "canonical38"],
+                        default="all")
     a = ap.parse_args()
     out = Path(a.out)
     if out.exists():
@@ -45,6 +47,8 @@ def main() -> int:
     groups: dict[str, list] = {}
     no_source: list = []
     for d, e in mp["entries"].items():
+        if a.scope == "canonical38" and e["kind"] != "mapped":
+            continue
         src = ROOT / "cropped_images" / d
         for f in sorted(src.iterdir()):
             if f.suffix.lower() not in (".jpg", ".jpeg", ".png"):
