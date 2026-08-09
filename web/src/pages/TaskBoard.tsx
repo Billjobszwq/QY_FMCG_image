@@ -29,17 +29,19 @@ export default function TaskBoard() {
             return (
               <div key={i} style={{ background: "#fff",
                                     border: "1px solid #ddd", padding: 6,
-                                    marginBottom: 6, fontSize: 12 }}>
+                                    marginBottom: 6, fontSize: 12,
+                                    color: "#1a1a1a",
+                                    wordBreak: "break-word" as const }}>
                 <b>{e.title}</b>
                 <div>owner: {p.owner ?? e.by}</div>
                 <div>status: {p.state ?? s}</div>
                 {p.blocker && <div style={{ color: "#a00" }}>
                   blocker: {p.blocker}</div>}
-                <div style={{ opacity: 0.7 }}>
+                <div style={{ color: "#444", wordBreak: "break-word" as const }}>
                   evidence: {(e.evidence_json ?? "[]").slice(0, 60)}</div>
-                <div style={{ opacity: 0.7 }}>
+                <div style={{ color: "#444", wordBreak: "break-word" as const }}>
                   graph_run: sku_long_tail_nextgen_cycle_v1</div>
-                <div style={{ opacity: 0.7 }}>
+                <div style={{ color: "#444", wordBreak: "break-word" as const }}>
                   updated: {(e.created_at ?? "").slice(0, 19)}</div>
                 <div>acceptance: {p.acceptance ?? "pending"}</div>
               </div>

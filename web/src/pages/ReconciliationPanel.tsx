@@ -28,7 +28,7 @@ export default function ReconciliationPanel() {
 
   return (
     <section style={{ margin: 12, padding: 12, border: "2px solid #d9a520",
-                      background: "#fffbe8" }}>
+                      background: "#fffbe8", color: "#1a1a1a" }}>
       <h2>平台对账真实状态（四方一致）</h2>
       <p><b>Gate：</b>{gate?.gate}</p>
       <p><b>Production：</b>prod_20260805_v5_r1（未切换）</p>
@@ -49,7 +49,8 @@ export default function ReconciliationPanel() {
               <td>{a.artifact_id}</td>
               <td>{a.candidate_status}</td>
               <td>{a.disk_consistent ? "✓" : "✗ FAIL-CLOSED"}</td>
-              <td>{a.blocker}</td>
+              <td style={{ wordBreak: "break-word" as const, maxWidth: 260 }}>
+                {a.blocker}</td>
             </tr>
           ))}
         </tbody>

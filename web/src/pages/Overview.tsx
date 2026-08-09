@@ -9,6 +9,37 @@ const KIND_CN: Record<string, string> = {
   recognition: "识别",
 };
 
+// 状态收口 T3/T10：当前真实状态区（读投影，非旧250）
+function CurrentStatePanel() {
+  const [g, setG] = useState<any>(null);
+  const [c, setC] = useState<any>(null);
+  useEffect(() => {
+    fetch("/api/v1/platform/gate").then((r) => r.json())
+      .then(setG).catch(() => {});
+    fetch("/api/v1/training/cycle").then((r) => r.json())
+      .then(setC).catch(() => {});
+  }, []);
+  return (
+    <section style={{ margin: "8px 0", padding: 10,
+                      border: "2px solid #b8860b", background: "#fffbe8",
+                      color: "#1a1a1a" }}>
+      <h3 style={{ color: "#1a1a1a" }}>当前真实状态</h3>
+      <p style={{ color: "#1a1a1a" }}>
+        <b>Gate：</b>{g?.gate}
+        <br />
+        <b>Cycle：</b>{c?.summary?.done ?? 0}/{c?.summary?.distinct_nodes ?? 0}
+        节点完成；剩余评估/决策节点
+        （M3 独立测试、M4 独立评估、DemoEvaluation、micro-gold、
+        pending SKU 裁决、production 决定）
+        <br />
+        <b>M1/M2：</b>PILOT_NOT_CANDIDATE（数据不足，待补采全场景图）
+        <br />
+        <b>旧250：</b>SUPERSEDED_FOR_DEMO_TRAINING，不再 active
+      </p>
+    </section>
+  );
+}
+
 // U2-4：阶段→配色（业务语言默认，技术状态进高级详情）
 const STAGE_PILL: Record<string, string> = {
   todo: "degraded",
@@ -41,6 +72,7 @@ export default function Overview({ health }: { health: HealthBody | null }) {
   return (
     <section>
       <h2>我的工作台</h2>
+      <CurrentStatePanel />
 
       {wiError && <div className="banner banner-unavailable">任务中心加载失败：{wiError}</div>}
       {s && (
@@ -51,8 +83,11 @@ export default function Overview({ health }: { health: HealthBody | null }) {
               <div className="v">{s.todos}</div>
             </div>
             <div className="card">
-              <div className="k">待人工审核</div>
+              <div className="k">待人工审核（旧250已superseded）</div>
               <div className="v">{s.pending_review}</div>
+              <div style={{ fontSize: 11, color: "#555" }}>
+                历史队列，仅证据查询；替代=demo_micro_gold_v1
+              </div>
             </div>
             <div className="card">
               <div className="k">活动任务</div>
