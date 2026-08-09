@@ -21,7 +21,8 @@ export default function SupervisorDrawer() {
   const [msgs, setMsgs] = useState<any[]>([]);
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
-  const sidRef = useRef<string | null>(null);
+  const sidRef = useRef<string | null>(
+    localStorage.getItem("supervisor_session_id"));
   const boxRef = useRef<HTMLDivElement>(null);
 
   const reload = useCallback(async () => {
@@ -61,6 +62,8 @@ export default function SupervisorDrawer() {
           method: "POST", body: JSON.stringify({ title: "drawer" }),
         });
         sidRef.current = (await r.json()).session_id;
+        localStorage.setItem("supervisor_session_id",
+                             sidRef.current as string);
       }
       await api("/api/agent/v1/chat", {
         method: "POST",

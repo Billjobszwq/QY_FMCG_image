@@ -101,7 +101,7 @@ def create_agent_runtime_router(store: Any,
         # 批准 training.plan.create → 真实创建 Plan（不启动）
         if row["kind"] == "training.plan.create":
             store._conn.execute(
-                "INSERT INTO training_plan_v2 (plan_id, lane, config_json,"
+                "INSERT INTO training_plan_v2 (plan_id, lane, plan_json,"
                 " status, created_by, created_at, updated_at)"
                 " VALUES (?,?,?,?,?,?,?,?)",
                 ("plan-" + uuid4().hex[:8], "classifier",
