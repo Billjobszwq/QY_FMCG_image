@@ -103,7 +103,7 @@ def create_agent_runtime_router(store: Any,
             store._conn.execute(
                 "INSERT INTO training_plan_v2 (plan_id, lane, plan_json,"
                 " status, created_by, created_at, updated_at)"
-                " VALUES (?,?,?,?,?,?,?,?)",
+                " VALUES (?,?,?,?,?,?,?)",
                 ("plan-" + uuid4().hex[:8], "classifier",
                  row["params_json"], "approved_not_started", p["actor"],
                  _now(), _now()))
