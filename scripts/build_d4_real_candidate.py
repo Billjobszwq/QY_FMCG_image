@@ -49,7 +49,7 @@ def embed(texts):
 
 
 def main() -> int:
-    out = ROOT / ".datasets_nextgen/d4_real_candidate_v1"
+    out = ROOT / ".datasets_nextgen/d4_real_candidate_v2"
     if out.exists():
         print("exists skip")
         return 1
@@ -79,13 +79,17 @@ def main() -> int:
     rng = random.Random(31)
     records = []
     n_abstain = 0
+    ocr_cache: dict = {}
     for d, e in mp["entries"].items():
         if e["kind"] != "mapped":
             continue
         src = ROOT / "cropped_images" / d
         files = sorted(src.glob("*.jpg"))
+        if e["class_id"] not in ocr_cache and files:
+            ocr_cache[e["class_id"]] = ocr_text(files[0].read_bytes())
+        cls_ocr = ocr_cache.get(e["class_id"], "")
         for f in files[:30]:
-            txt = ocr_text(f.read_bytes())
+            txt = cls_ocr
             qte = embed([txt or ""])[0]
             with torch.no_grad():
                 qie = model(tf(Image.open(f).convert("RGB"))[None]
