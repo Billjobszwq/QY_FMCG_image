@@ -88,3 +88,4 @@ web/dist/
 
 # Platform V2 开发存储（W5，不入库）
 .platform/
+.gstack/
