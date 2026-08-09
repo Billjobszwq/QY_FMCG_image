@@ -41,8 +41,12 @@ export default function ReconciliationPanel() {
       </ul>
       <h3>模型 Artifact（磁盘=DB=API 对账）</h3>
       <table style={{ fontSize: 12, width: "100%" }}>
-        <thead><tr><th>artifact</th><th>candidate_status</th>
-          <th>disk 一致</th><th>blocker</th></tr></thead>
+        <thead><tr style={{ color: "#1a1a1a" }}>
+          <th style={{ color: "#1a1a1a", textAlign: "left" }}>artifact</th>
+          <th style={{ color: "#1a1a1a", textAlign: "left" }}>candidate_status</th>
+          <th style={{ color: "#1a1a1a", textAlign: "left" }}>disk 一致</th>
+          <th style={{ color: "#1a1a1a", textAlign: "left" }}>blocker</th>
+        </tr></thead>
         <tbody>
           {arts.map((a) => (
             <tr key={a.artifact_id}>
