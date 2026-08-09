@@ -14,7 +14,7 @@ from pathlib import Path
 import pytest
 
 from src.platform.data.store import PlatformStore
-from src.modules.training_control.cycle_projection import (
+from src.platform.projection import (
     CycleProjectionService,
     IllegalTransition,
 )

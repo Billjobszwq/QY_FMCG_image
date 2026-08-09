@@ -96,7 +96,7 @@ class SupervisorAgent:
                               "启动），不再建议先完成 250 项审核。")
             resp["evidence"] = ["platform.sqlite:flow_supersession_v1"]
         elif "训练到哪里" in t or "目前训练" in t or "cycle" in t.lower():
-            from src.modules.training_control.cycle_projection import (
+            from src.platform.projection import (
                 CycleProjectionService)
             cps = CycleProjectionService(self.store)
             sm = cps.cycle_summary("sku_long_tail_nextgen_cycle_v1")

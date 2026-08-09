@@ -70,7 +70,7 @@ def create_agents_router(store: Any,
     @router.get("/api/v1/taskboard")
     def taskboard() -> dict:
         """任务板：读 task_state_projection_v1 唯一投影（无过期状态）。"""
-        from src.modules.training_control.cycle_projection import (
+        from src.platform.projection import (
             TaskProjectionService)
         tps = TaskProjectionService(store)
         return {"states": tps.board(

@@ -22,7 +22,7 @@
  ],
  "peak_mem_gb": 13.4,
  "artifact_sha256": "6e161234664d304a4997e36ddba5a6dd5f6aa760fc61148e2e730dda09299b67",
- "candidate": true,
- "candidate_status": "CANDIDATE_PENDING_EVAL",
+ "candidate": false,
+ "candidate_status": "PILOT_PENDING_EVALUATION",
  "note": "KB gate passed (coverage 1.0, recall@8 1.0); awaiting micro-gold"
 }

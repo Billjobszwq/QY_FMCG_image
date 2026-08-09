@@ -40,7 +40,7 @@ def create_recon_router(store: Any) -> APIRouter:
     @router.get("/api/v1/training/cycle")
     def cycle() -> dict:
         # 状态收口：读唯一投影 v2（历史表仅证据）
-        from src.modules.training_control.cycle_projection import (
+        from src.platform.projection import (
             CycleProjectionService)
         row = store._conn.execute(
             "SELECT * FROM training_cycle_v1 WHERE cycle_id="
