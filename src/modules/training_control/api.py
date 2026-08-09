@@ -302,10 +302,12 @@ def _mount_profile_endpoints(router: APIRouter, store: Any) -> None:
 
     @router.get("/api/v1/recognition/profiles")
     def profiles_list() -> dict:
-        reg = ProfileRegistry(store)
-        ps = reg.list_profiles()
+        # 纠偏 Task 7：状态从 Artifact Registry 动态派生，不存过期文本
+        from .profiles import derive_profiles
+        ps = derive_profiles(store)
         return {"count": len(ps), "profiles": ps,
-                "note": "识别只允许选择注册 profile_id，禁任意权重路径"}
+                "note": "识别只允许选择注册 profile_id，禁任意权重路径；"
+                        "status 由 artifact registry 动态派生"}
 
 def _mount_cycle_endpoints(router: APIRouter, store: Any,
                            auth: AuthService | None) -> None:

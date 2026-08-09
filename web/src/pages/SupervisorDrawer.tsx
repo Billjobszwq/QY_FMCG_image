@@ -1,11 +1,14 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { fetchAgents, fetchBlackboard, fetchTaskboard } from "../api";
+import { csrfToken, fetchAgents, fetchBlackboard,
+  fetchTaskboard } from "../api";
 
 // 纠偏 Task 6：主管抽屉（可读对比度 + 对话输入 + 会话历史 + 命令审批）。
 // 数据全部来自平台事实源（blackboard/taskboard/agents/sessions）。
 const api = (p: string, o?: RequestInit) =>
   fetch(p, {
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json",
+               ...(csrfToken() ? { "X-CSRF-Token": csrfToken() as string }
+                   : {}) },
     credentials: "include",
     ...o,
   });

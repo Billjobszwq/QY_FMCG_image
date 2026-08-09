@@ -37,7 +37,7 @@ def create_agent_runtime_router(store: Any,
         sid = "sess-" + uuid4().hex[:10]
         store._conn.execute(
             "INSERT INTO agent_session_v1 (session_id, created_by,"
-            " created_at) VALUES (?,?,?)", (sid, p["name"], _now()))
+            " created_at) VALUES (?,?,?)", (sid, p["actor"], _now()))
         store._conn.commit()
         return {"session_id": sid}
 
@@ -71,7 +71,7 @@ def create_agent_runtime_router(store: Any,
                 (body.session_id,)).fetchone():
             raise HTTPException(404, "session not found")
         sup = SupervisorAgent(store)
-        resp = sup.chat(body.session_id, body.text, actor=p["name"])
+        resp = sup.chat(body.session_id, body.text, actor=p["actor"])
         # 命令预览落库
         for c in resp.get("commands", []):
             store._conn.execute(
@@ -79,7 +79,7 @@ def create_agent_runtime_router(store: Any,
                 " status, created_by, created_at) VALUES (?,?,?,?,?,?)",
                 (c["command_id"], c["kind"],
                  json.dumps(c.get("params", {}), ensure_ascii=False),
-                 "pending_approval", p["name"], _now()))
+                 "pending_approval", p["actor"], _now()))
             store._conn.commit()
         return resp
 
@@ -96,7 +96,7 @@ def create_agent_runtime_router(store: Any,
         store._conn.execute(
             "UPDATE agent_command_v1 SET status='approved', decided_by=?,"
             " decided_at=? WHERE command_id=?",
-            (p["name"], _now(), command_id))
+            (p["actor"], _now(), command_id))
         store._conn.commit()
         # 批准 training.plan.create → 真实创建 Plan（不启动）
         if row["kind"] == "training.plan.create":
@@ -105,7 +105,7 @@ def create_agent_runtime_router(store: Any,
                 " status, created_by, created_at, updated_at)"
                 " VALUES (?,?,?,?,?,?,?,?)",
                 ("plan-" + uuid4().hex[:8], "classifier",
-                 row["params_json"], "approved_not_started", p["name"],
+                 row["params_json"], "approved_not_started", p["actor"],
                  _now(), _now()))
             store._conn.commit()
         return {"status": "approved"}
@@ -116,7 +116,7 @@ def create_agent_runtime_router(store: Any,
         store._conn.execute(
             "UPDATE agent_command_v1 SET status='rejected', decided_by=?,"
             " decided_at=? WHERE command_id=?",
-            (p["name"], _now(), command_id))
+            (p["actor"], _now(), command_id))
         store._conn.commit()
         return {"status": "rejected"}
 

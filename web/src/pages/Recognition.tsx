@@ -23,6 +23,36 @@ const STATUS_CN: Record<string, string> = {
   failed: "失败",
 };
 
+function ProfilesPanel() {
+  const [ps, setPs] = useState<any[]>([]);
+  useEffect(() => {
+    fetch("/api/v1/recognition/profiles")
+      .then((r) => r.json())
+      .then((d) => setPs(d.profiles ?? []))
+      .catch(() => {});
+  }, []);
+  return (
+    <section style={{ margin: 12, padding: 10, border: "1px solid #ccc" }}>
+      <h3>Recognition Profiles（状态动态派生）</h3>
+      <table style={{ fontSize: 12, width: "100%" }}>
+        <thead><tr><th>profile</th><th>status</th><th>blockers</th>
+          <th>tags</th></tr></thead>
+        <tbody>
+          {ps.map((x) => (
+            <tr key={x.profile_id}>
+              <td>{x.profile_id}</td>
+              <td style={{ color: x.status === "enabled" ? "#070" : "#a00" }}>
+                {x.status}</td>
+              <td>{(x.blockers ?? []).join("; ")}</td>
+              <td>{(x.tags ?? []).join(",")}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </section>
+  );
+}
+
 export default function Recognition() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -104,6 +134,7 @@ export default function Recognition() {
 
   return (
     <section>
+      <ProfilesPanel />
       <h2>图片识别（统一入口）</h2>
       <p className="muted">
         单文件 / 批量文件 / URL 共用同一识别服务层（8091 级联识别，bundle
