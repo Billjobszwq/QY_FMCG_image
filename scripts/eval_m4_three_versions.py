@@ -59,8 +59,7 @@ def build_candidates(qte, qie, txt_v, img_v, kb, k=8):
     return [kb[i]["display"] for i in np.argsort(-score)[:k]]
 
 
-def main() -> int:
-    from mlx_vlm import generate, load
+def stage_a() -> int:
     import torch
     import torchvision
     from torchvision import transforms
@@ -107,15 +106,25 @@ def main() -> int:
             samples.append({"file": files[0], "gt": None,
                             "class_id": e["class_id"],
                             "is_canonical": False, "ocr": ""})
-    print("holdout samples:", len(samples))
-
-    # 预计算候选
     for s in samples:
         qte = embed([s["ocr"] or ""])[0]
         with torch.no_grad():
             qie = feat(tf(Image.open(s["file"]).convert("RGB"))[None]
                        ).squeeze(0).tolist()
         s["cands"] = build_candidates(qte, qie, txt_v, img_v, kb)
+        s["file"] = str(s["file"])
+    Path("/tmp/m4_eval_samples.json").write_text(
+        json.dumps(samples, ensure_ascii=False))
+    print("stage A done:", len(samples))
+    return 0
+
+
+def main() -> int:
+    from mlx_vlm import generate, load
+    from mlx_vlm.prompt_utils import apply_chat_template
+    samples = json.loads(Path("/tmp/m4_eval_samples.json").read_text())
+    kb = json.loads((ROOT / ".kb/canonical38.json").read_text())
+    print("holdout samples:", len(samples))
 
     versions = [
         ("base", None),
@@ -129,6 +138,7 @@ def main() -> int:
         model, processor = load(
             "mlx-community/Qwen3-VL-4B-Instruct-4bit",
             adapter_path=adapter)
+        config = model.config if hasattr(model, "config") else {}
         hit = tot = 0
         accepted = acc_ok = 0
         abstain_n = abstain_ok = 0
@@ -138,15 +148,19 @@ def main() -> int:
         for s in samples:
             cand_txt = "\n".join(f"{i+1}. {c}" for i, c in
                                  enumerate(s["cands"]))
-            prompt = f"货架商品切图。候选 SKU：\n{cand_txt}\n最匹配编号？都不匹配回答 none。"
+            prompt = apply_chat_template(
+                processor, config,
+                "USER: <image>\n货架商品切图。候选 SKU：\n"
+                f"{cand_txt}\n最匹配编号？都不匹配回答 none。\n"
+                "ASSISTANT:", num_images=1)
             t0 = time.time()
             out = generate(model, processor, prompt,
                            image=str(s["file"]), max_tokens=8,
                            verbose=False)
             dt = time.time() - t0
-            txt = out["text"].strip()
+            txt = out.text.strip()
             lats.append(dt)
-            toks.append(out.get("token_count", 0))
+            toks.append(getattr(out, "token_count", 0))
             gt_pos = (s["cands"].index(s["gt"]) + 1
                       if s["gt"] in s["cands"] else None)
             tot += 1
@@ -156,7 +170,7 @@ def main() -> int:
                     abstain_ok += 1
                 else:
                     false_reject += 1
-                    errors.append({"file": s["file"].name,
+                    errors.append({"file": Path(s["file"]).name,
                                    "gt": s["gt"], "pred": "none"})
             elif txt.isdigit():
                 accepted += 1
@@ -164,14 +178,14 @@ def main() -> int:
                     hit += 1
                     acc_ok += 1
                 elif s["is_canonical"]:
-                    errors.append({"file": s["file"].name,
+                    errors.append({"file": Path(s["file"]).name,
                                    "gt": s["gt"], "pred": txt})
                 else:
                     false_accept += 1
-                    errors.append({"file": s["file"].name,
+                    errors.append({"file": Path(s["file"]).name,
                                    "gt": None, "pred": txt})
             else:
-                errors.append({"file": s["file"].name, "gt": s["gt"],
+                errors.append({"file": Path(s["file"]).name, "gt": s["gt"],
                                "pred": txt})
         lats.sort()
         results[vname] = {
@@ -214,4 +228,7 @@ def main() -> int:
 
 
 if __name__ == "__main__":
+    import sys as _s
+    if len(_s.argv) > 1 and _s.argv[1] == "a":
+        raise SystemExit(stage_a())
     raise SystemExit(main())
