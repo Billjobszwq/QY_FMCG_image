@@ -28,7 +28,8 @@ def test_eight_profiles_present(store):
     ps = derive_profiles(store)
     ids = {p["profile_id"] for p in ps}
     assert {"production_legacy", "nextgen_m1_pilot", "nextgen_m1_m2_pilot",
-            "canonical38_classifier", "canonical38_cascade",
+            "canonical38_classifier_e1", "canonical38_classifier_e5",
+            "canonical38_vlm_real_candidate", "canonical38_cascade",
             "research83_classifier", "research83_full_cascade",
             "shadow_compare"} <= ids
 
