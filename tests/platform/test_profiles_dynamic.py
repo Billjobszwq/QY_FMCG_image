@@ -34,10 +34,10 @@ def test_eight_profiles_present(store):
 
 
 def test_smoke_not_selectable(store):
-    _reg(store, "nextgen_detector_smoke_v1", "SMOKE_ONLY_NOT_CANDIDATE")
+    _reg(store, "nextgen_detector_pilot_v1", "PILOT_NOT_CANDIDATE")
     ps = {p["profile_id"]: p for p in derive_profiles(store)}
     assert ps["nextgen_m1_pilot"]["status"] == "disabled"
-    assert "smoke_only" in ps["nextgen_m1_pilot"]["blockers"][0].lower() or \
+    assert "pilot_not_candidate" in ps["nextgen_m1_pilot"]["blockers"][0].lower() or \
         ps["nextgen_m1_pilot"]["blockers"]
 
 
@@ -47,7 +47,7 @@ def test_production_legacy_enabled_without_artifacts(store):
 
 
 def test_candidate_enables_profile(store):
-    _reg(store, "nextgen_detector_smoke_v1", "CANDIDATE")
+    _reg(store, "nextgen_detector_pilot_v1", "CANDIDATE")
     ps = {p["profile_id"]: p for p in derive_profiles(store)}
     assert ps["nextgen_m1_pilot"]["status"] == "enabled"
 

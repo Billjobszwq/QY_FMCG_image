@@ -39,20 +39,37 @@ def create_recon_router(store: Any) -> APIRouter:
 
     @router.get("/api/v1/training/cycle")
     def cycle() -> dict:
+        # 状态收口：读唯一投影 v2（历史表仅证据）
+        from src.modules.training_control.cycle_projection import (
+            CycleProjectionService)
         row = store._conn.execute(
             "SELECT * FROM training_cycle_v1 WHERE cycle_id="
             "'sku_long_tail_nextgen_cycle_v1'").fetchone()
         if row is None:
             return {"cycle": None}
-        nodes = store._conn.execute(
-            "SELECT node, status, evidence_json FROM training_cycle_node_v1"
-            " WHERE cycle_id=? ORDER BY id", (row["cycle_id"],)).fetchall()
-        return {**dict(row), "nodes": [dict(n) for n in nodes]}
+        cps = CycleProjectionService(store)
+        proj = store._conn.execute(
+            "SELECT logical_node AS node, current_status AS status,"
+            " evidence_json FROM training_cycle_node_state_v2"
+            " WHERE cycle_id=? ORDER BY logical_node",
+            (row["cycle_id"],)).fetchall()
+        return {**dict(row), "nodes": [dict(n) for n in proj],
+                "summary": cps.cycle_summary(row["cycle_id"]),
+                "history_rows": store._conn.execute(
+                    "SELECT COUNT(*) c FROM training_cycle_node_v1"
+                    " WHERE cycle_id=?",
+                    (row["cycle_id"],)).fetchone()["c"]}
 
     @router.get("/api/v1/platform/gate")
     def gate() -> dict:
-        return {"gate": "PIPELINE_SMOKES_READY_PLATFORM_NOT_CONNECTED",
-                "corrected_from":
-                "FOUR_DEMO_CANDIDATES_READY_AWAITING_INDEPENDENT_EVALUATION"}
+        row = store._conn.execute(
+            "SELECT status FROM training_cycle_v1 WHERE cycle_id="
+            "'sku_long_tail_nextgen_cycle_v1'").fetchone()
+        return {"gate": row["status"] if row else
+                "MODEL_PILOTS_READY_AWAITING_CANDIDATE_EVALUATION",
+                "history": ["FOUR_DEMO_CANDIDATES_READY_AWAITING_INDEPENDENT_"
+                            "EVALUATION", "FOUR_CANDIDATES_READY_AWAITING_"
+                            "MICRO_GOLD（撤销）",
+                            "PIPELINE_SMOKES_READY_PLATFORM_NOT_CONNECTED"]}
 
     return router

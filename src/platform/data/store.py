@@ -1039,6 +1039,33 @@ CREATE TABLE IF NOT EXISTS agent_command_v1 (
 );
 """
 
+_M028 = """
+CREATE TABLE IF NOT EXISTS training_cycle_node_state_v2 (
+    cycle_id TEXT NOT NULL,
+    logical_node TEXT NOT NULL,
+    current_status TEXT NOT NULL,
+    latest_event_id TEXT NOT NULL DEFAULT '',
+    evidence_json TEXT NOT NULL DEFAULT '{}',
+    version INTEGER NOT NULL DEFAULT 1,
+    updated_at TEXT NOT NULL,
+    UNIQUE(cycle_id, logical_node)
+);
+CREATE TABLE IF NOT EXISTS task_state_projection_v1 (
+    project TEXT NOT NULL DEFAULT 'llm-image',
+    cycle_id TEXT NOT NULL DEFAULT '',
+    logical_task_key TEXT NOT NULL,
+    title TEXT NOT NULL DEFAULT '',
+    current_status TEXT NOT NULL,
+    owner TEXT NOT NULL DEFAULT '',
+    blocker TEXT NOT NULL DEFAULT '',
+    evidence_json TEXT NOT NULL DEFAULT '[]',
+    acceptance TEXT NOT NULL DEFAULT 'pending',
+    version INTEGER NOT NULL DEFAULT 1,
+    updated_at TEXT NOT NULL,
+    UNIQUE(project, cycle_id, logical_task_key)
+);
+"""
+
 MIGRATIONS: tuple[tuple[str, str], ...] = (
     ("001_platform_init", _M001),
     ("002_labeling_inbox", _M002),
@@ -1067,6 +1094,7 @@ MIGRATIONS: tuple[tuple[str, str], ...] = (
     ("025_agent_blackboard_memory_v1", _M025),
     ("026_reconciliation_registry_v1", _M026),
     ("027_agent_runtime_v1", _M027),
+    ("028_state_projections_v2", _M028),
 )
 
 

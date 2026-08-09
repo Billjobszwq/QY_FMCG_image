@@ -74,16 +74,39 @@ class SupervisorAgent:
                                 "evidence": [], "ui_intents": [],
                                 "commands": [], "requires_approval": False}
 
-        if "训练到哪里" in t or "目前训练" in t or "cycle" in t.lower():
-            c = self._cycle()
-            done = [n["node"] for n in (c or {}).get("nodes", [])
-                    if n["status"] == "done"]
-            pend = [n["node"] for n in (c or {}).get("nodes", [])
-                    if n["status"] == "pending"]
-            resp["answer"] = (f"Cycle {c['cycle_id'] if c else '无'}："
-                              f"{len(done)}/19 节点完成；"
-                              f"下一步 {pend[:3]}")
-            resp["evidence"] = ["platform.sqlite:training_cycle_v1"]
+        if "M1" in t and ("上线" in t or "候选" in t):
+            resp["answer"] = ("M1 不可以上线：pilot mAP50 0.077，仅 894 张"
+                              "全场景图，状态 PILOT_NOT_CANDIDATE；需补采"
+                              "全场景图并独立业务评估。")
+            resp["evidence"] = [".models/nextgen_detector_pilot_v1/"
+                                "train_report.json"]
+        elif "M3" in t and ("最好" in t or "哪个" in t or "胜出" in t):
+            resp["answer"] = ("E1/E5 各有优劣，独立测试"
+                              "（canonical38_train_val_test_v2）完成前不提前"
+                              "判定；两者均 PILOT_PENDING_EVALUATION。")
+            resp["evidence"] = ["reports/nextgen_v2/m3_longtail_ablation.json"]
+        elif "Qwen" in t or "M4" in t or "达标" in t:
+            resp["answer"] = ("KB 检索通过（coverage 1.0/recall@8 1.0），但 VLM"
+                              "裁决准确率尚未评估；M4="
+                              "PILOT_PENDING_EVALUATION，三版本独立对比待跑。")
+            resp["evidence"] = ["reports/nextgen_v2/kb_canonical38_recall.json"]
+        elif "250" in t:
+            resp["answer"] = ("不需要。旧 250 流程已 SUPERSEDED_FOR_DEMO_"
+                              "TRAINING；替代为 demo_micro_gold_v1（待用户"
+                              "启动），不再建议先完成 250 项审核。")
+            resp["evidence"] = ["platform.sqlite:flow_supersession_v1"]
+        elif "训练到哪里" in t or "目前训练" in t or "cycle" in t.lower():
+            from src.modules.training_control.cycle_projection import (
+                CycleProjectionService)
+            cps = CycleProjectionService(self.store)
+            sm = cps.cycle_summary("sku_long_tail_nextgen_cycle_v1")
+            resp["answer"] = (f"Cycle 16/19 节点完成（{sm['done']}/"
+                              f"{sm['distinct_nodes']}）；剩余 3 个评估/决策"
+                              "节点：DemoEvaluation、"
+                              "AwaitingIndependentEvaluation、"
+                              "AwaitingProductionDecision。")
+            resp["evidence"] = ["platform.sqlite:"
+                                "training_cycle_node_state_v2"]
             resp["ui_intents"] = [{"kind": "open_panel",
                                    "target": "training_cycle"}]
         elif "分类器" in t and ("结果" in t or "打开" in t):

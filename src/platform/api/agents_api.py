@@ -69,21 +69,11 @@ def create_agents_router(store: Any,
 
     @router.get("/api/v1/taskboard")
     def taskboard() -> dict:
-        """任务板投影：Todo→Running→Waiting→Review→Done。
-
-        同标题 Task 取最新事件 state（append-only，不修改历史）。"""
-        bb = BlackboardService(store)
-        tasks = [e for e in bb.cards() if e["event_type"] == "Task"]
-        latest: dict[str, dict] = {}
-        for t in tasks:
-            payload = json.loads(t["payload_json"] or "{}")
-            title = payload.get("title") or payload.get("text") or t["id"]
-            latest[title] = {**t, "payload": payload, "title": title}
-        by_state: dict[str, list] = {s: [] for s in (
-            "todo", "running", "waiting", "review", "done")}
-        for t in latest.values():
-            st = t["payload"].get("state") or "todo"
-            by_state.setdefault(st, []).append(t)
-        return {"states": by_state}
+        """任务板：读 task_state_projection_v1 唯一投影（无过期状态）。"""
+        from src.modules.training_control.cycle_projection import (
+            TaskProjectionService)
+        tps = TaskProjectionService(store)
+        return {"states": tps.board(
+            "sku_long_tail_nextgen_cycle_v1")}
 
     return router
