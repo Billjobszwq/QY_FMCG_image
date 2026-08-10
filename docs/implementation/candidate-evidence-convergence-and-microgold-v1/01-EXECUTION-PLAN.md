@@ -1,0 +1,5 @@
+# 01 执行计划（Graph 13 节点）
+BaselineAudit→ArtifactIdentityConvergence→ProfileConvergence→M3EvaluationRegistration
+→M4RealInferenceSmoke→M4ThreeVersionRealEvaluation→EvaluationRegistryConvergence
+→CycleTaskboardBlackboardConvergence→HermeticTestIsolation→WebAndAPIAcceptance
+→MicroGoldDatasetBuild→LabelStudioMicroGoldImport→AwaitingHumanReview。
