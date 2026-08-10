@@ -74,7 +74,38 @@ class SupervisorAgent:
                                 "evidence": [], "ui_intents": [],
                                 "commands": [], "requires_approval": False}
 
-        if "M1" in t and ("上线" in t or "候选" in t):
+        if "候选" in t and ("哪些" in t or "模型是" in t):
+            resp["answer"] = ("候选：M3 E1（m3_tvt_e1_v2，综合优先档）/"
+                              "M3 E5（m3_tvt_e5_v2，calibration 档）/"
+                              "M4 new real adapter，均 "
+                              "CANDIDATE_PENDING_MICRO_GOLD；M1/M2 为 "
+                              "PILOT_NOT_CANDIDATE。")
+            resp["evidence"] = ["platform.sqlite:model_artifact_registry_v1"]
+        elif "E1" in t and "E5" in t and ("区别" in t or "差异" in t):
+            resp["answer"] = ("E1 top1 0.9484/F1 0.94/worst 0.766 领先；"
+                              "E5 ECE 0.013 校准最优；各有优劣，分档保留，"
+                              "不强行选一个。")
+            resp["evidence"] = [".models/m3_tvt_e1_v2/train_report.json",
+                                ".models/m3_tvt_e5_v2/train_report.json"]
+        elif "0.828" in t or ("M4" in t and "真实" in t):
+            resp["answer"] = ("0.828 为三版本真实推理结果（v2 证据版）："
+                              "逐样本 raw output/generation_tokens/wall time/"
+                              "prompt hash/adapter sha 在案；base 0.475/旧 "
+                              "0.656/新 0.828。仍为 "
+                              "CANDIDATE_PENDING_MICRO_GOLD。")
+            resp["evidence"] = [
+                "reports/nextgen_v2/m4_three_version_eval_v2.json",
+                "reports/nextgen_v2/m4_evidence_v2/"
+                "per_sample_new_real_adapter.jsonl"]
+        elif "micro-gold" in t or "micro_gold" in t or "micro gold" in t:
+            resp["answer"] = ("demo_micro_gold_v1 共 200 任务（LS 项目 21）："
+                              "120 canonical+40 pending+20 困难+20 负样本；"
+                              "blind 无 prediction；待人工主审。")
+            resp["evidence"] = [".micro_gold_v1/manifest.json"]
+        elif "训练进程" in t or "正在训练" in t:
+            resp["answer"] = ("当前无训练进程（MPS/MLX 空闲）；"
+                              "本轮只评估不训练。")
+        elif "M1" in t and ("上线" in t or "候选" in t):
             resp["answer"] = ("M1 不可以上线：pilot mAP50 0.077，仅 894 张"
                               "全场景图，状态 PILOT_NOT_CANDIDATE；需补采"
                               "全场景图并独立业务评估。")
