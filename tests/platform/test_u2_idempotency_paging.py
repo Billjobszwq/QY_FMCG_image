@@ -167,7 +167,12 @@ class TestEnqueueIdempotency:
 
         s = PlatformStore(tmp_path / "p.sqlite")
         try:
-            svc = TrainingGovernanceService(s)
+            svc = TrainingGovernanceService(
+                s, hardware_gate=lambda **kw: {
+                    "gate_version": "g0-fake", "ok": True,
+                    "checks": [{"name": "fake_unit_evidence",
+                                 "ok": True}],
+                    "evidence": {"note": "hermetic fake G0"}})
             snap = svc.register_snapshot(
                 "e2", "v1", "product", MANIFEST_OK,
                 source_actor="a", source_conclusion="ok")

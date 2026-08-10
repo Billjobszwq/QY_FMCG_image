@@ -157,38 +157,85 @@ _PROFILE_DEFS = [
 ]
 
 
+
+# ---- 证据链收口（2026-08-10）：artifact 状态纠正表 ----
+ARTIFACT_STATUS_FIX = {
+    "m3_tvt_e1_v2": "CANDIDATE_PENDING_MICRO_GOLD",
+    "m3_tvt_e5_v2": "CANDIDATE_PENDING_MICRO_GOLD",
+    "m3_ablation_e1_v1": "EXPERIMENTAL_SUPERSEDED_BY_M3_TVT_E1_V2",
+    "m3_ablation_e5_v1": "EXPERIMENTAL_SUPERSEDED_BY_M3_TVT_E5_V2",
+}
+
+_PROFILE_SEED = [
+    ("production_legacy", ["prod_20260805_v5_r1_bundle"], [], ["production"]),
+    ("nextgen_m1_pilot", ["nextgen_detector_pilot_v1"], [], []),
+    ("nextgen_m1_m2_pilot", ["nextgen_detector_pilot_v1",
+                             "nextgen_segmenter_pilot_v1"], [], []),
+    ("canonical38_classifier_e1", ["m3_tvt_e1_v2"], ["canonical38"], []),
+    ("canonical38_classifier_e5", ["m3_tvt_e5_v2"], ["canonical38"], []),
+    ("canonical38_vlm_real_candidate",
+     ["nextgen_vlm_real_candidate_v1"], ["canonical38"], []),
+    ("canonical38_cascade", ["nextgen_detector_pilot_v1",
+                             "nextgen_segmenter_pilot_v1", "m3_tvt_e1_v2",
+                             "nextgen_vlm_real_candidate_v1"],
+     ["canonical38"], []),
+    ("research83_classifier", ["nextgen_classifier_grouped_v1"],
+     ["research83"], ["实验，不可商业输出"]),
+    ("research83_full_cascade", ["nextgen_detector_pilot_v1",
+                                 "nextgen_segmenter_pilot_v1",
+                                 "nextgen_classifier_grouped_v1",
+                                 "nextgen_vlm_real_candidate_v1"],
+     ["research83"], ["实验，不可商业输出"]),
+    ("shadow_compare", ["prod_20260805_v5_r1_bundle", "m3_tvt_e1_v2"],
+     [], ["shadow"]),
+]
+
+
+def seed_profile_defs(store) -> None:
+    import json as _j
+    from datetime import datetime, timezone
+    for pid, comps, scopes, tags in _PROFILE_SEED:
+        if not store._conn.execute(
+                "SELECT 1 FROM recognition_profile_def_v1 WHERE"
+                " profile_id=?", (pid,)).fetchone():
+            store._conn.execute(
+                "INSERT INTO recognition_profile_def_v1 (profile_id,"
+                " components_json, scopes_json, tags_json, legacy,"
+                " created_at) VALUES (?,?,?,?,0,?)",
+                (pid, _j.dumps(comps), _j.dumps(scopes), _j.dumps(tags),
+                 datetime.now(timezone.utc).isoformat()))
+    store._conn.commit()
+
+
 def derive_profiles(store) -> list[dict]:
-    """从 Artifact Registry 动态派生 status/blockers。"""
+    """状态/blocker 从 Artifact Registry 动态派生；定义读 DB（单源）。"""
+    import json as _j
+    seed_profile_defs(store)
     arts = {r["artifact_id"]: r for r in store._conn.execute(
         "SELECT artifact_id, candidate_status, blocker FROM"
         " model_artifact_registry_v1").fetchall()}
     out = []
-    for pid, needs, scopes, tags in _PROFILE_DEFS:
+    for row in store._conn.execute(
+            "SELECT * FROM recognition_profile_def_v1 ORDER BY profile_id"):
+        needs = _j.loads(row["components_json"])
+        tags = _j.loads(row["tags_json"])
         blockers = []
-        if pid == "production_legacy":
-            out.append({"profile_id": pid, "status": "enabled",
-                        "blockers": [], "tags": tags,
-                        "components": needs})
-            continue
-        for aid in needs:
-            a = arts.get(aid)
-            if a is None:
-                blockers.append(f"{aid}: not_registered")
-            elif a["candidate_status"] != "CANDIDATE":
-                blockers.append(
-                    f"{aid}: {a['candidate_status']}（smoke_only/非候选不可选）")
-        # M4 组件：KB 覆盖 0 时禁用
-        if "nextgen_vlm_cropped_v1" in needs:
-            ev = store._conn.execute(
-                "SELECT summary_json FROM evaluation_registry_v1"
-                " WHERE eval_id='qwen_candidate_recall'").fetchone()
-            if ev:
-                import json as _j
-                sm = _j.loads(ev["summary_json"])
-                if sm.get("gt_in_kb", 0) == 0:
-                    blockers.append("KB coverage=0 → M4 组件禁用")
-        out.append({"profile_id": pid,
+        if row["profile_id"] != "production_legacy":
+            for aid in needs:
+                a = arts.get(aid)
+                if a is None:
+                    blockers.append(f"{aid}: not_registered")
+                elif a["candidate_status"] != "CANDIDATE":
+                    blockers.append(f"{aid}: {a['candidate_status']}")
+            if "nextgen_vlm_real_candidate_v1" in needs:
+                ev = store._conn.execute(
+                    "SELECT eval_id FROM evaluation_registry_v1 WHERE"
+                    " eval_id='m4_three_version_real_eval_v2'").fetchone()
+                if ev is None:
+                    blockers.append("M4 三版本真实评估未登记")
+        out.append({"profile_id": row["profile_id"],
                     "status": "enabled" if not blockers else "disabled",
                     "blockers": blockers, "tags": tags,
-                    "components": needs, "scopes": scopes})
+                    "components": needs,
+                    "scopes": _j.loads(row["scopes_json"])})
     return out

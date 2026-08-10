@@ -41,10 +41,15 @@ class FakeWorker:
         return f"job-fake-{len(self.submitted)}"
 
 
+FAKE_G0 = {"gate_version": "g0-fake", "ok": True,
+           "checks": [{"name": "fake_unit_evidence", "ok": True}],
+           "evidence": {"note": "hermetic unit test fake G0"}}
+
+
 @pytest.fixture()
 def svc(tmp_path: Path):
     s = PlatformStore(tmp_path / "p.sqlite")
-    yield TrainingGovernanceService(s)
+    yield TrainingGovernanceService(s, hardware_gate=lambda **kw: FAKE_G0)
     s.close()
 
 

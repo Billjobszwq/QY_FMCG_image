@@ -1066,6 +1066,17 @@ CREATE TABLE IF NOT EXISTS task_state_projection_v1 (
 );
 """
 
+_M029 = """
+CREATE TABLE IF NOT EXISTS recognition_profile_def_v1 (
+    profile_id TEXT PRIMARY KEY,
+    components_json TEXT NOT NULL DEFAULT '[]',
+    scopes_json TEXT NOT NULL DEFAULT '[]',
+    tags_json TEXT NOT NULL DEFAULT '[]',
+    legacy INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL
+);
+"""
+
 MIGRATIONS: tuple[tuple[str, str], ...] = (
     ("001_platform_init", _M001),
     ("002_labeling_inbox", _M002),
@@ -1095,6 +1106,7 @@ MIGRATIONS: tuple[tuple[str, str], ...] = (
     ("026_reconciliation_registry_v1", _M026),
     ("027_agent_runtime_v1", _M027),
     ("028_state_projections_v2", _M028),
+    ("029_profile_def_v1", _M029),
 )
 
 
