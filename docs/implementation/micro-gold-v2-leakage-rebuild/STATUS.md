@@ -1,0 +1,3 @@
+# STATUS
+Gate=MICRO_GOLD_V2_READY_AWAITING_HUMAN_REVIEW（LS22 200 条 0 prediction）。
+M4 v3 评估运行中；完成后登记并出终报（DONE_WITH_CONCERNS：类覆盖 27/38）。
