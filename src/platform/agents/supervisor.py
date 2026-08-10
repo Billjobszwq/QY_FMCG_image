@@ -74,7 +74,44 @@ class SupervisorAgent:
                                 "evidence": [], "ui_intents": [],
                                 "commands": [], "requires_approval": False}
 
-        if "候选" in t and ("哪些" in t or "模型是" in t):
+        if "项目 21" in t or ("21" in t and "审核" in t):
+            resp["answer"] = ("项目 21 不能继续审核：五键及 source-group "
+                              "泄漏门禁未实现（仅输出 crop SHA 对比），已 "
+                              "SUPERSEDED_INVALID_INDEPENDENCE_AUDIT；请进新"
+                              "项目 demo_micro_gold_v2_blind。")
+            resp["evidence"] = ["platform.sqlite:flow_supersession_v1"]
+        elif "0.828" in t and ("降级" in t or "泄漏" in t):
+            resp["answer"] = ("0.828 被降级因 holdout v2 与 QLoRA 训练集 "
+                              "24/84=28.6% 来源组重叠；标记 "
+                              "EXPERIMENTAL_GROUP_LEAKED_EVALUATION。")
+            resp["evidence"] = [
+                "reports/nextgen_v2/m4_three_version_eval_v2.json"]
+        elif "同源" in t and ("micro" in t or "新" in t):
+            resp["answer"] = ("新 micro-gold v2 与训练集不同源：forbidden "
+                              "identity index（20,597 SHA/8,338 group）"
+                              "fail-closed 排除；独立 raw 照片池。")
+            resp["evidence"] = [
+                "reports/nextgen_v2/forbidden_index_v2/"
+                "forbidden_identity_index_v2.audit.json"]
+        elif "新项目" in t and ("ID" in t or "id" in t):
+            import json as _j
+            try:
+                pid = _j.loads((Path(".micro_gold_v2/ls_project.json")
+                       if False else Path(
+                           "/Users/zhangweiqi/Documents/QY/项目/LLM-Image"
+                           "/.micro_gold_v2/ls_project.json")).read_text()
+                       )["project_id"]
+            except Exception:
+                pid = "待导入"
+            resp["answer"] = f"新有效项目 ID={pid}（demo_micro_gold_v2_blind）。"
+        elif "多少条" in t or "完成多少" in t:
+            resp["answer"] = ("用户需完成 200 条主审（120 canonical+40 "
+                              "pending+20 hard+20 negative）；确定性抽 40 "
+                              "二盲，分歧仲裁。")
+        elif "数据" in t and ("不足" in t or "缺" in t):
+            resp["answer"] = ("仍不足：M1/M2 全场景图（≥3,000 补采）、"
+                              "45 pending 人工裁决、micro-gold 人工审核。")
+        elif "候选" in t and ("哪些" in t or "模型是" in t):
             resp["answer"] = ("候选：M3 E1（m3_tvt_e1_v2，综合优先档）/"
                               "M3 E5（m3_tvt_e5_v2，calibration 档）/"
                               "M4 new real adapter，均 "

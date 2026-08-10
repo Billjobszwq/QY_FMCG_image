@@ -86,6 +86,7 @@ def main() -> int:
     ap = __import__("argparse").ArgumentParser()
     ap.add_argument("--out", default=str(ROOT / ".micro_gold_v2"))
     ap.add_argument("--seed", type=int, default=7)
+    ap.add_argument("--min-conf", type=float, default=0.3)
     a = ap.parse_args()
     out = Path(a.out)
     if out.exists():
@@ -178,7 +179,7 @@ def main() -> int:
                 if (best_per_stratum.get("hard", {}).get(
                         "quality", {}).get("reasons") is None):
                     best_per_stratum["hard"] = cand
-            if p38 >= 0.5 and not q["reasons"]:
+            if p38 >= a.min_conf and not q["reasons"]:
                 cand = {**base, "stratum": "canonical",
                         "provisional_sku": cls38[c38],
                         "provisional_source": "sam_mask+m3_tvt_e1_v2",
@@ -186,24 +187,19 @@ def main() -> int:
                 prev = best_per_stratum.get("canonical")
                 if prev is None or p38 > prev["conf"]:
                     best_per_stratum["canonical"] = cand
-            elif cls83[c83] in pending45 and p83 >= 0.4:
+            elif cls83[c83] in pending45 and p83 >= 0.3:
                 cand = {**base, "stratum": "pending",
                         "provisional_sku": cls83[c83],
                         "provisional_source": "sam_mask+grouped_v1",
                         "conf": p83}
                 best_per_stratum.setdefault("pending", cand)
         # negative：与全部 mask 零交集的背景
-        allmask = np.zeros((h, w), bool)
+        allmask = np.zeros(h * w, dtype=bool)
         for mk in ph["masks"]:
-            allmask[y0:y1, x0:x1] |= True if False else allmask[y0:y1, x0:x1]
-        # 重建每 mask
-        for mk in ph["masks"]:
-            bx0, by0, bx1, by1 = mk["bbox"]
-            mm = np.zeros((h, w), bool)
             for seg in mk["rle"].split(","):
                 s, ln = seg.split(":")
-                mm.ravel(order="F")[int(s):int(s) + int(ln)] = True
-            allmask |= mm
+                allmask[int(s):int(s) + int(ln)] = True
+        allmask = allmask.reshape((h, w), order="F")
         rngn = random.Random(a.seed + hash(ph["photo"]) % 1000)
         for _ in range(3):
             ny = rngn.randint(0, max(h - 80, 1))

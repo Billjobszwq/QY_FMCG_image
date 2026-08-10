@@ -35,6 +35,12 @@ function CurrentStatePanel() {
         <b>M1/M2：</b>PILOT_NOT_CANDIDATE（数据不足，待补采全场景图）
         <br />
         <b>旧250：</b>SUPERSEDED_FOR_DEMO_TRAINING，不再 active
+        <br />
+        <b>项目21：</b>SUPERSEDED_INVALID_INDEPENDENCE_AUDIT（禁止审核）；
+        唯一有效人工入口=demo_micro_gold_v2_blind
+        <br />
+        <b>M4 0.828：</b>来源组泄漏实验（EXPERIMENTAL_GROUP_LEAKED），
+        非独立评估
       </p>
     </section>
   );
