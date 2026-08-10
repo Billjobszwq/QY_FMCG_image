@@ -28,7 +28,8 @@ export default function SupervisorDrawer() {
   const reload = useCallback(async () => {
     try {
       const [b, t, a] = await Promise.all([
-        fetchBlackboard().catch(() => ({ events: [] })),
+        fetch("/api/v1/blackboard?current=1").then((r) => r.json())
+        .catch(() => ({ events: [] })),
         fetchTaskboard().catch(() => ({ states: {} })),
         fetchAgents().catch(() => ({ agents: [] })),
       ]);

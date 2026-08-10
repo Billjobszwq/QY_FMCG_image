@@ -38,10 +38,11 @@ def create_agents_router(store: Any,
                 "agents": reg.list_agents()}
 
     @router.get("/api/v1/blackboard")
-    def blackboard_list() -> dict:
+    def blackboard_list(current: int = 0) -> dict:
         bb = BlackboardService(store)
-        cards = bb.cards()
-        return {"count": len(cards), "events": cards}
+        cards = bb.cards(current_only=bool(current))
+        return {"count": len(cards), "events": cards,
+                "current_only": bool(current)}
 
     @router.post("/api/v1/blackboard")
     def blackboard_append(body: BlackboardAppendBody,
