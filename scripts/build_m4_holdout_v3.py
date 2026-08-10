@@ -109,6 +109,11 @@ def main() -> int:
     m38.fc = torch.nn.Linear(m38.fc.in_features, 38)
     m38.load_state_dict(ck["model"])
     m38.eval()
+    feat38 = torchvision.models.resnet18(weights=None)
+    feat38.fc = torch.nn.Identity()
+    feat38.load_state_dict({k: v for k, v in ck["model"].items()
+                            if not k.startswith("fc.")}, strict=False)
+    feat38.eval()
     n_canon = n_pend = n_hardneg = 0
     for ph in photos:
         if Path(ph["photo"]).name in used:
@@ -124,10 +129,11 @@ def main() -> int:
             txt = ocr_text(cv2.imencode(".jpg", crop)[1].tobytes())
             qte = embed([txt or ""])[0]
             with torch.no_grad():
-                o38 = torch.softmax(m38(tf(_I.fromarray(
-                    cv2.cvtColor(crop, cv2.COLOR_BGR2RGB)))[None]), 1)[0]
+                pil = _I.fromarray(cv2.cvtColor(crop, cv2.COLOR_BGR2RGB))
+                o38 = torch.softmax(m38(tf(pil)[None]), 1)[0]
+                qie = feat38(tf(pil)[None]).squeeze(0)
             c38, p38 = int(o38.argmax()), float(o38.max())
-            cands, scores = build_candidates_no_gt(qte, o38.tolist(),
+            cands, scores = build_candidates_no_gt(qte, qie.tolist(),
                                                    txt_v, img_v, kb)
             area = mk["area_ratio"]
             kind = ("hardneg" if area < 0.01 or n_canon >= 100

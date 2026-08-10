@@ -139,7 +139,7 @@ class SupervisorAgent:
                               "120 canonical+40 pending+20 困难+20 负样本；"
                               "blind 无 prediction；待人工主审。")
             resp["evidence"] = [".micro_gold_v1/manifest.json"]
-        elif "训练进程" in t or "正在训练" in t:
+        elif "训练进程" in t or "正在训练" in t or "训练运行" in t:
             resp["answer"] = ("当前无训练进程（MPS/MLX 空闲）；"
                               "本轮只评估不训练。")
         elif "M1" in t and ("上线" in t or "候选" in t):
@@ -245,7 +245,7 @@ class SupervisorAgent:
                                  "kind": "training.safe_stop",
                                  "status": "pending_approval"}]
             resp["requires_approval"] = True
-        elif "切换生产" in t or "production" in t.lower():
+        elif "切换生产" in t or "切生产" in t or "production" in t.lower():
             resp["answer"] = ("拒绝：production 切换为高风险操作，"
                               "Supervisor 无权自行执行，需人工独立批准。")
             resp["requires_approval"] = True
