@@ -30,7 +30,7 @@ def _post(path, body):
         f"{OMLX}/{path}", data=json.dumps(body).encode(),
         headers={"Authorization": f"Bearer {API_KEY}",
                  "Content-Type": "application/json"})
-    return json.loads(urllib.request.urlopen(req, timeout=120).read())
+    return json.loads(urllib.request.urlopen(req, timeout=60).read())
 
 
 def ocr_text(b):
@@ -146,6 +146,8 @@ def main() -> int:
                 kind = "hardneg"
             else:
                 continue
+            if len(samples) % 10 == 0:
+                print("progress:", len(samples), flush=True)
             samples.append({
                 "sample_id": f"v3_{len(samples):04d}",
                 "file": ph["photo"], "bbox": mk["bbox"],
