@@ -22,6 +22,57 @@ def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+
+
+# ---- DeepSeek LLM provider（规则未命中时兜底）----
+def _deepseek_answer(text: str, context: str) -> str | None:
+    import os
+    import urllib.request
+    key = os.environ.get("DEEPSEEK_API_KEY", "")
+    model = os.environ.get("DEEPSEEK_MODEL", "deepseek-v4-flash")
+    if not key:
+        return None
+    body = {
+        "model": model,
+        "messages": [
+            {"role": "system", "content":
+             "你是 SKU 识别系统的主管 Agent。基于以下平台实时状态回答，"
+             "简洁、诚实、可执行；涉及生产切换/发布一律要求人工批准。\n"
+             + context},
+            {"role": "user", "content": text}],
+        "temperature": 0.3,
+    }
+    req = urllib.request.Request(
+        "https://api.deepseek.com/chat/completions",
+        data=json.dumps(body).encode(),
+        headers={"Authorization": f"Bearer {key}",
+                 "Content-Type": "application/json"})
+    try:
+        with urllib.request.urlopen(req, timeout=30) as r:
+            d = json.loads(r.read())
+        return d["choices"][0]["message"]["content"]
+    except Exception:
+        return None
+
+
+def _platform_context(store) -> str:
+    try:
+        gate = store._conn.execute(
+            "SELECT status FROM training_cycle_v1 WHERE cycle_id="
+            "'sku_long_tail_nextgen_cycle_v1'").fetchone()
+        arts = store._conn.execute(
+            "SELECT artifact_id, candidate_status FROM"
+            " model_artifact_registry_v1").fetchall()
+        tasks = store._conn.execute(
+            "SELECT COUNT(*) c FROM task_state_projection_v1").fetchone()
+        return (f"Gate={gate['status'] if gate else '—'}; "
+                f"artifacts={[(a['artifact_id'], a['candidate_status'])
+                              for a in arts]}; 任务数={tasks['c']}; "
+                "micro-gold=LS22 200条待人工; production=prod_20260805_v5_r1 未切换")
+    except Exception:
+        return "平台状态不可用"
+
+
 class SupervisorAgent:
     def __init__(self, store: Any, *, provider: str = "rules_fallback",
                  llm_fn: Any = None) -> None:
@@ -251,9 +302,15 @@ class SupervisorAgent:
             resp["requires_approval"] = True
             resp["denied"] = True
         else:
-            resp["answer"] = ("已解析但无匹配意图；支持：训练进度/分类器结果/"
-                              "SKU长尾/阻塞/创建计划/比较/打开LS/M4/停止/"
-                              "切换生产")
+            llm = _deepseek_answer(t, _platform_context(self.store))
+            if llm:
+                resp["answer"] = llm
+                resp["provider"] = "deepseek"
+            else:
+                resp["answer"] = ("（LLM 暂不可用）可问：训练进度/候选模型/"
+                                  "SKU 长尾/阻塞/创建计划/比较/打开 LS/"
+                                  "M4/切换生产/micro-gold")
+                resp["provider"] = "rules_fallback"
         # 记录会话消息
         self.store._conn.execute(
             "INSERT INTO agent_session_msg_v1 (session_id, role, content,"
