@@ -58,11 +58,19 @@ class BlackboardService:
         self.store._conn.commit()
         return eid
 
-    def cards(self, *, status: str | None = None) -> list[dict[str, Any]]:
+    def cards(self, *, status: str | None = None,
+              current_only: bool = False) -> list[dict[str, Any]]:
         rows = self.store._conn.execute(
             "SELECT * FROM blackboard_event_v1 ORDER BY created_at"
         ).fetchall()
-        return [dict(r) for r in rows]
+        out = [dict(r) for r in rows]
+        if current_only:
+            superseded = set()
+            for r in out:
+                if r["supersedes"]:
+                    superseded.add(r["supersedes"])
+            out = [r for r in out if r["id"] not in superseded]
+        return out
 
 
 class MemoryService:

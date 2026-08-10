@@ -71,8 +71,9 @@ def run_version(samples, adapter, vname, out_dir, limit=None):
             "wall_time_s": round(dt, 3),
             "generation_tokens": getattr(out, "generation_tokens",
                                          "unsupported"),
-            "peak_memory_gb": round(getattr(out, "peak_memory", 0) /
-                                    (1024 ** 3), 2),
+            "peak_memory_gb": (round(float(out.peak_memory), 2)
+                                if getattr(out, "peak_memory", 0) else
+                                "unsupported"),
         })
     (out_dir / f"per_sample_{vname}.jsonl").write_text(
         "\n".join(json.dumps(r, ensure_ascii=False) for r in rows),
