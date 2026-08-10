@@ -156,13 +156,12 @@ def main() -> int:
             if crop.size == 0:
                 continue
             q = quality_metrics(crop, mk["area_ratio"])
+            from PIL import Image as _Image
             with torch.no_grad():
-                o38 = torch.softmax(m38(tf(
-                    cv2.cvtColor(crop, cv2.COLOR_BGR2RGB)
-                )[None]), 1)[0]
-                o83 = torch.softmax(m83(tf(
-                    cv2.cvtColor(crop, cv2.COLOR_BGR2RGB)
-                )[None]), 1)[0]
+                pil = _Image.fromarray(
+                    cv2.cvtColor(crop, cv2.COLOR_BGR2RGB))
+                o38 = torch.softmax(m38(tf(pil)[None]), 1)[0]
+                o83 = torch.softmax(m83(tf(pil)[None]), 1)[0]
             c38, p38 = int(o38.argmax()), float(o38.max())
             c83, p83 = int(o83.argmax()), float(o83.max())
             base = {"photo": ph["photo"], "photo_sha": psha,
