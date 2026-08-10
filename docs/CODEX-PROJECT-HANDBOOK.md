@@ -622,3 +622,9 @@ Agent 不是万能管理员。Graph 节点必须声明 capability、数据域、
 - M4 三版本真实推理证据：reports/nextgen_v2/m4_evidence_v2/（逐样本 raw/tokens/latency）。
 - demo_micro_gold_v1：LS 项目 21，200 blind 任务，0 prediction；待人工主审。
 - 后续流程：人工完成 200 主审+40 二盲+分歧仲裁 → human_final/gold_verified。
+
+## 2026-08-10 泄漏重建收口
+- 入口 docs/implementation/micro-gold-v2-leakage-rebuild/。
+- Gate=MICRO_GOLD_V2_READY_AWAITING_HUMAN_REVIEW（LS22 唯一有效人工入口）。
+- M4 v2 0.828=EXPERIMENTAL_GROUP_LEAKED；v3 独立评估新 adapter 无收益。
+- 用户下一步唯一操作：LS22 完成 200 条真实人工审核。
