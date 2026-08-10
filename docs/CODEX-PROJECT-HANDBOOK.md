@@ -613,3 +613,12 @@ Agent 不是万能管理员。Graph 节点必须声明 capability、数据域、
   KB 对百事系覆盖 0（recall 分母 0 → null）；四 snapshot v3 已冻结；
   Agent Kernel/黑板/记忆/黄色抽屉/任务板已上线；production 未切换。
 - Gate：FOUR_DEMO_CANDIDATES_READY_AWAITING_INDEPENDENT_EVALUATION。
+
+## 2026-08-10 候选证据链收口 + micro-gold 更新
+- 入口：docs/implementation/candidate-evidence-convergence-and-microgold-v1/。
+- Gate=MICRO_GOLD_READY_AWAITING_HUMAN_REVIEW；Cycle 17/19。
+- Profile 单源 DB（recognition_profile_def_v1，10 定义）；e1/e5→m3_tvt_*_v2；
+  旧 ablation=EXPERIMENTAL_SUPERSEDED_BY_*。
+- M4 三版本真实推理证据：reports/nextgen_v2/m4_evidence_v2/（逐样本 raw/tokens/latency）。
+- demo_micro_gold_v1：LS 项目 21，200 blind 任务，0 prediction；待人工主审。
+- 后续流程：人工完成 200 主审+40 二盲+分歧仲裁 → human_final/gold_verified。
