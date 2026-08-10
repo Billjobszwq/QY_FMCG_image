@@ -1,0 +1,80 @@
+{
+ "versions": {
+  "base": {
+   "n": 140,
+   "top1": 0.029,
+   "accepted_precision": 0.073,
+   "coverage": 0.393,
+   "abstain_n": 83,
+   "abstain_precision": 0.265,
+   "false_accept": 18,
+   "pending_false_accept": 8,
+   "false_reject": 96,
+   "p50_s": 1.12,
+   "p95_s": 1.67
+  },
+  "old_cropped_adapter": {
+   "n": 140,
+   "top1": 0.043,
+   "accepted_precision": 0.043,
+   "coverage": 1.0,
+   "abstain_n": 0,
+   "abstain_precision": 0.0,
+   "false_accept": 40,
+   "pending_false_accept": 20,
+   "false_reject": 94,
+   "p50_s": 1.78,
+   "p95_s": 2.04
+  },
+  "new_real_adapter": {
+   "n": 140,
+   "top1": 0.029,
+   "accepted_precision": 0.029,
+   "coverage": 1.0,
+   "abstain_n": 0,
+   "abstain_precision": 0.0,
+   "false_accept": 40,
+   "pending_false_accept": 20,
+   "false_reject": 96,
+   "p50_s": 1.72,
+   "p95_s": 2.0
+  }
+ },
+ "smoke": {
+  "n": 12,
+  "top1": 0.0,
+  "accepted_precision": 0.0,
+  "coverage": 0.25,
+  "abstain_n": 9,
+  "abstain_precision": 0.889,
+  "false_accept": 3,
+  "pending_false_accept": 3,
+  "false_reject": 1,
+  "p50_s": 1.09,
+  "p95_s": 1.13
+ },
+ "holdout_manifest": {
+  "n": 140,
+  "canonical": 100,
+  "pending": 20,
+  "hardneg": 20,
+  "per_class": {
+   "纯水乐 PET瓶 550ML": 33,
+   "佳得乐西柚 PET瓶 600ML": 9,
+   "纯果乐阳光橙 PET瓶 450ML": 5,
+   "佳得乐低糖青柠PET瓶 600ML": 27,
+   "1L百事": 1,
+   "1L百事无糖": 3,
+   "佳得乐低糖红柚PET瓶 600ML": 1,
+   "2L美年达青苹果": 5,
+   "美年达百香果菠萝600ml": 1,
+   "2L美年达(橙味)": 2,
+   "2L七喜": 9,
+   "拉罐330ml七喜": 1,
+   "1L七喜": 3
+  },
+  "manifest_hash": "7164d4a7d6d9b633b50fb438160040d8d923fed69b8e38ad1df1c078d4414cb1"
+ },
+ "gt_policy": "GT 仅评估账本；候选冻结于 holdout",
+ "report_hash": "8df9d748e8364d1d09a8dfd4c291e5515aa7d14f828c49a4585005ba7dadd77c"
+}

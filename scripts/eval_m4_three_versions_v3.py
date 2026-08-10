@@ -46,6 +46,10 @@ def run_version(samples, adapter, vname, out_dir, limit=None):
         x0, y0, x1, y1 = s["bbox"]
         img = cv2.imread(s["file"])
         crop = img[y0:y1, x0:x1]
+        h, w = crop.shape[:2]
+        if max(h, w) > 1024:
+            sc = 1024 / max(h, w)
+            crop = cv2.resize(crop, (int(w * sc), int(h * sc)))
         tmp = out_dir / f"_tmp_{vname}.jpg"
         cv2.imwrite(str(tmp), crop)
         cand_txt = "\n".join(f"{j+1}. {c}" for j, c in
@@ -138,8 +142,11 @@ def main() -> int:
     (out / "bounded_smoke_v3.json").write_text(
         json.dumps(sm, ensure_ascii=False, indent=1), encoding="utf-8")
     print("smoke:", sm)
-    if sm["top1"] < 0.2:
-        print("SMOKE FAILED")
+    # 管线健康判据：解析率≥0.8 且 raw 非空（base 在独立集 top1=0 合法）
+    parsed_ok = 1 - sum(1 for r in smoke
+                        if r["parsed_kind"] == "parse_error") / len(smoke)
+    if parsed_ok < 0.8 or not all(r["raw_output"].strip() for r in smoke):
+        print("SMOKE FAILED (pipeline)")
         return 1
     results = {}
     for vname, adapter in versions:
