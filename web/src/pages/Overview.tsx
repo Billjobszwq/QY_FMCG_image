@@ -1,225 +1,86 @@
 import { useEffect, useState } from "react";
-import { HealthBody, WorkItemsBody, fetchWorkItems } from "../api";
+import { HealthBody } from "../api";
 
-const KIND_CN: Record<string, string> = {
-  human_review: "人工审核",
-  training: "训练",
-  job: "后台任务",
-  labeling: "标注",
-  recognition: "识别",
-};
-
-// 状态收口 T3/T10：当前真实状态区（读投影，非旧250）
-function CurrentStatePanel() {
-  const [g, setG] = useState<any>(null);
-  const [c, setC] = useState<any>(null);
-  useEffect(() => {
-    fetch("/api/v1/platform/gate").then((r) => r.json())
-      .then(setG).catch(() => {});
-    fetch("/api/v1/training/cycle").then((r) => r.json())
-      .then(setC).catch(() => {});
-  }, []);
-  return (
-    <section style={{ margin: "8px 0", padding: 10,
-                      border: "2px solid #b8860b", background: "#fffbe8",
-                      color: "#1a1a1a" }}>
-      <h3 style={{ color: "#1a1a1a" }}>当前真实状态</h3>
-      <p style={{ color: "#1a1a1a" }}>
-        <b>Gate：</b>{g?.gate}
-        <br />
-        <b>Cycle：</b>{c?.summary?.done ?? 0}/{c?.summary?.distinct_nodes ?? 0}
-        节点完成；剩余评估/决策节点
-        （M3 独立测试、M4 独立评估、DemoEvaluation、micro-gold、
-        pending SKU 裁决、production 决定）
-        <br />
-        <b>M1/M2：</b>PILOT_NOT_CANDIDATE（数据不足，待补采全场景图）
-        <br />
-        <b>旧250：</b>SUPERSEDED_FOR_DEMO_TRAINING，不再 active
-        <br />
-        <b>项目21：</b>SUPERSEDED_INVALID_INDEPENDENCE_AUDIT（禁止审核）；
-        唯一有效人工入口=demo_micro_gold_v2_blind
-        <br />
-        <b>M4 0.828：</b>来源组泄漏实验（EXPERIMENTAL_GROUP_LEAKED），
-        非独立评估
-      </p>
-    </section>
-  );
-}
-
-// U2-4：阶段→配色（业务语言默认，技术状态进高级详情）
-const STAGE_PILL: Record<string, string> = {
-  todo: "degraded",
-  active: "healthy",
-  done: "unavailable",
-  blocked: "degraded",
-};
-
+// 总览：units 风格拼贴。Gate + Cycle + micro-gold + 候选 + 服务。
 export default function Overview({ health }: { health: HealthBody | null }) {
-  const [wi, setWi] = useState<WorkItemsBody | null>(null);
-  const [wiError, setWiError] = useState<string | null>(null);
-
+  const [gate, setGate] = useState<any>(null);
+  const [cycle, setCycle] = useState<any>(null);
+  const [arts, setArts] = useState<any>(null);
   useEffect(() => {
-    let stop = false;
-    const load = () =>
-      fetchWorkItems()
-        .then((d) => !stop && setWi(d))
-        .catch((e) => !stop && setWiError(e instanceof Error ? e.message : String(e)));
-    load();
-    const t = setInterval(load, 15000);
-    return () => {
-      stop = true;
-      clearInterval(t);
-    };
+    fetch("/api/v1/platform/gate").then((r) => r.json()).then(setGate)
+      .catch(() => {});
+    fetch("/api/v1/training/cycle").then((r) => r.json()).then(setCycle)
+      .catch(() => {});
+    fetch("/api/v1/training/artifacts").then((r) => r.json()).then(setArts)
+      .catch(() => {});
   }, []);
-
-  const down = (health?.services ?? []).filter((s) => s.status !== "healthy");
-  const s = wi?.summary;
-
+  const cands = (arts?.artifacts ?? []).filter((a: any) =>
+    a.candidate_status?.includes("CANDIDATE") ||
+    a.candidate_status?.includes("REJECTED"));
   return (
-    <section>
-      <h2>我的工作台</h2>
-      <CurrentStatePanel />
-
-      {wiError && <div className="banner banner-unavailable">任务中心加载失败：{wiError}</div>}
-      {s && (
-        <>
-          <div className="cards">
-            <div className="card">
-              <div className="k">我的待办</div>
-              <div className="v">{s.todos}</div>
-            </div>
-            <div className="card">
-              <div className="k">待人工审核（旧250已superseded）</div>
-              <div className="v">{s.pending_review}</div>
-              <div style={{ fontSize: 11, color: "#555" }}>
-                历史队列，仅证据查询；替代=demo_micro_gold_v1
-              </div>
-            </div>
-            <div className="card">
-              <div className="k">活动任务</div>
-              <div className="v">{s.active}</div>
-            </div>
-            <div className={`card ${s.blocked.length > 0 ? "card-degraded" : "card-healthy"}`}>
-              <div className="k">阻断项</div>
-              <div className="v">{s.blocked.length}</div>
-            </div>
-          </div>
-
-          {s.blocked.length > 0 && (
-            <div className="banner banner-degraded">
-              <strong>阻断原因：</strong>
-              <ul style={{ margin: "6px 0 0" }}>
-                {s.blocked.map((b) => (
-                  <li key={b}>{b}</li>
-                ))}
-              </ul>
-            </div>
-          )}
-
-          <h3>下一步建议</h3>
-          <ul>
-            {s.next_steps.map((n) => (
-              <li key={n}>{n}</li>
-            ))}
-          </ul>
-
-          <h3>任务列表（真实来源聚合，业务语言）</h3>
-          {wi && wi.items.length > 0 ? (
-            <table>
-              <thead>
-                <tr>
-                  <th>任务</th>
-                  <th>类型</th>
-                  <th>状态</th>
-                  <th>负责人</th>
-                </tr>
-              </thead>
-              <tbody>
-                {wi.items.slice(0, 50).map((w) => (
-                  <tr key={w.id}>
-                    <td>
-                      {w.title}
-                      <details className="muted">
-                        <summary>高级详情</summary>
-                        <pre style={{ fontSize: 11 }}>
-                          {JSON.stringify({ raw_status: w.status, ...w.detail }, null, 2)}
-                        </pre>
-                      </details>
-                    </td>
-                    <td>{KIND_CN[w.kind] ?? w.kind}</td>
-                    <td>
-                      <span
-                        className={`pill pill-${STAGE_PILL[w.stage] ?? "unavailable"}`}
-                        title={w.status}
-                      >
-                        {w.status_text || w.status}
-                      </span>
-                    </td>
-                    <td>{w.owner}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          ) : (
-            <p className="muted">暂无任务。</p>
-          )}
-          {wi && wi.items.length > 50 && (
-            <p className="muted">仅显示前 50 条（共 {wi.items.length} 条）。</p>
-          )}
-        </>
-      )}
-
-      <h3>系统状态</h3>
-      {!health ? (
-        <p className="muted">正在加载系统状态…</p>
-      ) : (
-        <>
-          <div className="cards">
-            <div className={`card card-${health.status}`}>
-              <div className="k">平台整体状态</div>
-              <div className="v">{health.status}</div>
-            </div>
-            <div className="card">
-              <div className="k">受监控服务</div>
-              <div className="v">{health.services.length}</div>
-            </div>
-            <div className="card">
-              <div className="k">异常服务</div>
-              <div className="v">{down.length}</div>
-            </div>
-          </div>
-          <table>
-            <thead>
-              <tr>
-                <th>服务</th>
-                <th>状态</th>
-                <th>延迟</th>
-                <th>关键</th>
-                <th>说明</th>
+    <div>
+      <h1>SKU 识别系统</h1>
+      <p className="muted">Agent + Workflow 驱动 · 非 SaaS · 生产推进中</p>
+      <div className="grid" style={{ marginBottom: 28 }}>
+        <div className="tile" style={{ background: "var(--violet)",
+          color: "#fff" }}>
+          <span className="k">当前 Gate</span>
+          <span style={{ fontWeight: 800, fontSize: 15 }}>
+            {gate?.gate ?? "—"}
+          </span>
+        </div>
+        <div className="tile" style={{ background: "var(--green)" }}>
+          <span className="k">Cycle 进度</span>
+          <span className="num">{cycle?.summary?.done ?? 0}/19</span>
+          <span className="k">节点完成</span>
+        </div>
+        <div className="tile" style={{ background: "var(--card-yellow)" }}>
+          <span className="k">micro-gold 待人工</span>
+          <span className="num">200</span>
+          <span className="k">LS 项目 22 · 唯一有效入口</span>
+        </div>
+        <div className="tile" style={{ background: "var(--blue)" }}>
+          <span className="k">候选模型</span>
+          <span className="num">{cands.length}</span>
+          <span className="k">待 micro-gold 解禁</span>
+        </div>
+        <div className="tile" style={{ background: "var(--card-orange)" }}>
+          <span className="k">production</span>
+          <span style={{ fontWeight: 800 }}>prod_20260805_v5_r1</span>
+          <span className="k">未切换 · 人工批准制</span>
+        </div>
+        <div className="tile" style={{ background: "var(--lavender)" }}>
+          <span className="k">服务状态</span>
+          <span style={{ fontWeight: 800, fontSize: 18 }}>
+            {health?.status ?? "—"}
+          </span>
+          <span className="k">8091/8300/8400/8455</span>
+        </div>
+      </div>
+      <div className="card-lg tint-coral">
+        <h2>下一步只有一件事</h2>
+        <p style={{ fontSize: 16 }}>
+          进入标注中心 → LS 项目 22 → 完成 200 条真实人工审核。
+          机器侧数据、训练、评估、门禁已全部闭环。
+        </p>
+        <a className="btn" style={{ background: "#fff", color: "#000" }}
+          href="#/labelstudio">进入标注中心</a>
+      </div>
+      <div className="card-lg">
+        <h3>候选模型状态</h3>
+        <table>
+          <thead><tr><th>模型</th><th>状态</th><th>blocker</th></tr></thead>
+          <tbody>
+            {(arts?.artifacts ?? []).map((a: any) => (
+              <tr key={a.artifact_id}>
+                <td>{a.artifact_id}</td>
+                <td><span className="pill info">{a.candidate_status}</span></td>
+                <td style={{ maxWidth: 420 }}>{a.blocker}</td>
               </tr>
-            </thead>
-            <tbody>
-              {health.services.map((sv) => (
-                <tr key={sv.name}>
-                  <td>{sv.name}</td>
-                  <td>
-                    <span className={`pill pill-${sv.status}`}>{sv.status}</span>
-                  </td>
-                  <td>{sv.latency_ms != null ? `${sv.latency_ms} ms` : "—"}</td>
-                  <td>{sv.critical ? "是" : "否"}</td>
-                  <td className="muted">{sv.description}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          {down.length > 0 && (
-            <div className="note">
-              系统异常：{down.map((sv) => `${sv.name}（${sv.detail ?? sv.status}）`).join("；")}
-            </div>
-          )}
-          <p className="muted">健康快照时间：{health.generated_at}</p>
-        </>
-      )}
-    </section>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
   );
 }

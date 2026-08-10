@@ -11,20 +11,25 @@ import SystemStatus from "./pages/SystemStatus";
 import CascadeTasks from "./pages/CascadeTasks";
 import ModelRuntime from "./pages/ModelRuntime";
 import NewPackaging from "./pages/NewPackaging";
-import SupervisorDrawer from "./pages/SupervisorDrawer";
+import AgentChat from "./pages/AgentChat";
 import TaskBoard from "./pages/TaskBoard";
+import Workflow from "./pages/Workflow";
+import LabelStudioHub from "./pages/LabelStudioHub";
 
 const NAV = [
-  { to: "/", label: "系统总览" },
-  { to: "/runs", label: "Graph Runs" },
-  { to: "/recognition", label: "图片识别" },
-  { to: "/annotation", label: "标注审核" },
-  { to: "/assets", label: "数据资产" },
-  { to: "/training", label: "训练模型" },
-  { to: "/cascade", label: "级联任务" },
-  { to: "/models-runtime", label: "模型驻留" },
+  { to: "/", label: "总览" },
+  { to: "/taskboard", label: "任务板" },
+  { to: "/workflow", label: "工作流" },
+  { to: "/recognition", label: "识别" },
+  { to: "/labelstudio", label: "标注中心" },
+  { to: "/annotation", label: "审核" },
+  { to: "/assets", label: "数据" },
+  { to: "/training", label: "训练" },
+  { to: "/cascade", label: "级联" },
+  { to: "/models-runtime", label: "模型" },
   { to: "/packaging", label: "新包装" },
-  { to: "/status", label: "系统状态" },
+  { to: "/runs", label: "Graph" },
+  { to: "/status", label: "状态" },
 ];
 
 export default function App() {
@@ -77,91 +82,74 @@ export default function App() {
 
   const overall = health?.status;
 
+  if (!authChecked) return <div className="main">加载中…</div>;
+
+  if (!me) {
+    return (
+      <div className="main" style={{ maxWidth: 460, margin: "8vh auto" }}>
+        <h1>统一工作台</h1>
+        <p className="muted">Agent + Workflow 驱动的 SKU 识别系统</p>
+        <div className="card-lg">
+          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+            <input placeholder="用户名" value={username}
+              onChange={(e) => setUsername(e.target.value)} />
+            <input placeholder="口令" type="password" value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && onLogin()} />
+            {loginError && <span className="pill err">{loginError}</span>}
+            <button className="btn violet" disabled={loginBusy} onClick={onLogin}>
+              进入工作台
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="shell">
-      <header className="topbar">
-        <div className="brand">
-          <span className="logo">◈</span> 统一工作台
-          <span className="sub">Platform V2 · 8400</span>
-        </div>
-        <div className={`overall overall-${overall ?? "unknown"}`}>
-          {overall ? `平台状态：${overall}` : "平台状态：加载中…"}
-        </div>
-        <div style={{ marginLeft: "auto", display: "flex", gap: 8, alignItems: "center" }}>
-          {authChecked && me && (
-            <>
-              <span className="muted">
-                已登录：{me.actor}（{me.role}）
-              </span>
-              <button onClick={onLogout}>退出</button>
-            </>
-          )}
-          {authChecked && !me && (
-            <>
-              <input
-                placeholder="用户名"
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                style={{ width: 90 }}
-              />
-              <input
-                placeholder="口令"
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && onLogin()}
-                style={{ width: 120 }}
-              />
-              <button onClick={onLogin} disabled={loginBusy}>
-                登录
-              </button>
-              {loginError && (
-                <span className="muted" style={{ color: "#c0392b" }}>
-                  {loginError}
-                </span>
-              )}
-            </>
-          )}
-        </div>
-      </header>
-      {overall === "degraded" && (
-        <div className="banner banner-degraded">
-          部分依赖服务不可用（如 Label Studio / ML Backend），平台以 degraded 模式继续服务。
-        </div>
-      )}
-      {overall === "unavailable" && (
-        <div className="banner banner-unavailable">关键服务不可用：识别服务（8091）未连接。</div>
-      )}
-      <div className="body">
-        <nav className="sidenav">
+    <div>
+      <div className="topbar">
+        <span className="brand">◆ 统一工作台</span>
+        <span className={
+          overall === "healthy" ? "pill ok" :
+          overall === "degraded" ? "pill warn" : "pill err"}>
+          {overall === "healthy" ? "● 全部服务在线" :
+           overall === "degraded" ? "● 部分降级" : "● 异常"}
+        </span>
+        <span className="pill muted">Gate 见总览</span>
+        <span style={{ flex: 1 }} />
+        <span className="pill info">{me.actor}</span>
+        <button className="btn ghost" style={{ padding: "8px 16px" }}
+          onClick={onLogout}>退出</button>
+      </div>
+      <div className="shell">
+        <nav className="nav">
           {NAV.map((n) => (
-            <NavLink
-              key={n.to}
-              to={n.to}
-              end={n.to === "/"}
-              className={({ isActive }) => (isActive ? "nav active" : "nav")}
-            >
+            <NavLink key={n.to} to={n.to} end={n.to === "/"}
+              className={({ isActive }) => (isActive ? "active" : "")}>
               {n.label}
             </NavLink>
           ))}
         </nav>
-        <main className="content">
+        <main className="main">
           <Routes>
             <Route path="/" element={<Overview health={health} />} />
+            <Route path="/taskboard" element={<TaskBoard />} />
+            <Route path="/workflow" element={<Workflow />} />
             <Route path="/runs" element={<GraphRuns />} />
             <Route path="/recognition" element={<Recognition />} />
+            <Route path="/labelstudio" element={<LabelStudioHub />} />
             <Route path="/annotation" element={<Annotation health={health} />} />
             <Route path="/assets" element={<Assets />} />
             <Route path="/training" element={<Training />} />
-            <Route path="/taskboard" element={<TaskBoard />} />
             <Route path="/cascade" element={<CascadeTasks />} />
             <Route path="/models-runtime" element={<ModelRuntime />} />
             <Route path="/packaging" element={<NewPackaging />} />
             <Route path="/status" element={<SystemStatus health={health} />} />
           </Routes>
-      <SupervisorDrawer />
         </main>
       </div>
+      <AgentChat />
     </div>
   );
 }

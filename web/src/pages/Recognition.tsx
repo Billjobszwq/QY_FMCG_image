@@ -23,33 +23,52 @@ const STATUS_CN: Record<string, string> = {
   failed: "失败",
 };
 
+const TINTS = ["var(--card-yellow)", "var(--lavender)", "var(--green)",
+  "var(--blue)", "var(--card-orange)", "var(--card-coral)"];
+
 function ProfilesPanel() {
   const [ps, setPs] = useState<any[]>([]);
+  const [sel, setSel] = useState<string>("production_legacy");
   useEffect(() => {
-    fetch("/api/v1/recognition/profiles")
-      .then((r) => r.json())
-      .then((d) => setPs(d.profiles ?? []))
-      .catch(() => {});
+    fetch("/api/v1/recognition/profiles").then((r) => r.json())
+      .then((d) => setPs(d.profiles ?? [])).catch(() => {});
   }, []);
   return (
-    <section style={{ margin: 12, padding: 10, border: "1px solid #ccc" }}>
-      <h3>Recognition Profiles（状态动态派生）</h3>
-      <table style={{ fontSize: 12, width: "100%" }}>
-        <thead><tr><th>profile</th><th>status</th><th>blockers</th>
-          <th>tags</th></tr></thead>
-        <tbody>
-          {ps.map((x) => (
-            <tr key={x.profile_id}>
-              <td>{x.profile_id}</td>
-              <td style={{ color: x.status === "enabled" ? "#070" : "#a00" }}>
-                {x.status}</td>
-              <td>{(x.blockers ?? []).join("; ")}</td>
-              <td>{(x.tags ?? []).join(",")}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </section>
+    <div className="card-lg" style={{ background: "var(--surface)" }}>
+      <h3>选择识别模型（Recognition Profile）</h3>
+      <p className="muted">
+        当前仅 production_legacy 可用于生产识别；候选模型待 micro-gold
+        人工金标准后解禁。
+      </p>
+      <div className="grid">
+        {ps.map((p, i) => {
+          const on = p.status === "enabled";
+          const active = sel === p.profile_id;
+          return (
+            <div key={p.profile_id} className="tile"
+              style={{ background: on ? "var(--green)" : TINTS[i % 6],
+                border: active ? "3px solid #000" : "none",
+                cursor: on ? "pointer" : "not-allowed",
+                opacity: on ? 1 : 0.75 }}
+              onClick={() => on && setSel(p.profile_id)}>
+              <span className="k">{p.profile_id}</span>
+              <span className="pill" style={{
+                background: on ? "#000" : "#fff",
+                color: on ? "#fff" : "#000", alignSelf: "flex-start" }}>
+                {on ? "● 可用" : "○ 禁用"}
+              </span>
+              <span className="k" style={{ fontSize: 12 }}>
+                {(p.blockers ?? []).join("；") ||
+                  (p.tags ?? []).join("，") || "生产级联"}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+      <p style={{ marginTop: 16 }}>
+        当前使用：<b>{sel}</b>
+      </p>
+    </div>
   );
 }
 

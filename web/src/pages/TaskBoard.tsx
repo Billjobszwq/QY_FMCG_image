@@ -1,54 +1,63 @@
 import { useEffect, useState } from "react";
-import { fetchTaskboard } from "../api";
 
-// 纠偏 Task 6：任务板真实卡片（标题/owner/status/blocker/evidence/
-// graph_run_id/linked/updated_at/acceptance），数据来自平台事实源。
+// 任务板：units 风格卡片流。每卡只露标题/状态 pill/owner/更新时间，
+// 详情（evidence/graph_run/acceptance）折叠。
 const ORDER = ["todo", "running", "waiting", "review", "done"];
 const CN: Record<string, string> = {
   todo: "待办", running: "运行中", waiting: "等待/阻塞",
   review: "待验收", done: "完成",
 };
+const TINT: Record<string, string> = {
+  todo: "var(--card-yellow)", running: "var(--blue)",
+  waiting: "var(--amber)", review: "var(--lavender)",
+  done: "var(--green)",
+};
 
 export default function TaskBoard() {
   const [tb, setTb] = useState<Record<string, any[]>>({});
   useEffect(() => {
-    fetchTaskboard().then((t) => setTb(t.states)).catch(() => {});
-    const t = setInterval(
-      () => fetchTaskboard().then((t) => setTb(t.states)).catch(() => {}),
-      8000);
+    const load = () =>
+      fetch("/api/v1/taskboard").then((r) => r.json())
+        .then((d) => setTb(d.states)).catch(() => {});
+    load();
+    const t = setInterval(load, 10000);
     return () => clearInterval(t);
   }, []);
   return (
-    <div style={{ display: "flex", gap: 12, padding: 12 }}>
-      {ORDER.map((s) => (
-        <div key={s} style={{ flex: 1, background: "#f6f6f2",
-                              border: "1px solid #ccc", padding: 8 }}>
-          <h3>{CN[s]} ({(tb[s] ?? []).length})</h3>
-          {(tb[s] ?? []).map((e, i) => {
-            const p = e.payload ?? {};
-            return (
-              <div key={i} style={{ background: "#fff",
-                                    border: "1px solid #ddd", padding: 6,
-                                    marginBottom: 6, fontSize: 12,
-                                    color: "#1a1a1a",
-                                    wordBreak: "break-word" as const }}>
-                <b>{e.title}</b>
-                <div>owner: {p.owner ?? e.by}</div>
-                <div>status: {p.state ?? s}</div>
-                {p.blocker && <div style={{ color: "#a00" }}>
-                  blocker: {p.blocker}</div>}
-                <div style={{ color: "#444", wordBreak: "break-word" as const }}>
-                  evidence: {(e.evidence_json ?? "[]").slice(0, 60)}</div>
-                <div style={{ color: "#444", wordBreak: "break-word" as const }}>
-                  graph_run: sku_long_tail_nextgen_cycle_v1</div>
-                <div style={{ color: "#444", wordBreak: "break-word" as const }}>
-                  updated: {(e.created_at ?? "").slice(0, 19)}</div>
-                <div>acceptance: {p.acceptance ?? "pending"}</div>
+    <div>
+      <h1>任务板</h1>
+      <p className="muted">Agent 与人工的共同工作队列 · 实时投影</p>
+      <div style={{ display: "flex", gap: 20, alignItems: "flex-start" }}>
+        {ORDER.map((s) => (
+          <div key={s} className="tcol">
+            <span className="pill" style={{ background: TINT[s],
+              marginBottom: 14 }}>
+              {CN[s]}（{(tb[s] ?? []).length}）
+            </span>
+            {(tb[s] ?? []).map((c, i) => (
+              <div key={i} className="tcard">
+                <div className="t">{c.title}</div>
+                <span className="pill" style={{
+                  background: TINT[s], fontSize: 11 }}>
+                  {c.payload?.state ?? s}
+                </span>
+                <div className="meta">
+                  owner：{c.owner || "—"} · 验收：{c.payload?.acceptance
+                    ?? "pending"}
+                </div>
+                <details>
+                  <summary>证据与关联</summary>
+                  <div className="meta">
+                    graph：{c.cycle_id ?? "—"}<br />
+                    evidence：{(c.payload?.evidence ?? []).join(", ")
+                      || "—"}
+                  </div>
+                </details>
               </div>
-            );
-          })}
-        </div>
-      ))}
+            ))}
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
