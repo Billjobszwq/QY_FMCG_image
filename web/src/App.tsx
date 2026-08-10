@@ -16,20 +16,22 @@ import TaskBoard from "./pages/TaskBoard";
 import Workflow from "./pages/Workflow";
 import LabelStudioHub from "./pages/LabelStudioHub";
 
-const NAV = [
-  { to: "/", label: "总览" },
-  { to: "/taskboard", label: "任务板" },
-  { to: "/workflow", label: "工作流" },
-  { to: "/recognition", label: "识别" },
-  { to: "/labelstudio", label: "标注中心" },
+const RAIL = [
+  { to: "/", label: "总览", c: "var(--blue)" },
+  { to: "/taskboard", label: "任务板", c: "var(--orange)" },
+  { to: "/workflow", label: "工作流", c: "var(--white)" },
+  { to: "/recognition", label: "识别", c: "var(--green)" },
+  { to: "/labelstudio", label: "标注", c: "var(--lavender)" },
+  { to: "/training", label: "训练", c: "var(--yellow)" },
+  { to: "/assets", label: "数据", c: "var(--blue)" },
+  { to: "/status", label: "状态", c: "var(--green)" },
+];
+const MORE = [
   { to: "/annotation", label: "审核" },
-  { to: "/assets", label: "数据" },
-  { to: "/training", label: "训练" },
   { to: "/cascade", label: "级联" },
   { to: "/models-runtime", label: "模型" },
   { to: "/packaging", label: "新包装" },
   { to: "/runs", label: "Graph" },
-  { to: "/status", label: "状态" },
 ];
 
 export default function App() {
@@ -40,98 +42,96 @@ export default function App() {
   const [password, setPassword] = useState("");
   const [loginError, setLoginError] = useState<string | null>(null);
   const [loginBusy, setLoginBusy] = useState(false);
+  const [gate, setGate] = useState<string>("");
 
   useEffect(() => {
-    fetchMe()
-      .then(setMe)
-      .catch(() => setMe(null))
+    fetchMe().then(setMe).catch(() => setMe(null))
       .finally(() => setAuthChecked(true));
+  }, []);
+  useEffect(() => {
+    fetch("/api/v1/platform/gate").then((r) => r.json())
+      .then((d) => setGate(d.gate ?? "")).catch(() => {});
+  }, []);
+  useEffect(() => {
+    let stop = false;
+    const load = () => fetchHealth().then((h) => !stop && setHealth(h))
+      .catch(() => !stop && setHealth(null));
+    load();
+    const t = setInterval(load, 15000);
+    return () => { stop = true; clearInterval(t); };
   }, []);
 
   const onLogin = async () => {
-    setLoginBusy(true);
-    setLoginError(null);
-    try {
-      setMe(await login(username, password));
-      setPassword("");
-    } catch (e) {
-      setLoginError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setLoginBusy(false);
-    }
+    setLoginBusy(true); setLoginError(null);
+    try { setMe(await login(username, password)); setPassword(""); }
+    catch (e) { setLoginError(e instanceof Error ? e.message : String(e)); }
+    finally { setLoginBusy(false); }
   };
 
-  const onLogout = async () => {
-    await logout();
-    setMe(null);
-  };
-
-  useEffect(() => {
-    let stop = false;
-    const load = () =>
-      fetchHealth()
-        .then((h) => !stop && setHealth(h))
-        .catch(() => !stop && setHealth(null));
-    load();
-    const t = setInterval(load, 15000);
-    return () => {
-      stop = true;
-      clearInterval(t);
-    };
-  }, []);
-
-  const overall = health?.status;
-
-  if (!authChecked) return <div className="main">加载中…</div>;
-
+  if (!authChecked) return <div className="main">…</div>;
   if (!me) {
     return (
-      <div className="main" style={{ maxWidth: 460, margin: "8vh auto" }}>
-        <h1>统一工作台</h1>
-        <p className="muted">Agent + Workflow 驱动的 SKU 识别系统</p>
-        <div className="card-lg">
-          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-            <input placeholder="用户名" value={username}
-              onChange={(e) => setUsername(e.target.value)} />
-            <input placeholder="口令" type="password" value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && onLogin()} />
-            {loginError && <span className="pill err">{loginError}</span>}
-            <button className="btn violet" disabled={loginBusy} onClick={onLogin}>
-              进入工作台
-            </button>
-          </div>
+      <div className="main" style={{ maxWidth: 520, margin: "10vh auto" }}>
+        <span className="kicker">qy · sku recognition</span>
+        <div className="display">进入工作台。</div>
+        <div className="blk c-white" style={{ minHeight: 0 }}>
+          <input placeholder="用户名" value={username}
+            onChange={(e) => setUsername(e.target.value)} />
+          <input placeholder="口令" type="password" value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && onLogin()} />
+          {loginError && <span className="pill on-red">{loginError}</span>}
+          <button className="btn" disabled={loginBusy} onClick={onLogin}>
+            进入 →
+          </button>
         </div>
       </div>
     );
   }
 
+  const mq = ` micro-gold 200 条待人工审核 ✦ Gate：${gate || "—"} ✦ ` +
+    `production 未切换 ✦ 服务：${health?.status ?? "—"} ✦` +
+    " 候选模型待 micro-gold 解禁 ✦ Agent + Workflow 驱动 ✦";
+
   return (
     <div>
-      <div className="topbar">
-        <span className="brand">◆ 统一工作台</span>
-        <span className={
-          overall === "healthy" ? "pill ok" :
-          overall === "degraded" ? "pill warn" : "pill err"}>
-          {overall === "healthy" ? "● 全部服务在线" :
-           overall === "degraded" ? "● 部分降级" : "● 异常"}
+      <div className="marquee"><div>{mq}{mq}</div></div>
+      <div style={{ display: "flex", justifyContent: "space-between",
+        alignItems: "center", padding: "14px 40px 0 100px" }}>
+        <span style={{ fontWeight: 900, fontFamily: "var(--font-display)",
+          fontSize: 20 }}>qy·sku.</span>
+        <span style={{ display: "flex", gap: 8 }}>
+          <span className="pill on-blue">{me.actor}</span>
+          <button className="btn black" style={{ padding: "8px 18px" }}
+            onClick={async () => { await logout(); setMe(null); }}>
+            退出
+          </button>
         </span>
-        <span className="pill muted">Gate 见总览</span>
-        <span style={{ flex: 1 }} />
-        <span className="pill info">{me.actor}</span>
-        <button className="btn ghost" style={{ padding: "8px 16px" }}
-          onClick={onLogout}>退出</button>
       </div>
-      <div className="shell">
-        <nav className="nav">
-          {NAV.map((n) => (
+      <div className="layout">
+        <nav className="rail">
+          {RAIL.map((n, i) => (
             <NavLink key={n.to} to={n.to} end={n.to === "/"}
+              style={{ background: n.c }}
               className={({ isActive }) => (isActive ? "active" : "")}>
-              {n.label}
+              <span className="top">
+                <span>0{i + 1}</span><span>→</span>
+              </span>
+              <span>{n.label}</span>
             </NavLink>
           ))}
+          <div style={{ display: "flex", flexDirection: "column",
+            gap: 4, padding: "8px 4px", fontSize: 11, fontWeight: 700 }}>
+            {MORE.map((n) => (
+              <NavLink key={n.to} to={n.to}
+                style={{ color: "#5a4a3d", textDecoration: "none",
+                  padding: "2px 0" }}>
+                {n.label}
+              </NavLink>
+            ))}
+          </div>
         </nav>
-        <main className="main">
+        <main className="content">
           <Routes>
             <Route path="/" element={<Overview health={health} />} />
             <Route path="/taskboard" element={<TaskBoard />} />
@@ -147,6 +147,13 @@ export default function App() {
             <Route path="/packaging" element={<NewPackaging />} />
             <Route path="/status" element={<SystemStatus health={health} />} />
           </Routes>
+          <footer className="footer">
+            <div className="logo">qy·sku.</div>
+            <div className="fine">
+              © 2026 QY · Agent + Workflow 驱动的 SKU 识别系统 ·
+              非 SaaS · production=prod_20260805_v5_r1（人工批准制）
+            </div>
+          </footer>
         </main>
       </div>
       <AgentChat />
