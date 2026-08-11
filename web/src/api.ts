@@ -673,6 +673,37 @@ export interface RecognitionTaskRow {
   trace_id?: string;
 }
 
+export interface RecognitionTaskDetail {
+  task: RecognitionTaskRow;
+  contract: {
+    recognition_profile_id: string;
+    service_tier: string;
+    source: string;
+    project_id: string;
+    trace_id: string;
+    idempotency_key: string | null;
+  };
+  inputs: { entry: string; file_count: number };
+  outputs: { status: string; sku_count: number; results: any[] };
+  errors: string[];
+  timeline: Array<{ at: string; event: string; detail: string }>;
+  usage: { events: any[]; note: string };
+  evidence: { refs: any[]; note: string };
+  relations: {
+    work_id: string | null; run_id: string | null;
+    parent_task_id: string | null; child_task_ids: string[];
+    note: string;
+  };
+  next_actions: string[];
+}
+
+export async function fetchRecognitionTaskDetail(
+  taskId: string): Promise<RecognitionTaskDetail> {
+  const r = await fetch(`/api/v1/recognition/tasks/${taskId}`);
+  if (!r.ok) throw new Error(`recognition task detail HTTP ${r.status}`);
+  return r.json();
+}
+
 export interface RecognitionTaskView {
   task: RecognitionTaskRow;
   results: Array<Record<string, unknown> & { name?: string }>;

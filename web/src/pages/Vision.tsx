@@ -3,11 +3,14 @@
 // /vision/models /vision/evidence —— 每条独立可深链接。
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  RecognitionProfileRow, RecognitionTaskRow, RecognitionTaskView,
-  fetchGoldStatus, fetchRecognitionProfiles, fetchRecognitionTasks,
-  fetchReviewStatus, recognizeByUrl, uploadRecognitionFiles,
+  RecognitionProfileRow, RecognitionTaskDetail, RecognitionTaskRow,
+  RecognitionTaskView, fetchGoldStatus, fetchRecognitionProfiles,
+  fetchRecognitionTaskDetail, fetchRecognitionTasks, fetchReviewStatus,
+  recognizeByUrl, uploadRecognitionFiles,
 } from "../api";
-import { EmptyState, ErrorState, Loading, PageHeader } from "../platform/components";
+import {
+  DetailDrawer, EmptyState, ErrorState, Loading, PageHeader,
+} from "../platform/components";
 import Annotation from "./Annotation";
 import Assets from "./Assets";
 import LabelStudioHub from "./LabelStudioHub";
@@ -161,11 +164,18 @@ export function RecognizeNow({ health }: { health: HealthBody | null }) {
         <h3>服务档位</h3>
         <select value={tier} aria-label="服务档位"
           onChange={(e) => setTier(e.target.value)}>
-          <option value="fast">fast（快速）</option>
-          <option value="standard">standard（标准）</option>
-          <option value="high">high（高精度）</option>
-          <option value="extreme">extreme（极高）</option>
+          <option value="standard">standard（标准 · 当前唯一可用）</option>
+          <option value="fast" disabled>
+            fast — 未启用（无真实算力/SLA/价格差异）</option>
+          <option value="high" disabled>
+            high — 未启用（无真实算力/SLA/价格差异）</option>
+          <option value="extreme" disabled>
+            extreme — 未启用（无真实算力/SLA/价格差异）</option>
         </select>
+        <p className="v" style={{ marginTop: 6 }}>
+          ABOSV2-P0-004：档位尚未真实路由不同模型/计算/SLA/价格，
+          仅 standard 可用；其余档位明确标记未启用，不作为可售选项。
+        </p>
       </div>
       {busy && <p className="muted" role="status">识别中…</p>}
       {error && <div className="banner banner-error">识别失败：{error}</div>}
@@ -268,6 +278,17 @@ export function VisionTasks() {
   const [status, setStatus] = useState("");
   const [page, setPage] = useState(0);
   const [err, setErr] = useState<string | null>(null);
+  // ABOSV2-P1-005：统一任务详情（真实 API，不伪造）
+  const [detail, setDetail] = useState<RecognitionTaskDetail | null>(null);
+  const [detailErr, setDetailErr] = useState<string | null>(null);
+  const openDetail = async (taskId: string) => {
+    setDetailErr(null);
+    try {
+      setDetail(await fetchRecognitionTaskDetail(taskId));
+    } catch (e) {
+      setDetailErr(e instanceof Error ? e.message : String(e));
+    }
+  };
   const PAGE = 20;
   const reload = useCallback(async () => {
     try {
@@ -312,21 +333,93 @@ export function VisionTasks() {
             </tr></thead>
             <tbody>
               {tasks.map((t) => (
-                <tr key={t.task_id}>
-                  <td>{ENTRY_CN[t.entry] ?? t.entry}</td>
-                  <td><span className={t.status === "completed"
+                <tr key={t.task_id} className="row-clickable"
+                  tabIndex={0} role="button"
+                  aria-label={`查看任务 ${t.task_id.slice(0, 8)} 详情`}
+                  onClick={() => openDetail(t.task_id)}
+                  onKeyDown={(e) => e.key === "Enter"
+                    && openDetail(t.task_id)}>
+                  <td data-label="入口">{ENTRY_CN[t.entry] ?? t.entry}</td>
+                  <td data-label="状态"><span className={t.status === "completed"
                     ? "pill-healthy" : "pill-unavailable"}>
                     {STATUS_CN[t.status] ?? t.status}</span></td>
-                  <td>{t.file_count}</td>
-                  <td>{t.sku_count}</td>
-                  <td className="v">{t.recognition_profile_id || "—"}</td>
-                  <td className="v">{t.source || "—"}</td>
-                  <td>{t.created_by}</td>
-                  <td className="v">{t.created_at}</td>
+                  <td data-label="输入">{t.file_count}</td>
+                  <td data-label="检出">{t.sku_count}</td>
+                  <td data-label="Profile" className="v">
+                    {t.recognition_profile_id || "—"}</td>
+                  <td data-label="来源" className="v">{t.source || "—"}</td>
+                  <td data-label="发起人">{t.created_by}</td>
+                  <td data-label="时间" className="v">{t.created_at}</td>
                 </tr>
               ))}
             </tbody>
           </table>
+        )}
+        {detailErr && <ErrorState message={`详情加载失败：${detailErr}`}
+          onRetry={() => detail && openDetail(detail.task.task_id)} />}
+        {detail && (
+          <DetailDrawer
+            title={`识别任务 · ${detail.task.task_id.slice(0, 8)}…`}
+            onClose={() => setDetail(null)}>
+            <section>
+              <h4>契约（冻结）</h4>
+              <div className="detail-kv">
+                <b>Profile</b><span>{detail.contract.recognition_profile_id}</span>
+                <b>服务档位</b><span>{detail.contract.service_tier}</span>
+                <b>来源</b><span>{detail.contract.source}</span>
+                <b>trace_id</b><span>{detail.contract.trace_id}</span>
+                <b>项目</b><span>{detail.contract.project_id || "—"}</span>
+              </div>
+            </section>
+            <section>
+              <h4>输入 / 输出</h4>
+              <div className="detail-kv">
+                <b>入口</b><span>{ENTRY_CN[detail.inputs.entry]
+                  ?? detail.inputs.entry}</span>
+                <b>文件数</b><span>{detail.inputs.file_count}</span>
+                <b>检出总数</b><span>{detail.outputs.sku_count}</span>
+                <b>状态</b><span>{STATUS_CN[detail.outputs.status]
+                  ?? detail.outputs.status}</span>
+              </div>
+              {detail.outputs.results.slice(0, 3).map((r: any, i) => (
+                <p key={i} className="v" style={{ fontSize: 12 }}>
+                  {r.name}：{r.count ?? 0} 件
+                  {r.products?.slice(0, 3).map((p: any) =>
+                    ` ${p.name}×${p.count}`).join("、")}
+                </p>
+              ))}
+            </section>
+            {detail.errors.length > 0 && (
+              <section>
+                <h4>错误</h4>
+                {detail.errors.map((e) => <p key={e} className="v"
+                  style={{ color: "var(--err, #c92f2f)" }}>⚠ {e}</p>)}
+              </section>
+            )}
+            <section>
+              <h4>时间线</h4>
+              {detail.timeline.map((ev, i) => (
+                <p key={i} className="v" style={{ fontSize: 12 }}>
+                  {ev.event} · {ev.detail}</p>
+              ))}
+            </section>
+            <section>
+              <h4>证据 / 用量 / 关联</h4>
+              <p className="v" style={{ fontSize: 12 }}>
+                {detail.evidence.note}</p>
+              <p className="v" style={{ fontSize: 12 }}>
+                {detail.usage.events.length > 0
+                  ? `usage 事件 ${detail.usage.events.length} 条`
+                  : detail.usage.note}</p>
+              <p className="v" style={{ fontSize: 12 }}>
+                work/run：{detail.relations.note}</p>
+            </section>
+            <section>
+              <h4>下一动作</h4>
+              {detail.next_actions.map((a) => <p key={a} className="v"
+                style={{ fontSize: 12 }}>· {a}</p>)}
+            </section>
+          </DetailDrawer>
         )}
       </div>
     </>

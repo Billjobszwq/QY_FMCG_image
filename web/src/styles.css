@@ -316,5 +316,32 @@ th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid
 th { font-weight: 800; }
 .main { padding: 28px 40px; }
 .nav { display: none; }
-.topbar { display: none; }
+/* ABOSV2 回归修复：旧兼容规则曾隐藏新壳 topbar（浏览器验收发现）；
+   topbar 由 platform/design/shell.css 控制，不得在此覆盖。 */
 .shell { display: block; }
+
+/* ---------- ABOSV2-P1-005 统一任务详情抽屉 ---------- */
+.detail-drawer-backdrop { position: fixed; inset: 0;
+  background: rgba(30, 22, 16, .35); z-index: 60; }
+.detail-drawer { position: fixed; top: 0; right: 0; bottom: 0;
+  width: min(460px, 92vw); background: var(--surface, #fffdf7);
+  border-left: 1px solid #eadfd5; box-shadow: -8px 0 28px rgba(0,0,0,.12);
+  z-index: 61; display: flex; flex-direction: column; }
+.detail-drawer-head { display: flex; align-items: center;
+  justify-content: space-between; padding: 12px 16px;
+  border-bottom: 1px solid #eadfd5; }
+.detail-drawer-head h3 { margin: 0; font-size: 14px; }
+.detail-drawer-body { overflow-y: auto; padding: 12px 16px; }
+.detail-drawer-body section { margin-bottom: 14px; }
+.detail-drawer-body section h4 { margin: 0 0 6px; font-size: 12px;
+  text-transform: uppercase; letter-spacing: .04em;
+  color: var(--text-muted, #5a4a3d); }
+.detail-kv { display: grid; grid-template-columns: 92px 1fr; gap: 4px 8px;
+  font-size: 12.5px; }
+.detail-kv b { font-weight: 600; color: var(--text-muted, #5a4a3d); }
+tr.row-clickable { cursor: pointer; }
+tr.row-clickable:hover, tr.row-clickable:focus-visible {
+  background: rgba(255, 214, 102, .18); outline: none; }
+@media (max-width: 1023px) {
+  .detail-drawer { width: 100vw; border-left: none; }
+}

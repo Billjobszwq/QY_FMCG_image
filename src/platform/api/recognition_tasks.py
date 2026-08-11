@@ -246,4 +246,79 @@ def create_recognition_tasks_router(
         total = store.count_recognition_tasks(status=status)
         return {"count": total, "tasks": tasks}
 
+    @router.get("/api/v1/recognition/tasks/{task_id}")
+    def task_detail(task_id: str) -> dict:
+        """ABOSV2-P1-005：统一任务详情（task/trace/tier/profile/输入
+        输出/错误/时间线/证据/usage/关联/下一动作）。
+
+        诚实原则：统一 Work/Run/EvidenceBundle/Usage 由 Phase B 接入；
+        未接入区块显式给 note，不伪造数字。
+        """
+        task = store.get_recognition_task(task_id)
+        if task is None:
+            raise HTTPException(404, f"识别任务不存在: {task_id}")
+        results = json.loads(task.get("result_json") or "[]")
+        errors = [e for e in (task.get("error") or "").split("; ") if e]
+        status = task.get("status")
+        created_at = task.get("created_at") or ""
+        timeline = [{"at": created_at, "event": "created",
+                     "detail": f"入口 {task.get('entry')}；来源"
+                                f" {task.get('source') or '未知'}"}]
+        if status in ("completed", "failed"):
+            timeline.append({"at": created_at, "event": status,
+                             "detail": ("全部完成" if status == "completed"
+                                        else f"失败：{len(errors)} 项错误")})
+        next_actions: list[str] = []
+        if status == "failed":
+            next_actions.append("重试：用同一 Profile 重新上传（可用相同"
+                                " Idempotency-Key 避免重复）")
+            next_actions.append("若识别服务不可达：./bin/abos status → "
+                                "./bin/abos start 后重试")
+        elif status == "completed":
+            next_actions.append("在结果中核对 SKU 与数量；0 检出是诚实结果"
+                                "（非货架/registry 外商品 fail-closed）")
+            next_actions.append("如需复核：按 trace_id 在证据/审计链查询")
+        usage_rows = []
+        try:
+            usage_rows = store.list_usage_events_for_task(task_id)
+        except Exception:
+            usage_rows = []  # Phase B 前无按任务的 usage 索引，诚实为空
+        return {
+            "task": task,
+            "contract": {
+                "recognition_profile_id": task.get(
+                    "recognition_profile_id") or "",
+                "service_tier": task.get("service_tier") or "",
+                "source": task.get("source") or "",
+                "project_id": task.get("project_id") or "",
+                "trace_id": task.get("trace_id") or "",
+                "idempotency_key": task.get("idempotency_key") or None,
+            },
+            "inputs": {"entry": task.get("entry"),
+                       "file_count": task.get("file_count")},
+            "outputs": {"status": status,
+                        "sku_count": task.get("sku_count"),
+                        "results": results},
+            "errors": errors,
+            "timeline": timeline,
+            "usage": {
+                "events": usage_rows,
+                "note": ("当前识别任务未写入 usage 账本；"
+                         "Phase B 统一 UsageEventV2 接入后此处显示真实计量"
+                         if not usage_rows else ""),
+            },
+            "evidence": {
+                "refs": [],
+                "note": "EvidenceBundleV1 由 Phase B 统一接入；当前仅"
+                        " trace_id/profile/结果可作为追溯线索",
+            },
+            "relations": {
+                "work_id": None, "run_id": None,
+                "parent_task_id": None, "child_task_ids": [],
+                "note": "统一 Work/Run（BusinessRunV1/WorkItemV2）由"
+                        " Phase B 接入；当前识别任务尚未进入 workflow run",
+            },
+            "next_actions": next_actions,
+        }
+
     return router

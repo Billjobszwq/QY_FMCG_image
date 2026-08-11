@@ -156,7 +156,7 @@ export default function Home({ health, modules, identity }: {
                 <tbody>
                   {modules.map((m) => (
                     <tr key={m.module_id}>
-                      <td>
+                      <td data-label="模块">
                         <span style={{ display: "inline-block",
                           width: 9, height: 9, borderRadius: 3,
                           background: accentVar(m.theme_token),
@@ -164,8 +164,9 @@ export default function Home({ health, modules, identity }: {
                         <Link to={m.navigation[0]?.route
                           ?? m.primary_route}>{m.name}</Link>
                       </td>
-                      <td><StatusBadge status={m.status} /></td>
-                      <td className="v">{m.agents.join("、") || "—"}</td>
+                      <td data-label="状态"><StatusBadge status={m.status} /></td>
+                      <td data-label="Agent" className="v">
+                        {m.agents.join("、") || "—"}</td>
                     </tr>
                   ))}
                 </tbody>

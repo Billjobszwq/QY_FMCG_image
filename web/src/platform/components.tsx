@@ -1,5 +1,5 @@
 // ABOS T4：共享状态组件（loading/empty/error/blocked 均有下一步）。
-import { ReactNode } from "react";
+import { ReactNode, useEffect } from "react";
 import { ModuleView, STATUS_CN } from "./registry";
 
 export function Loading({ text = "加载中…" }: { text?: string }) {
@@ -48,6 +48,33 @@ export function StatusBadge({ status }: { status: string }) {
     : status === "degraded" ? "warn"
     : status === "disabled" ? "err" : "muted";
   return <span className={`badge ${cls}`}>{STATUS_CN[status] ?? status}</span>;
+}
+
+// ABOSV2-P1-005：统一任务详情抽屉壳（识别/问卷/外勤/报告/结算复用）。
+// Esc 关闭；背景点击关闭；内容全部来自真实详情 API。
+export function DetailDrawer({ title, onClose, children }: {
+  title: string; onClose: () => void; children: ReactNode;
+}) {
+  useEffect(() => {
+    const h = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    window.addEventListener("keydown", h);
+    return () => window.removeEventListener("keydown", h);
+  }, [onClose]);
+  return (
+    <>
+      <div className="detail-drawer-backdrop" onClick={onClose}
+        aria-hidden="true" />
+      <aside className="detail-drawer" role="dialog"
+        aria-label={title} aria-modal="true">
+        <div className="detail-drawer-head">
+          <h3>{title}</h3>
+          <button className="btn small" aria-label="关闭详情"
+            onClick={onClose}>✕</button>
+        </div>
+        <div className="detail-drawer-body">{children}</div>
+      </aside>
+    </>
+  );
 }
 
 // ABOS T10：planned 模块诚实插槽 —— 说明目标/依赖/可接入 Data Product/

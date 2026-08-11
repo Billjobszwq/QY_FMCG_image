@@ -253,19 +253,38 @@ button:focus-visible, a:focus-visible, [tabindex]:focus-visible {
   gap: 6px 12px; font-size: 13px; margin: 12px 0; }
 .planned-slot dt { color: var(--text-muted); }
 
-/* ---------- 响应式 ---------- */
+/* ---------- 响应式（ABOSV2-P1-006） ---------- */
 @media (max-width: 1280px) {
   :root { --side-w: 320px; }
 }
+/* 1024–1439：主管默认收起（JS 阈值 1440）；打开时为不透明临时
+   抽屉，不占据主内容布局；<1024 抽屉占满宽度。 */
+@media (max-width: 1439px) {
+  .side-panel { position: fixed; right: 0; top: 0; z-index: 40;
+    height: 100vh; box-shadow: var(--shadow-2);
+    background: var(--surface); }
+}
 @media (max-width: 1024px) {
   :root { --nav-w: 180px; }
-  .side-panel { position: fixed; right: 0; z-index: 40;
-    box-shadow: var(--shadow-2); }
   .rec-grid { grid-template-columns: 1fr; }
+  /* 表格转 card：thead 隐藏，每行成卡片，单元格用 data-label 显示列名 */
+  table.table { display: block; }
+  table.table thead { display: none; }
+  table.table tbody { display: block; }
+  table.table tr { display: block; border: 1px solid var(--border);
+    border-radius: 10px; padding: 8px 12px; margin-bottom: 10px;
+    background: var(--surface); }
+  table.table td { display: flex; justify-content: space-between;
+    gap: 12px; border-bottom: 1px dashed var(--border); padding: 6px 0; }
+  table.table td:last-child { border-bottom: none; }
+  table.table td::before { content: attr(data-label);
+    font-weight: 600; color: var(--text-muted); flex: 0 0 auto; }
 }
 @media (max-width: 768px) {
-  :root { --nav-w: 64px; }
-  .pnav-item span.label { display: none; }
+  /* 窄屏保留可理解标签（只缩字号，隐藏状态徽章），不只剩色点 */
+  :root { --nav-w: 132px; }
+  .pnav-item { font-size: 12px; gap: 6px; padding: 8px 6px; }
+  .pnav-item span.label { display: inline; }
   .pnav-status { display: none; }
   .page { padding: 12px 12px 40px; }
 }

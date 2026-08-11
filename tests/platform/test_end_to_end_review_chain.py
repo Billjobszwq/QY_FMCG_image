@@ -293,11 +293,18 @@ def test_7_invalidated_queue_isolated_from_default_views(env):
     assert old_tid not in {t["task_id"] for t in prog["active"]["tasks"]}
     # 历史行仍在（追加式失效，不删除）
     assert len(store.list_review_tasks()) == 10
-    # WorkItems 默认视图同样隔离失效队列任务
-    review_items = [w for w in collect_workitems(store)["items"]
+    # WorkItems 投影同样隔离失效队列任务；另（ABOSV2-P0-001/D-010）
+    # rq_v2 族已被 supersession 账本取代：current 不含，all 保留历史。
+    current = collect_workitems(store)
+    review_items = [w for w in current["items"]
                     if w["kind"] == "human_review"]
-    assert len(review_items) == 9
-    assert all(w["id"] != f"review:{old_tid}" for w in review_items)
+    assert review_items == []
+    assert all(w["id"] != f"review:{old_tid}" for w in current["items"])
+    all_items = [w for w in collect_workitems(
+        store, projection="all")["items"] if w["kind"] == "human_review"]
+    assert len(all_items) == 9
+    assert all(w["id"] != f"review:{old_tid}" for w in all_items)
+    assert all(w["superseded"] for w in all_items)
 
 
 # ---- 阶段 8：truebox 导出（严格模式只含终态 + 解析自洽 + GT 非空）----
@@ -337,7 +344,9 @@ def test_9_workitems_api_matches_review_progress(env):
 
     store = env["store"]
     prog = review_progress(store)
-    wi = collect_workitems(store)
+    # ABOSV2-P0-001/D-010：rq_v2 族已被 supersession 取代；口径一致性
+    # 在 projection=all 上对照，current 必须为 0。
+    wi = collect_workitems(store, projection="all")
     review_items = [w for w in wi["items"] if w["kind"] == "human_review"]
     assert len(review_items) == prog["active"]["total"] == 9
     assert wi["summary"]["pending_review"] == \
@@ -346,10 +355,16 @@ def test_9_workitems_api_matches_review_progress(env):
     for w in review_items:
         tid = w["id"].split(":", 1)[1]
         assert derived[tid] == w["status"]
-    # API 层（同库）计数一致
+    # API 层（同库）：默认 current=0；projection=all 计数一致
     app = FastAPI()
     app.include_router(create_workitems_router(store))
-    r = TestClient(app).get("/api/v1/workitems",
-                            params={"kind": "human_review", "limit": 500})
+    tc = TestClient(app)
+    r = tc.get("/api/v1/workitems",
+               params={"kind": "human_review", "limit": 500})
+    assert r.status_code == 200
+    assert r.json()["count"] == 0
+    r = tc.get("/api/v1/workitems",
+               params={"kind": "human_review", "limit": 500,
+                       "projection": "all"})
     assert r.status_code == 200
     assert r.json()["count"] == prog["active"]["total"]

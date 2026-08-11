@@ -191,6 +191,8 @@ export default function App() {
           {navModules.map((m) => (
             <NavLink key={m.module_id}
               to={m.navigation[0]?.route ?? m.primary_route}
+              title={m.name}
+              aria-label={`${m.name}（${STATUS_CN[m.status] ?? m.status}）`}
               className={({ isActive }) => (isActive
                 || (currentModule?.module_id === m.module_id)
                 ? "pnav-item active" : "pnav-item")}>
