@@ -27,6 +27,7 @@ import SystemStatus from "./pages/SystemStatus";
 import {
   IamAccounts, IamAudit, MasterCustomers, MasterProjects, MasterSkus,
 } from "./pages/IamMaster";
+import { SurveyDesign, SurveyField, SurveyReport } from "./pages/Survey";
 import {
   RecognizeNow, VisionAnnotation, VisionDatasets, VisionEvidence,
   VisionModels, VisionTasks,
@@ -291,12 +292,21 @@ export default function App() {
                 <MasterProjects /></div>} />
             <Route path="/master/skus"
               element={<div className="page wide"><MasterSkus /></div>} />
+            {/* 调研与问卷（ABOSV2 Phase E，真实后端） */}
+            <Route path="/survey" element={<Navigate to="/survey/design"
+              replace />} />
+            <Route path="/survey/design"
+              element={<div className="page wide">
+                <SurveyDesign /></div>} />
+            <Route path="/survey/field"
+              element={<div className="page wide"><SurveyField /></div>} />
+            <Route path="/survey/report"
+              element={<div className="page wide">
+                <SurveyReport /></div>} />
             {/* 系统与开发者 */}
             <Route path="/status"
               element={<SystemStatus health={health} />} />
-            {/* planned 模块：诚实插槽 */}
-            <Route path="/survey/*"
-              element={<ModulePage modules={modules} moduleId="survey" />} />
+            {/* planned 模块：诚实插槽（survey 已 live，见上方真实路由） */}
             <Route path="/geo/*"
               element={<ModulePage modules={modules} moduleId="geo" />} />
             <Route path="/analytics/*"

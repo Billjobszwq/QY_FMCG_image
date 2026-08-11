@@ -133,17 +133,24 @@ def build_default_module_registry() -> ModuleRegistry:
         health_checks=(),
     ))
     reg.register(ModuleManifestV2(
-        module_id="survey", name="调研与问卷", version="0.1.0",
-        domain="survey", status="planned", theme_token="cyan",
+        module_id="survey", name="调研与问卷", version="1.0.0",
+        domain="survey", status="live", theme_token="cyan",
         primary_route="/survey",
         navigation=(
             NavRoute(route="/survey/design", label="问卷设计",
-                     description="planned：问卷定义与样本",
-                     actions=()),
+                     description="题型/跳题 DAG/评分规则/版本/发布",
+                     actions=("创建草稿", "lint", "发布", "新版本")),
+            NavRoute(route="/survey/field", label="分配与填写",
+                     description="分配/作答/拍照证据/识别建议人工终审",
+                     actions=("分配", "填写", "提交", "修正")),
+            NavRoute(route="/survey/report", label="报表输入",
+                     description="final 答案与评分聚合（BI 只读消费）",
+                     actions=("查看报表",)),
         ),
         api_prefix="/api/v1/survey", openapi_tag="survey",
         data_products=("survey.responses_v1",),
-        permission_scopes=("survey.read",), billing_units=("response",),
+        permission_scopes=("survey.read", "survey.manage"),
+        billing_units=("response",),
     ))
     reg.register(ModuleManifestV2(
         module_id="geo", name="位置与外勤", version="0.1.0",

@@ -1479,6 +1479,92 @@ CREATE TRIGGER IF NOT EXISTS iam_audit_event_v1_no_update
     END;
 """
 
+# ABOSV2 Phase E：问卷域（定义版本/分配/响应/修正事件/拍照媒体）。
+# 发布后不可原地改；后台修正只追加 correction 事件并重算评分版本。
+_M036 = """
+CREATE TABLE IF NOT EXISTS survey_definition_v1 (
+    survey_id TEXT NOT NULL,
+    version INTEGER NOT NULL,
+    name TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'draft',
+    spec_json TEXT NOT NULL,
+    spec_hash TEXT NOT NULL DEFAULT '',
+    lint_report_json TEXT NOT NULL DEFAULT '[]',
+    created_by TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    published_at TEXT,
+    PRIMARY KEY (survey_id, version)
+);
+CREATE TABLE IF NOT EXISTS survey_assignment_v1 (
+    assignment_id TEXT PRIMARY KEY,
+    survey_id TEXT NOT NULL,
+    survey_version INTEGER NOT NULL,
+    customer_id TEXT NOT NULL DEFAULT '',
+    project_id TEXT NOT NULL DEFAULT '',
+    assignee TEXT NOT NULL DEFAULT '',
+    status TEXT NOT NULL DEFAULT 'assigned',
+    created_by TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS survey_response_v1 (
+    response_id TEXT PRIMARY KEY,
+    assignment_id TEXT NOT NULL,
+    survey_id TEXT NOT NULL,
+    survey_version INTEGER NOT NULL,
+    customer_id TEXT NOT NULL DEFAULT '',
+    respondent TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'draft',
+    answers_json TEXT NOT NULL DEFAULT '{}',
+    scores_json TEXT NOT NULL DEFAULT '{}',
+    score_version INTEGER NOT NULL DEFAULT 0,
+    submitted_at TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS survey_answer_correction_v1 (
+    correction_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    response_id TEXT NOT NULL,
+    question_id TEXT NOT NULL,
+    old_value_json TEXT NOT NULL,
+    new_value_json TEXT NOT NULL,
+    reason TEXT NOT NULL,
+    actor TEXT NOT NULL,
+    approver TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS survey_media_v1 (
+    media_id TEXT PRIMARY KEY,
+    response_id TEXT NOT NULL,
+    question_id TEXT NOT NULL,
+    kind TEXT NOT NULL DEFAULT 'photo',
+    evidence_ref TEXT NOT NULL DEFAULT '',
+    location_json TEXT NOT NULL DEFAULT '{}',
+    taken_at TEXT,
+    device TEXT NOT NULL DEFAULT '',
+    quality_json TEXT NOT NULL DEFAULT '{}',
+    recognition_run_id TEXT NOT NULL DEFAULT '',
+    suggestion_json TEXT NOT NULL DEFAULT '{}',
+    suggestion_status TEXT NOT NULL DEFAULT 'none',
+    final_value_json TEXT NOT NULL DEFAULT '',
+    decided_by TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL
+);
+CREATE TRIGGER IF NOT EXISTS survey_answer_correction_v1_no_delete
+    BEFORE DELETE ON survey_answer_correction_v1
+    BEGIN
+        SELECT RAISE(ABORT,
+            'survey_answer_correction_v1 不可变：禁止 DELETE');
+    END;
+CREATE TRIGGER IF NOT EXISTS survey_answer_correction_v1_no_update
+    BEFORE UPDATE ON survey_answer_correction_v1
+    BEGIN
+        SELECT RAISE(ABORT,
+            'survey_answer_correction_v1 不可变：禁止 UPDATE');
+    END;
+"""
+
 MIGRATIONS: tuple[tuple[str, str], ...] = (
     ("001_platform_init", _M001),
     ("002_labeling_inbox", _M002),
@@ -1515,6 +1601,7 @@ MIGRATIONS: tuple[tuple[str, str], ...] = (
     ("033_work_event_usage_control_plane", _M033),
     ("034_workflow_studio_v1", _M034),
     ("035_iam_master_data_v1", _M035),
+    ("036_survey_v1", _M036),
 )
 
 

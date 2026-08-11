@@ -139,6 +139,14 @@ def create_app(
         from src.platform.api.iam_api import create_iam_router
         app.include_router(create_iam_router(
             bundle.store, auth=AuthService(bundle.store)))
+        # ABOSV2 Phase E：问卷域（定义/分配/填写/拍照/修正/报表输入）。
+        from src.platform.iam import IAMService
+        from src.platform.survey import SurveyService
+        from src.platform.api.survey_api import create_survey_router
+        survey_service = SurveyService(bundle.store, gateway)
+        app.include_router(create_survey_router(
+            bundle.store, survey_service, IAMService(bundle.store),
+            auth=AuthService(bundle.store)))
         # U2-2：数据中心 Asset API（真实台账 source_asset_inventory_v1）
         from src.platform.api.assets import create_assets_router
         app.include_router(create_assets_router(bundle.store))
