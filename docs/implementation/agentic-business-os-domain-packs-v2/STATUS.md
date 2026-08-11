@@ -5,13 +5,14 @@
 
 ## 当前 Gate（唯一）
 
-`PHASE_A_CLOSED_G1_PASSED → Phase B 进行中`（统一 Work/Event/Usage Foundation）。
+`PHASE_A/B_CLOSED_G1_G2_PASSED → Phase C 待开工`（Workflow Studio MVP）。
 
-Phase A 关闭证据：commit 链 `4af64f2d` → `79b3a534` → `15a39325`；
-浏览器四视口 8/8 + topbar 回归复验；hermetic 1191 passed。
+- Phase A 证据：commit `4af64f2d` → `79b3a534` → `15a39325`；浏览器四视口 8/8。
+- Phase B 证据：commit `13106320`；实跱全链 ID 对账 + 失败同链恢复；
+  hermetic 1201 passed。
 
 不是 `READY_FOR_NEXT_DOMAIN_PACK`。Phase A（P0-001/002/004、P1-005/006/007、
-新增 P1-008）已关闭；P0-003 待 Phase B 全链贯通；Workflow/IAM/问卷/BI/
+新增 P1-008）与 Phase B（P0-003 全链贯通）已关闭；Workflow/IAM/问卷/BI/
 外勤/财务仍为 planned，禁止以导航入口计为完成。
 
 ## 已冻结决定
@@ -28,9 +29,8 @@ Phase A 关闭证据：commit 链 `4af64f2d` → `79b3a534` → `15a39325`；
 
 ## 当前未关闭问题
 
-- P0：P0-003 Recognition/Graph/Agent/Usage 无统一 run（Phase B 关闭）；
 - P1：Workflow 仅运行查看器；Manifest 与 Capability/Route 不是真正一体化；
-  主管 Agent 不是工具规划执行器（Phase B/C 关闭）；
+  主管 Agent 不是工具规划执行器（Phase C/Z 关闭）；
 - P2：便签 localStorage、event polling、profile 信息过载；
 - 业务：问卷、BI、Geo/Field、Finance、IAM 仍为 planned，禁止以导航入口计为完成。
 

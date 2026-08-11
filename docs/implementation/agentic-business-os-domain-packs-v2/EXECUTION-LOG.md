@@ -79,3 +79,36 @@
 
 - Phase B：统一 Work/Event/Usage Foundation（migration 033+）、Command Gateway、
   Outbox、投影重建对账、识别全链实跑报告 ID。
+
+## 2026-08-11 · Phase B 完成（commit 13106320），Gate G2 通过
+
+- migration 033：business_run_v1 / work_item_v2 / event_envelope_v1 /
+  usage_event_v2 / evidence_bundle_v1 / outbox_v1；事件/用量/证据 append-only
+  触发器；recognition_task 增加 run_id/work_id/correlation_id 回链。
+- CommandGateway（src/platform/control_plane.py）：Web/API/Agent 共用命令入口
+  POST /api/v1/commands；run 状态机（queued/running/succeeded/failed/cancelled，
+  failed 只能经 retry 事件恢复，不得直接成功）；Transactional Outbox（事件+outbox
+  同事务，幂等键去重）；retry/cancel 端点；投影 GET /api/v1/control/projection；
+  对账 GET /api/v1/control/reconcile。
+- 红测试 7 项先红后绿（test_abos_v2_control_plane.py）：schema 全字段、
+  append-only、全链 ID 一致、幂等、失败→retry 恢复、cancel 状态机、API 同源。
+- 实跑全链（B-6，真实 8091 production cascade，真实货架照片只读引用）：
+  goal `goal-7bdbc18c2613` → run `run-827e9e90f63f4efb` / work
+  `work-7482b3762cc24bd3` / corr `corr-9cb71622b785` → task
+  `b85d64704f33b8a490fba48161dee859` / trace `tr-d0a89eac757f` /
+  evidence `evid-2737faadd9354f19`；usage=recognition_photo×1 +
+  model_compute_ms×58.61；timeline=created/completed/command.accepted/
+  node.started/node.completed/run.succeeded；sku_count=4；
+  reconcile consistent=true（hash e80ea04d…，event_count=11，outbox 全 dispatched）。
+- 失败与恢复（B-7）：run `run-637bcd55272842c5` 因 adapter 未装配失败
+  （错误留在同一 run 与事件链）→ 修复后 POST /commands/{run}/retry 补交输入
+  → 同一 run succeeded，task `7807364dfc96f5cf297a3c4f780a070e`。
+- 识别任务详情 API 已消费控制平面：relations.run_id/work_id、usage events、
+  evidence refs、时间线融合 run 事件（不再诚实空）。
+- 全量 hermetic 回归：1201 passed, 1 skipped, 6 deselected。
+- 声明：未启动训练；production 未切换；用户资产只读引用（blob 未改动）。
+
+## 下一动作
+
+- Phase C：Workflow Studio MVP（canonical WorkflowDefinition/节点类型/
+  生命周期/runtime checkpoint/Studio UI/Executor Adapter SPI）。

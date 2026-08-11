@@ -20,11 +20,12 @@
 - [x] supersession 单测/集成测试（7+ 项红转绿；全量 1191 passed）
 - [x] 附加回归修复：ABOSV2-P1-008 topbar 隐藏
 
-## Gate G2 · Phase B（未开始）
+## Gate G2 · Phase B（已通过，2026-08-11）
 
-- [ ] 一条识别全链 ID 对账报告
-- [ ] 投影重建 hash/count 一致
-- [ ] 失败恢复演示
+- [x] 一条识别全链 ID 对账报告（EXECUTION-LOG：goal/run/work/corr/task/trace/evidence/usage；sku_count=4）
+- [x] 投影重建 hash/count 一致（reconcile consistent=true，hash e80ea04d…，outbox 全 dispatched）
+- [x] 失败恢复演示（run-637bcd55272842c5 failed → retry 同一 run succeeded）
+- [x] 红测试先红后绿（test_abos_v2_control_plane.py 7 项）；全量 1201 passed
 
 ## Gate G3–G9（未开始）
 

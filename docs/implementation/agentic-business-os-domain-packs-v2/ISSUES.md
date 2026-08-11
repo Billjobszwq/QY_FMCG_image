@@ -8,7 +8,7 @@
 |---|---:|---|---|---|---|
 | ABOSV2-P0-001 | P0 | CLOSED_WITH_EVIDENCE | 主页/主管读取旧 WorkItems，旧 250 审核复活为当前待办 | `workitems.py` 重新聚合 active 审核队列，未消费 supersession/current projection | commit `4af64f2d`：migration 031 supersession 账本 + projection=current/history/all；现场 current=2、superseded=254 入 history；红测试 7 项 + 浏览器四视口 |
 | ABOSV2-P0-002 | P0 | CLOSED_WITH_EVIDENCE | 快速目标 → 交给主管丢失输入 | Home.tsx 只导航 `?focus=chat`；无服务端 goal draft | commit `79b3a534`：migration 032 goal_draft_v1 + goals API；浏览器验证输入→主管→刷新恢复（abosv2_goal_* 截图） |
-| ABOSV2-P0-003 | P0 | PARTIALLY_CLOSED | 识别/Graph/Agent/Usage 无统一 run | recognition_tasks.py 直调 adapter，无 BusinessRun/Outbox/证据/计量 | Phase A 已接 goal→command→approve→task→detail 链（continuity 测试）；统一 BusinessRun/Event/Usage 留待 Phase B 全链关闭 |
+| ABOSV2-P0-003 | P0 | CLOSED_WITH_EVIDENCE | 识别/Graph/Agent/Usage 无统一 run | recognition_tasks.py 直调 adapter，无 BusinessRun/Outbox/证据/计量 | commit `13106320`：统一控制平面 + 实跱全链 ID 对账（run/work/corr/task/trace/evidence 一致，reconcile consistent=true）；失败 run 同一链恢复 |
 | ABOSV2-P0-004 | P0 | CLOSED_WITH_EVIDENCE | Service Tier 只是元数据，不改变模型/成本 | 所有档位调用同一 `adapter.recognize(conf)` | commit `15a39325`：fast/high/extreme 禁用并标“未启用”+ 契约守卫测试；浏览器截图 abosv2_tier_honest_1440.png |
 | ABOSV2-P1-001 | P1 | CONFIRMED_OPEN | Workflow 页面不是搭建器 | GraphDefinition 无 edge/条件/变量/触发器；build.py 硬注册两个 Graph | Phase C 关闭 |
 | ABOSV2-P1-002 | P1 | CONFIRMED_OPEN | Manifest 与 Capability 两套注册表 | `project()` 未投影执行契约；10 模块仅 4 capability | Phase C/Z 关闭 |

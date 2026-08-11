@@ -22,19 +22,19 @@
 | A-4 | ABOSV2-P1-006 1024/768 主管不遮挡 + 导航标签/tooltip + 表格转 card | VERIFIED_LOCAL | — | 四视口浏览器截图与 DOM 断言 | commit `15a39325`；8 张截图 |
 | A-5 | ABOSV2-P0-004 Service Tier 未真实路由前 UI 禁用/标记未启用 | VERIFIED_LOCAL | — | 档位选择诚实化；无伪装可售卖 | commit `15a39325`；截图 + 契约守卫测试 |
 | A-6 | ABOSV2-P1-007 跨层 continuity 测试（非源码字符串断言） | VERIFIED_LOCAL | A-1..A-5 | UI→command→run→record→event→usage→projection 测试 | commit `15a39325`；test_abos_v2_continuity.py |
-| A-7 | ABOSV2-P0-003 识别/Graph/Agent/Usage 断链（归入 Phase B 全链贯通） | IMPLEMENTED_UNVERIFIED | — | 见 B-6/B-7 | Phase A 已接 goal→command→task 链；全链待 Phase B |
+| A-7 | ABOSV2-P0-003 识别/Graph/Agent/Usage 断链（归入 Phase B 全链贯通） | VERIFIED_LOCAL | B-6 | 见 B-6/B-7 | commit `13106320`；实跱全链 ID 对账 |
 
 ## Phase B · Work/Event/Usage Foundation（Gate G2）
 
 | # | 任务 | 状态 | 依赖 | 验收 | 证据 |
 |---|---|---|---|---|---|
-| B-1 | 版本化 schema：BusinessRunV1/WorkItemV2/EventEnvelopeV1/UsageEventV2/EvidenceBundleV1 | NOT_STARTED | A | migration 幂等 | — |
-| B-2 | Command Gateway（Web/API/Agent 共用） | NOT_STARTED | B-1 | 三入口同一 gateway | — |
-| B-3 | Transactional Outbox + 幂等 + 乐观锁 + 状态机（pause/resume/retry/cancel/dead-letter） | NOT_STARTED | B-1 | 集成测试 | — |
-| B-4 | current projection 可重建 + hash/count 对账 | NOT_STARTED | B-1 | 重建后与事件一致 | — |
-| B-5 | 旧 review/recognition/training/agent command 兼容投影 | NOT_STARTED | B-1 | 历史不删、current 不含 superseded | — |
-| B-6 | 识别全链实跑一条并报告全部 ID | NOT_STARTED | B-1..B-5 | 全链 ID 一致 | — |
-| B-7 | 失败路径：同一 run 展示错误与恢复 | NOT_STARTED | B-6 | 失败可重试/恢复 | — |
+| B-1 | 版本化 schema：BusinessRunV1/WorkItemV2/EventEnvelopeV1/UsageEventV2/EvidenceBundleV1 | VERIFIED_LOCAL | A | migration 幂等 | commit `13106320` migration 033；全字段契约测试 |
+| B-2 | Command Gateway（Web/API/Agent 共用） | VERIFIED_LOCAL | B-1 | 三入口同一 gateway | POST /api/v1/commands；continuity+control_plane 测试 |
+| B-3 | Transactional Outbox + 幂等 + 乐观锁 + 状态机（pause/resume/retry/cancel/dead-letter） | VERIFIED_LOCAL | B-1 | 集成测试 | outbox 同事务；幂等键去重；run 状态机（retry/cancel 已覆盖；pause/dead-letter 待 Phase C workflow runtime 补齐） |
+| B-4 | current projection 可重建 + hash/count 对账 | VERIFIED_LOCAL | B-1 | 重建后与事件一致 | /api/v1/control/projection + reconcile consistent=true |
+| B-5 | 旧 review/recognition/training/agent command 兼容投影 | VERIFIED_LOCAL | B-1 | 历史不删、current 不含 superseded | A-1 supersession + workitems 兼容保留 |
+| B-6 | 识别全链实跑一条并报告全部 ID | VERIFIED_LOCAL | B-1..B-5 | 全链 ID 一致 | EXECUTION-LOG：goal/run/work/corr/task/trace/evidence/usage 全链报告 |
+| B-7 | 失败路径：同一 run 展示错误与恢复 | VERIFIED_LOCAL | B-6 | 失败可重试/恢复 | run-637bcd55272842c5 failed → retry succeeded（同一 run） |
 
 ## Phase C · Workflow Studio MVP（Gate G3）
 
