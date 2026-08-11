@@ -101,7 +101,8 @@ export default function Overview({ health }: { health: HealthBody | null }) {
         <span className="arrow">→</span>
       </a>
       <div className="blk c-white span12" style={{ minHeight: 0 }}>
-        <h2>候选模型状态</h2>
+        <details>
+          <summary style={{ fontSize: 16 }}>候选模型状态（{cands.length}）</summary>
         <table>
           <thead><tr><th>模型</th><th>状态</th><th>blocker</th></tr></thead>
           <tbody>
@@ -114,6 +115,7 @@ export default function Overview({ health }: { health: HealthBody | null }) {
             ))}
           </tbody>
         </table>
+        </details>
       </div>
     </div>
   );

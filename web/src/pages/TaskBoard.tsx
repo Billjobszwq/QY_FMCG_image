@@ -25,8 +25,7 @@ export default function TaskBoard() {
   }, []);
   return (
     <div>
-      <h1>任务板</h1>
-      <p className="muted">Agent 与人工的共同工作队列 · 实时投影</p>
+
       <div style={{ display: "flex", gap: 20, alignItems: "flex-start" }}>
         {ORDER.map((s) => (
           <div key={s} className="tcol">

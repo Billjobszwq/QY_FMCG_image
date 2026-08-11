@@ -18,8 +18,7 @@ export default function LabelStudioHub() {
     <div>
       <span className="kicker">03 · 标注中心 · annotation-agent</span>
       <ModuleTabs active="/labelstudio" items={[{ to: "/labelstudio", label: "micro-gold 审核" }, { to: "/labelstudio", label: "辅助标注" }, { to: "/labelstudio", label: "操作逻辑" }]} />
-      <h1>标注中心</h1>
-      <p className="muted">Label Studio 已融合进工作台 · 人工金标准唯一入口</p>
+
       <div className="grid" style={{ marginBottom: 24 }}>
         <div className="tile" style={{ background: "var(--green)" }}>
           <span className="k">micro-gold 审核（项目 22）</span>

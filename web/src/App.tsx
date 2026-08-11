@@ -28,14 +28,7 @@ const RAIL = [
   { to: "/biz", label: "经营智能", c: "var(--red)" },
   { to: "/status", label: "系统", c: "var(--green)" },
 ];
-const MORE = [
-  { to: "/taskboard", label: "任务板" },
-  { to: "/annotation", label: "审核" },
-  { to: "/cascade", label: "级联" },
-  { to: "/models-runtime", label: "模型驻留" },
-  { to: "/packaging", label: "新包装" },
-  { to: "/runs", label: "Graph" },
-];
+
 
 export default function App() {
   const [health, setHealth] = useState<HealthBody | null>(null);
@@ -123,16 +116,7 @@ export default function App() {
               <span>{n.label}</span>
             </NavLink>
           ))}
-          <div style={{ display: "flex", flexDirection: "column",
-            gap: 4, padding: "8px 4px", fontSize: 11, fontWeight: 700 }}>
-            {MORE.map((n) => (
-              <NavLink key={n.to} to={n.to}
-                style={{ color: "#5a4a3d", textDecoration: "none",
-                  padding: "2px 0" }}>
-                {n.label}
-              </NavLink>
-            ))}
-          </div>
+
         </nav>
         <main className="content">
           <Routes>
@@ -150,6 +134,8 @@ export default function App() {
             <Route path="/packaging" element={<NewPackaging />} />
             <Route path="/biz" element={<BizIntel />} />
             <Route path="/biz/api" element={<BizIntel />} />
+            <Route path="/biz/alert" element={<BizIntel />} />
+            <Route path="/biz/cfg" element={<BizIntel />} />
             <Route path="/status" element={<SystemStatus health={health} />} />
           </Routes>
           <footer className="footer">
