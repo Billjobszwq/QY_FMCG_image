@@ -1,0 +1,5 @@
+GET /api/v1/health: p50=148.5ms p95=165.2ms (n=20)
+GET /api/v1/modules: p50=1.6ms p95=2.1ms (n=20)
+GET /api/v1/recognition/tasks: p50=1.6ms p95=2.1ms (n=20)
+GET / (web shell HTML): p50=1.8ms p95=2.4ms (n=20)
+recent tasks: 5

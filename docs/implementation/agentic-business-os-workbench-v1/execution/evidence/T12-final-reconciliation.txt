@@ -1,0 +1,24 @@
+=== T12 最终对账 Tue Aug 11 17:20:27 CST 2026 ===
+--- HEAD:
+b5e27547edb84abc836532fbf41086ea28e730ae
+feat/nextgen-training-cycle-v2
+--- pytest: hermetic 1173 passed/1 skipped/6 deselected; host_mps 6 passed（见 T12-verification.txt 头部说明）
+--- SQLite:
+integrity: ok
+migrations: 30 | last: 030_recognition_task_profile_contract
+agents: 4
+recognition_task: 11
+tasks with profile: 6
+--- modules API:
+count: 10 source: ModuleManifestV2
+--- capabilities API:
+caps: 4 ['legacy.recognition.v2', 'legacy.training.monitor', 'legacy.label_studio', 'reference.echo']
+--- health:
+agg: healthy [('recognize', 'healthy'), ('monitor', 'healthy'), ('label_studio', 'healthy'), ('ml_backend', 'disabled'), ('omlx', 'healthy')]
+--- production:
+{
+  "bundle_id": "prod_20260805_v5_r1",
+  "previous": "prod_20260804_v4_r2",
+  "published_at": 1785916357.038639
+}--- 训练进程:
+       0

@@ -95,3 +95,14 @@
 - [ ] 模块与 Agent 开发指南
 - [ ] Quick Start + Troubleshooting Matrix + API 示例
 - [ ] 50 项最终报告
+
+---
+
+## 收口状态（2026-08-11 17:3x）
+
+- T1–T14 全部完成；红测试 12→0，新增测试 13+16+10+11 全绿。
+- hermetic 1173 passed/1 skipped/6 deselected；host_mps 6 passed；
+  npm typecheck/build 零错误；SQLite integrity ok（30 迁移）。
+- 四服务 bin/abos 冷启动实测通过；production 未切换；未启动训练。
+- 遗留见 ISSUES EX-005/EX-006（不阻断本 Gate）。
+- 最终状态：READY_FOR_NEXT_DOMAIN_PACK（FINAL-REPORT.md 50 项）。

@@ -38,7 +38,11 @@ function execIntent(intent: any, navigate: (to: string) => void): string {
 export function CommandPreviewCard({ cmd, onDone }:
   { cmd: any; onDone: (note: string) => void }) {
   const [busy, setBusy] = useState(false);
+  const [resolved, setResolved] = useState<string | null>(null);
   const params = cmd.params ?? {};
+  if (resolved) {
+    return <div className="delegation">命令 {cmd.command_id}：{resolved}</div>;
+  }
   return (
     <div className="cmd-preview">
       <div className="row"><b>命令</b><span>{cmd.kind}</span></div>
@@ -61,19 +65,22 @@ export function CommandPreviewCard({ cmd, onDone }:
             setBusy(true);
             try {
               const d = await approveAgentCommand(cmd.command_id);
-              onDone(`已批准${d.execution?.task_id
-                ? ` 并创建任务 ${d.execution.task_id}` : ""}`);
+              const note = `已批准${d.execution?.task_id
+                ? ` 并创建任务 ${d.execution.task_id}` : ""}`;
+              setResolved(note); onDone(note);
             } catch (e) {
-              onDone(`批准失败：${e instanceof Error ? e.message : e}`);
+              const note = `批准失败：${e instanceof Error ? e.message : e}`;
+              setResolved(note); onDone(note);
             } finally { setBusy(false); }
           }}>批准并执行</button>
         <button className="btn small danger" disabled={busy}
           onClick={async () => {
             setBusy(true);
             try { await rejectAgentCommand(cmd.command_id);
-              onDone("已拒绝"); }
+              setResolved("已拒绝"); onDone("已拒绝"); }
             catch (e) {
-              onDone(`拒绝失败：${e instanceof Error ? e.message : e}`);
+              const note = `拒绝失败：${e instanceof Error ? e.message : e}`;
+              setResolved(note); onDone(note);
             } finally { setBusy(false); }
           }}>拒绝</button>
       </div>
@@ -85,10 +92,14 @@ export default function SupervisorWorkspace() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const [tab, setTab] = useState<"board" | "chat">("board");
+  // 窄屏默认收起，避免遮挡主内容；顶栏/悬浮按钮可展开
+  const [open, setOpen] = useState<boolean>(() =>
+    typeof window !== "undefined" ? window.innerWidth >= 1024 : true);
 
   // 首页快速目标跳转 /home?focus=chat 时自动切到对话
   useEffect(() => {
     if (searchParams.get("focus") === "chat") {
+      setOpen(true);
       setTab("chat");
       searchParams.delete("focus");
       setSearchParams(searchParams, { replace: true });
@@ -212,6 +223,12 @@ export default function SupervisorWorkspace() {
   ];
 
   return (
+    <>
+      {!open && (
+        <button className="agent-fab" aria-label="打开主管工作台"
+          onClick={() => setOpen(true)}>✦</button>
+      )}
+      {open && (
     <aside className="side-panel" aria-label="主管工作台">
       <div className="side-tabs" role="tablist">
         <button role="tab" aria-selected={tab === "board"}
@@ -220,6 +237,10 @@ export default function SupervisorWorkspace() {
         <button role="tab" aria-selected={tab === "chat"}
           className={tab === "chat" ? "active" : ""}
           onClick={() => setTab("chat")}>主管 Agent</button>
+        <button aria-label="收起主管工作台" style={{ flex: "0 0 auto",
+          padding: "9px 10px", border: "none", background: "transparent",
+          cursor: "pointer", color: "var(--text-muted)" }}
+          onClick={() => setOpen(false)}>✕</button>
       </div>
       {tab === "board" ? (
         <div className="side-body">
@@ -320,5 +341,7 @@ export default function SupervisorWorkspace() {
         </>
       )}
     </aside>
+      )}
+    </>
   );
 }

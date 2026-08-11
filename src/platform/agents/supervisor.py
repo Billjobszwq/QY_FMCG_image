@@ -113,7 +113,8 @@ class QueryTool:
                 "SELECT COUNT(*) c FROM recognition_task").fetchone()["c"]
             last = self.store._conn.execute(
                 "SELECT task_id, status, entry, sku_count, created_at"
-                " FROM recognition_task ORDER BY id DESC LIMIT 1").fetchone()
+                " FROM recognition_task ORDER BY rowid DESC LIMIT 1"
+            ).fetchone()
             return {"total": total, "last": dict(last) if last else None}
         return self._safe(_q, {"total": 0, "last": None})
 

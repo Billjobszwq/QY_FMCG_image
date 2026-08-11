@@ -1,29 +1,28 @@
 # Execution Status
 
-- 当前 Gate：`BUSINESS_OS_REFRAME_IN_PROGRESS`
-- 当前节点：T0 完成 → T1/T2 进行中
-- HEAD：`7c2eab62030371d6c4bceec7dd3b5cc945d00729`（branch `feat/nextgen-training-cycle-v2`）
-- 服务：8091/8092/8300/8400 现场均在运行，聚合 healthy（T0 实测，见 evidence/T0-services-probe.txt）
-- Production：`prod_20260805_v5_r1`，未切换
-- 训练：无训练进程；本轮不启动
-- DB：integrity ok；本轮迁移将保持幂等
+- 当前 Gate：`READY_FOR_NEXT_DOMAIN_PACK`（13 项硬条件逐项核对，见 FINAL-REPORT §50）
+- HEAD：`b5e27547` + 收口提交（branch feat/nextgen-training-cycle-v2）
+- 服务：8091/8092/8300/8400 由 bin/abos 管理，聚合 healthy
+- Production：`prod_20260805_v5_r1`，未切换；训练：未启动
+- 测试：hermetic 1173 passed/1 skipped/6 deselected；host_mps 6 passed；
+  typecheck/build 零错误
 
 ## 节点进度
 
 | 节点 | 状态 |
 |---|---|
-| T0 BaselineAndSafetyAudit | done |
-| T1 CurrentUXBreakageReproduction | in-progress |
-| T2 ProductIdentityCorrection | pending |
-| T3 ModuleManifestV2AndRegistryProjection | pending |
-| T4 DesignSystemAndAppShell | pending |
-| T5 ThreeLevelNavigationMigration | pending |
-| T6 SupervisorAndDomainAgentRuntime | pending |
-| T7 RecognitionProfileContract | pending |
-| T8 RecognitionEndToEndVerticalSlice | pending |
-| T9 HomeCommandCenter | pending |
-| T10 FutureDomainSlots | pending |
-| T11 LocalStackRecoveryAndRunbook | pending |
-| T12 FullAutomatedVerification | pending |
-| T13 BrowserHumanAcceptance | pending |
-| T14 DocumentationAndFinalReconciliation | pending |
+| T0 BaselineAndSafetyAudit | done（evidence/T0-services-probe.txt） |
+| T1 CurrentUXBreakageReproduction | done（12 红测试→全绿） |
+| T2 ProductIdentityCorrection | done（identity API + 全站消费） |
+| T3 ModuleManifestV2AndRegistryProjection | done（16 测试） |
+| T4 DesignSystemAndAppShell | done（tokens/shell/组件） |
+| T5 ThreeLevelNavigationMigration | done（Registry 驱动 + redirect） |
+| T6 SupervisorAndDomainAgentRuntime | done（10 测试 + 浏览器验收） |
+| T7 RecognitionProfileContract | done（11 测试 + 实测拒绝） |
+| T8 RecognitionEndToEndVerticalSlice | done（Web/API/Agent 同源实测） |
+| T9 HomeCommandCenter | done（实时 workitems） |
+| T10 FutureDomainSlots | done（planned 诚实 + m3bars 删除） |
+| T11 LocalStackRecoveryAndRunbook | done（冷启动实测） |
+| T12 FullAutomatedVerification | done（全套测试 + 对账） |
+| T13 BrowserHumanAcceptance | done（视口 partial，见 BROWSER-QA） |
+| T14 DocumentationAndFinalReconciliation | done（三手册 + 本报告） |
