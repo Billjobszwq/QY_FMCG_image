@@ -104,6 +104,7 @@ def run_recognition_batch(
     service_tier: str = "standard", source: str = "api",
     project_id: str = "",
     profiles_service: Any | None = None,
+    run_id: str = "", work_id: str = "", correlation_id: str = "",
 ) -> dict[str, Any]:
     """四入口共用服务层：profile resolve → 逐图识别 → 落任务行。"""
     if idempotency_key:
@@ -152,7 +153,8 @@ def run_recognition_batch(
         error="; ".join(errors), idempotency_key=idempotency_key,
         recognition_profile_id=profile["profile_id"],
         service_tier=service_tier, source=source,
-        project_id=project_id, trace_id=trace_id)
+        project_id=project_id, trace_id=trace_id,
+        run_id=run_id, work_id=work_id, correlation_id=correlation_id)
     return {
         "task": task,
         "results": results,
@@ -279,10 +281,36 @@ def create_recognition_tasks_router(
                                 "（非货架/registry 外商品 fail-closed）")
             next_actions.append("如需复核：按 trace_id 在证据/审计链查询")
         usage_rows = []
+        evidence_refs: list[str] = []
+        relations_note = ("统一 Work/Run（BusinessRunV1/WorkItemV2）由"
+                          " Phase B 接入；当前识别任务尚未进入 workflow run")
         try:
-            usage_rows = store.list_usage_events_for_task(task_id)
+            usage_rows = store.list_usage_events_v2(
+                run_id=task.get("run_id") or "")
         except Exception:
-            usage_rows = []  # Phase B 前无按任务的 usage 索引，诚实为空
+            usage_rows = []
+        run_id_val = task.get("run_id") or ""
+        if run_id_val:
+            run_row = None
+            try:
+                run_row = store.get_business_run(run_id_val)
+            except Exception:
+                run_row = None
+            if run_row is not None:
+                relations_note = ""
+                if run_row.get("evidence_bundle_id"):
+                    evidence_refs.append(
+                        f"evidence_bundle:{run_row['evidence_bundle_id']}")
+                # 时间线融合统一 run 事件（command/node/run 全链）
+                try:
+                    for e in store.list_events(run_id=run_id_val):
+                        timeline.append({
+                            "at": e.get("occurred_at"),
+                            "event": e.get("event_type"),
+                            "detail": f"run {run_id_val[:12]}… ·"
+                                      f" work {e.get('work_id', '')[:12]}…"})
+                except Exception:
+                    pass
         return {
             "task": task,
             "contract": {
@@ -292,6 +320,7 @@ def create_recognition_tasks_router(
                 "source": task.get("source") or "",
                 "project_id": task.get("project_id") or "",
                 "trace_id": task.get("trace_id") or "",
+                "correlation_id": task.get("correlation_id") or "",
                 "idempotency_key": task.get("idempotency_key") or None,
             },
             "inputs": {"entry": task.get("entry"),
@@ -303,20 +332,22 @@ def create_recognition_tasks_router(
             "timeline": timeline,
             "usage": {
                 "events": usage_rows,
-                "note": ("当前识别任务未写入 usage 账本；"
-                         "Phase B 统一 UsageEventV2 接入后此处显示真实计量"
-                         if not usage_rows else ""),
+                "note": ("" if usage_rows else
+                         ("已接入统一 UsageEventV2 账本" if run_id_val else
+                          "当前识别任务未写入 usage 账本；Phase B 统一"
+                          " UsageEventV2 接入后此处显示真实计量")),
             },
             "evidence": {
-                "refs": [],
-                "note": "EvidenceBundleV1 由 Phase B 统一接入；当前仅"
-                        " trace_id/profile/结果可作为追溯线索",
+                "refs": evidence_refs,
+                "note": ("" if evidence_refs else
+                         "EvidenceBundleV1 由 Phase B 统一接入；当前仅"
+                         " trace_id/profile/结果可作为追溯线索"),
             },
             "relations": {
-                "work_id": None, "run_id": None,
+                "work_id": task.get("work_id") or None,
+                "run_id": run_id_val or None,
                 "parent_task_id": None, "child_task_ids": [],
-                "note": "统一 Work/Run（BusinessRunV1/WorkItemV2）由"
-                        " Phase B 接入；当前识别任务尚未进入 workflow run",
+                "note": relations_note,
             },
             "next_actions": next_actions,
         }

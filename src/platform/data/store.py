@@ -1132,6 +1132,179 @@ CREATE TABLE IF NOT EXISTS goal_draft_v1 (
 );
 """
 
+# ABOSV2 Phase B：统一 Work/Event/Usage 控制平面（01 文档契约）。
+# BusinessRunV1/WorkItemV2/EventEnvelopeV1/UsageEventV2/EvidenceBundleV1
+# + Transactional Outbox；事件/用量/证据 append-only。
+_M033 = """
+ALTER TABLE recognition_task
+    ADD COLUMN run_id TEXT NOT NULL DEFAULT '';
+ALTER TABLE recognition_task
+    ADD COLUMN work_id TEXT NOT NULL DEFAULT '';
+ALTER TABLE recognition_task
+    ADD COLUMN correlation_id TEXT NOT NULL DEFAULT '';
+CREATE TABLE IF NOT EXISTS business_run_v1 (
+    run_id TEXT PRIMARY KEY,
+    work_id TEXT NOT NULL DEFAULT '',
+    tenant_id TEXT NOT NULL DEFAULT 'local',
+    customer_id TEXT NOT NULL DEFAULT '',
+    project_id TEXT NOT NULL DEFAULT '',
+    workflow_definition_id TEXT NOT NULL DEFAULT '',
+    workflow_version TEXT NOT NULL DEFAULT '',
+    trigger_type TEXT NOT NULL DEFAULT 'command',
+    parent_run_id TEXT,
+    correlation_id TEXT NOT NULL DEFAULT '',
+    causation_id TEXT,
+    subject_type TEXT NOT NULL DEFAULT '',
+    subject_id TEXT NOT NULL DEFAULT '',
+    initiator_type TEXT NOT NULL DEFAULT 'human',
+    initiator_id TEXT NOT NULL DEFAULT '',
+    status TEXT NOT NULL DEFAULT 'queued',
+    current_node TEXT NOT NULL DEFAULT '',
+    started_at TEXT,
+    ended_at TEXT,
+    version INTEGER NOT NULL DEFAULT 1,
+    evidence_bundle_id TEXT,
+    usage_account_id TEXT NOT NULL DEFAULT '',
+    policy_snapshot_id TEXT,
+    error TEXT NOT NULL DEFAULT '',
+    command_kind TEXT NOT NULL DEFAULT '',
+    params_json TEXT NOT NULL DEFAULT '{}',
+    idempotency_key TEXT UNIQUE,
+    goal_id TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS work_item_v2 (
+    work_id TEXT PRIMARY KEY,
+    tenant_id TEXT NOT NULL DEFAULT 'local',
+    customer_id TEXT NOT NULL DEFAULT '',
+    project_id TEXT NOT NULL DEFAULT '',
+    run_id TEXT NOT NULL DEFAULT '',
+    status TEXT NOT NULL DEFAULT 'todo',
+    owner_type TEXT NOT NULL DEFAULT 'human',
+    owner_id TEXT NOT NULL DEFAULT '',
+    title TEXT NOT NULL DEFAULT '',
+    business_summary TEXT NOT NULL DEFAULT '',
+    next_actions_json TEXT NOT NULL DEFAULT '[]',
+    due_at TEXT,
+    sla_policy TEXT NOT NULL DEFAULT '',
+    subject_type TEXT NOT NULL DEFAULT '',
+    subject_id TEXT NOT NULL DEFAULT '',
+    parent_work_id TEXT,
+    dependencies_json TEXT NOT NULL DEFAULT '[]',
+    blockers_json TEXT NOT NULL DEFAULT '[]',
+    evidence_refs_json TEXT NOT NULL DEFAULT '[]',
+    usage_refs_json TEXT NOT NULL DEFAULT '[]',
+    result_ref TEXT NOT NULL DEFAULT '',
+    version INTEGER NOT NULL DEFAULT 1,
+    idempotency_key TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS event_envelope_v1 (
+    seq INTEGER PRIMARY KEY AUTOINCREMENT,
+    event_id TEXT NOT NULL UNIQUE,
+    event_type TEXT NOT NULL,
+    event_version INTEGER NOT NULL DEFAULT 1,
+    occurred_at TEXT NOT NULL,
+    tenant_id TEXT NOT NULL DEFAULT 'local',
+    customer_id TEXT NOT NULL DEFAULT '',
+    project_id TEXT NOT NULL DEFAULT '',
+    actor_type TEXT NOT NULL DEFAULT 'human',
+    actor_id TEXT NOT NULL DEFAULT '',
+    correlation_id TEXT NOT NULL DEFAULT '',
+    causation_id TEXT,
+    run_id TEXT NOT NULL DEFAULT '',
+    work_id TEXT NOT NULL DEFAULT '',
+    subject_type TEXT NOT NULL DEFAULT '',
+    subject_id TEXT NOT NULL DEFAULT '',
+    payload_schema TEXT NOT NULL DEFAULT '',
+    payload_json TEXT NOT NULL DEFAULT '{}',
+    evidence_refs_json TEXT NOT NULL DEFAULT '[]',
+    idempotency_key TEXT UNIQUE
+);
+CREATE TABLE IF NOT EXISTS outbox_v1 (
+    outbox_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    event_id TEXT NOT NULL UNIQUE,
+    status TEXT NOT NULL DEFAULT 'pending',
+    attempts INTEGER NOT NULL DEFAULT 0,
+    last_error TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL,
+    dispatched_at TEXT
+);
+CREATE TABLE IF NOT EXISTS usage_event_v2 (
+    usage_id TEXT PRIMARY KEY,
+    tenant_id TEXT NOT NULL DEFAULT 'local',
+    customer_id TEXT NOT NULL DEFAULT '',
+    project_id TEXT NOT NULL DEFAULT '',
+    contract_id TEXT NOT NULL DEFAULT '',
+    rate_card_id TEXT NOT NULL DEFAULT '',
+    run_id TEXT NOT NULL DEFAULT '',
+    work_id TEXT NOT NULL DEFAULT '',
+    node TEXT NOT NULL DEFAULT '',
+    capability TEXT NOT NULL DEFAULT '',
+    model TEXT NOT NULL DEFAULT '',
+    profile_id TEXT NOT NULL DEFAULT '',
+    tier TEXT NOT NULL DEFAULT '',
+    unit TEXT NOT NULL,
+    quantity REAL NOT NULL,
+    resource_cost REAL NOT NULL DEFAULT 0,
+    internal_cost REAL NOT NULL DEFAULT 0,
+    customer_price REAL NOT NULL DEFAULT 0,
+    currency TEXT NOT NULL DEFAULT 'CNY',
+    source_evidence TEXT NOT NULL DEFAULT '',
+    meter_version TEXT NOT NULL DEFAULT 'v1',
+    price_version TEXT NOT NULL DEFAULT '',
+    occurred_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS evidence_bundle_v1 (
+    evidence_id TEXT PRIMARY KEY,
+    run_id TEXT NOT NULL DEFAULT '',
+    work_id TEXT NOT NULL DEFAULT '',
+    kind TEXT NOT NULL,
+    source_uri TEXT NOT NULL DEFAULT '',
+    cas_hash TEXT NOT NULL DEFAULT '',
+    content_type TEXT NOT NULL DEFAULT '',
+    producer TEXT NOT NULL DEFAULT '',
+    input_hash TEXT NOT NULL DEFAULT '',
+    config_version TEXT NOT NULL DEFAULT '',
+    permission_label TEXT NOT NULL DEFAULT 'internal',
+    retention TEXT NOT NULL DEFAULT '',
+    parent_evidence_id TEXT,
+    created_at TEXT NOT NULL
+);
+CREATE TRIGGER IF NOT EXISTS event_envelope_v1_no_delete
+    BEFORE DELETE ON event_envelope_v1
+    BEGIN
+        SELECT RAISE(ABORT, 'event_envelope_v1 不可变：禁止 DELETE');
+    END;
+CREATE TRIGGER IF NOT EXISTS event_envelope_v1_no_update
+    BEFORE UPDATE ON event_envelope_v1
+    BEGIN
+        SELECT RAISE(ABORT, 'event_envelope_v1 不可变：禁止 UPDATE');
+    END;
+CREATE TRIGGER IF NOT EXISTS usage_event_v2_no_delete
+    BEFORE DELETE ON usage_event_v2
+    BEGIN
+        SELECT RAISE(ABORT, 'usage_event_v2 不可变：禁止 DELETE');
+    END;
+CREATE TRIGGER IF NOT EXISTS usage_event_v2_no_update
+    BEFORE UPDATE ON usage_event_v2
+    BEGIN
+        SELECT RAISE(ABORT, 'usage_event_v2 不可变：禁止 UPDATE');
+    END;
+CREATE TRIGGER IF NOT EXISTS evidence_bundle_v1_no_delete
+    BEFORE DELETE ON evidence_bundle_v1
+    BEGIN
+        SELECT RAISE(ABORT, 'evidence_bundle_v1 不可变：禁止 DELETE');
+    END;
+CREATE TRIGGER IF NOT EXISTS evidence_bundle_v1_no_update
+    BEFORE UPDATE ON evidence_bundle_v1
+    BEGIN
+        SELECT RAISE(ABORT, 'evidence_bundle_v1 不可变：禁止 UPDATE');
+    END;
+"""
+
 MIGRATIONS: tuple[tuple[str, str], ...] = (
     ("001_platform_init", _M001),
     ("002_labeling_inbox", _M002),
@@ -1165,6 +1338,7 @@ MIGRATIONS: tuple[tuple[str, str], ...] = (
     ("030_recognition_task_profile_contract", _M030),
     ("031_work_item_supersession_v1", _M031),
     ("032_goal_draft_v1", _M032),
+    ("033_work_event_usage_control_plane", _M033),
 )
 
 
@@ -2065,18 +2239,21 @@ class PlatformStore:
         recognition_profile_id: str = "",
         service_tier: str = "", source: str = "",
         project_id: str = "", trace_id: str = "",
+        run_id: str = "", work_id: str = "", correlation_id: str = "",
     ) -> dict[str, Any]:
         self._conn.execute(
             """INSERT INTO recognition_task
                (task_id, entry, status, file_count, sku_count,
                 created_by, created_at, result_json, error,
                 idempotency_key, recognition_profile_id, service_tier,
-                source, project_id, trace_id)
-               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                source, project_id, trace_id, run_id, work_id,
+                correlation_id)
+               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
             (task_id, entry, status, file_count, sku_count,
              created_by, _utcnow(), result_json, error,
              idempotency_key, recognition_profile_id, service_tier,
-             source, project_id, trace_id),
+             source, project_id, trace_id, run_id, work_id,
+             correlation_id),
         )
         self._conn.commit()
         return self.get_recognition_task(task_id)
@@ -2678,6 +2855,301 @@ class PlatformStore:
             raise StoreError("goal 乐观锁版本冲突")
         self._conn.commit()
         return self.get_goal_draft(goal_id)
+
+    # ---------- 统一 Work/Event/Usage 控制平面（ABOSV2 Phase B） ----------
+
+    RUN_TRANSITIONS = {
+        "queued": {"running", "cancelled"},
+        "running": {"running", "succeeded", "failed", "cancelled"},
+        "failed": {"running"},          # 只能经 retry 重新进入 running
+        "succeeded": set(),
+        "cancelled": set(),
+    }
+
+    def insert_business_run(self, row: dict[str, Any]) -> dict[str, Any]:
+        now = _utcnow()
+        self._conn.execute(
+            "INSERT INTO business_run_v1 (run_id, work_id, tenant_id,"
+            " customer_id, project_id, workflow_definition_id,"
+            " workflow_version, trigger_type, parent_run_id,"
+            " correlation_id, causation_id, subject_type, subject_id,"
+            " initiator_type, initiator_id, status, current_node,"
+            " version, usage_account_id, command_kind, params_json,"
+            " idempotency_key, goal_id, created_at, updated_at)"
+            " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?, ?,?,1,?,?,?,?,?,?,?)",
+            (row["run_id"], row.get("work_id", ""),
+             row.get("tenant_id", "local"), row.get("customer_id", ""),
+             row.get("project_id", ""),
+             row.get("workflow_definition_id", ""),
+             row.get("workflow_version", ""),
+             row.get("trigger_type", "command"),
+             row.get("parent_run_id"), row.get("correlation_id", ""),
+             row.get("causation_id"), row.get("subject_type", ""),
+             row.get("subject_id", ""), row.get("initiator_type", "human"),
+             row.get("initiator_id", ""), row.get("status", "queued"),
+             row.get("current_node", ""), row.get("usage_account_id", ""),
+             row.get("command_kind", ""),
+             json.dumps(row.get("params", {}), ensure_ascii=False),
+             row.get("idempotency_key"), row.get("goal_id", ""),
+             now, now))
+        self._conn.commit()
+        return self.get_business_run(row["run_id"])
+
+    def get_business_run(self, run_id: str) -> dict[str, Any] | None:
+        return _row_to_dict(self._conn.execute(
+            "SELECT * FROM business_run_v1 WHERE run_id=?",
+            (run_id,)).fetchone())
+
+    def find_business_run_by_idempotency_key(
+            self, key: str) -> dict[str, Any] | None:
+        return _row_to_dict(self._conn.execute(
+            "SELECT * FROM business_run_v1 WHERE idempotency_key=?",
+            (key,)).fetchone())
+
+    def set_business_run_status(self, run_id: str, status: str, *,
+                                error: str = "",
+                                current_node: str | None = None,
+                                subject_type: str | None = None,
+                                subject_id: str | None = None,
+                                evidence_bundle_id: str | None = None,
+                                ) -> dict[str, Any]:
+        """状态机：failed 不得直接变成功；终态不可回退。"""
+        row = self._conn.execute(
+            "SELECT status FROM business_run_v1 WHERE run_id=?",
+            (run_id,)).fetchone()
+        if row is None:
+            raise StoreError(f"run 不存在: {run_id}")
+        cur = row["status"]
+        if status not in self.RUN_TRANSITIONS.get(cur, set()):
+            raise StoreError(f"run {cur}→{status} 非法跃迁")
+        sets = ["status=?", "version=version+1", "updated_at=?"]
+        vals: list[Any] = [status, _utcnow()]
+        if status == "running" and cur == "queued":
+            sets.append("started_at=?"); vals.append(_utcnow())
+        if status in ("succeeded", "failed", "cancelled"):
+            sets.append("ended_at=?"); vals.append(_utcnow())
+        if error:
+            sets.append("error=?"); vals.append(error)
+        if current_node is not None:
+            sets.append("current_node=?"); vals.append(current_node)
+        if subject_type is not None:
+            sets.append("subject_type=?"); vals.append(subject_type)
+        if subject_id is not None:
+            sets.append("subject_id=?"); vals.append(subject_id)
+        if evidence_bundle_id is not None:
+            sets.append("evidence_bundle_id=?")
+            vals.append(evidence_bundle_id)
+        self._conn.execute(
+            f"UPDATE business_run_v1 SET {', '.join(sets)}"
+            " WHERE run_id=?", (*vals, run_id))
+        self._conn.commit()
+        return self.get_business_run(run_id)
+
+    def insert_work_item_v2(self, row: dict[str, Any]) -> dict[str, Any]:
+        now = _utcnow()
+        self._conn.execute(
+            "INSERT INTO work_item_v2 (work_id, tenant_id, customer_id,"
+            " project_id, run_id, status, owner_type, owner_id, title,"
+            " business_summary, subject_type, subject_id, idempotency_key,"
+            " created_at, updated_at)"
+            " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            (row["work_id"], row.get("tenant_id", "local"),
+             row.get("customer_id", ""), row.get("project_id", ""),
+             row.get("run_id", ""), row.get("status", "todo"),
+             row.get("owner_type", "human"), row.get("owner_id", ""),
+             row.get("title", ""), row.get("business_summary", ""),
+             row.get("subject_type", ""), row.get("subject_id", ""),
+             row.get("idempotency_key"), now, now))
+        self._conn.commit()
+        return self.get_work_item_v2(row["work_id"])
+
+    def get_work_item_v2(self, work_id: str) -> dict[str, Any] | None:
+        return _row_to_dict(self._conn.execute(
+            "SELECT * FROM work_item_v2 WHERE work_id=?",
+            (work_id,)).fetchone())
+
+    def set_work_item_v2_status(self, work_id: str, status: str, *,
+                                subject_type: str | None = None,
+                                subject_id: str | None = None,
+                                blockers: list[str] | None = None,
+                                ) -> None:
+        sets = ["status=?", "version=version+1", "updated_at=?"]
+        vals: list[Any] = [status, _utcnow()]
+        if subject_type is not None:
+            sets.append("subject_type=?"); vals.append(subject_type)
+        if subject_id is not None:
+            sets.append("subject_id=?"); vals.append(subject_id)
+        if blockers is not None:
+            sets.append("blockers_json=?")
+            vals.append(json.dumps(blockers, ensure_ascii=False))
+        self._conn.execute(
+            f"UPDATE work_item_v2 SET {', '.join(sets)} WHERE work_id=?",
+            (*vals, work_id))
+        self._conn.commit()
+
+    def list_work_items_v2(self, *, status: str | None = None
+                           ) -> list[dict[str, Any]]:
+        where, params = "", []
+        if status:
+            where, params = "WHERE status=?", [status]
+        rows = self._conn.execute(
+            "SELECT * FROM work_item_v2 " + where +
+            " ORDER BY created_at DESC", params).fetchall()
+        return [dict(r) for r in rows]
+
+    def emit_event(self, *, event_id: str, event_type: str,
+                   run_id: str = "", work_id: str = "",
+                   correlation_id: str = "", causation_id: str | None = None,
+                   actor_type: str = "human", actor_id: str = "",
+                   subject_type: str = "", subject_id: str = "",
+                   payload: dict[str, Any] | None = None,
+                   idempotency_key: str | None = None) -> dict[str, Any]:
+        """事件 + outbox 同一事务提交（Transactional Outbox）。"""
+        conn = self._conn
+        now = _utcnow()
+        try:
+            conn.execute("BEGIN IMMEDIATE")
+            conn.execute(
+                "INSERT INTO event_envelope_v1 (event_id, event_type,"
+                " occurred_at, actor_type, actor_id, correlation_id,"
+                " causation_id, run_id, work_id, subject_type, subject_id,"
+                " payload_json, idempotency_key)"
+                " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                (event_id, event_type, now, actor_type, actor_id,
+                 correlation_id, causation_id, run_id, work_id,
+                 subject_type, subject_id,
+                 json.dumps(payload or {}, ensure_ascii=False),
+                 idempotency_key))
+            conn.execute(
+                "INSERT INTO outbox_v1 (event_id, status, attempts,"
+                " created_at) VALUES (?,?,0,?)", (event_id, "pending", now))
+            conn.execute("COMMIT")
+        except sqlite3.IntegrityError:
+            conn.execute("ROLLBACK")
+            raise
+        return _row_to_dict(conn.execute(
+            "SELECT * FROM event_envelope_v1 WHERE event_id=?",
+            (event_id,)).fetchone())
+
+    def list_events(self, *, run_id: str | None = None,
+                    work_id: str | None = None) -> list[dict[str, Any]]:
+        where, params = [], []
+        if run_id:
+            where.append("run_id=?"); params.append(run_id)
+        if work_id:
+            where.append("work_id=?"); params.append(work_id)
+        sql = "SELECT * FROM event_envelope_v1"
+        if where:
+            sql += " WHERE " + " AND ".join(where)
+        sql += " ORDER BY seq"
+        return [dict(r) for r in self._conn.execute(sql, params).fetchall()]
+
+    def dispatch_outbox(self) -> int:
+        """至少一次投递：pending → dispatched（本机同进程消费）。"""
+        n = self._conn.execute(
+            "UPDATE outbox_v1 SET status='dispatched', attempts=attempts+1,"
+            " dispatched_at=? WHERE status='pending'", (_utcnow(),))
+        self._conn.commit()
+        return n.rowcount
+
+    def insert_usage_event_v2(self, *, usage_id: str, unit: str,
+                              quantity: float, run_id: str = "",
+                              work_id: str = "", node: str = "",
+                              capability: str = "", model: str = "",
+                              profile_id: str = "", tier: str = "",
+                              source_evidence: str = "") -> dict[str, Any]:
+        self._conn.execute(
+            "INSERT INTO usage_event_v2 (usage_id, run_id, work_id, node,"
+            " capability, model, profile_id, tier, unit, quantity,"
+            " source_evidence, occurred_at)"
+            " VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+            (usage_id, run_id, work_id, node, capability, model,
+             profile_id, tier, unit, float(quantity), source_evidence,
+             _utcnow()))
+        self._conn.commit()
+        return _row_to_dict(self._conn.execute(
+            "SELECT * FROM usage_event_v2 WHERE usage_id=?",
+            (usage_id,)).fetchone())
+
+    def list_usage_events_v2(self, *, run_id: str | None = None
+                             ) -> list[dict[str, Any]]:
+        if run_id:
+            rows = self._conn.execute(
+                "SELECT * FROM usage_event_v2 WHERE run_id=?"
+                " ORDER BY occurred_at", (run_id,)).fetchall()
+        else:
+            rows = self._conn.execute(
+                "SELECT * FROM usage_event_v2"
+                " ORDER BY occurred_at").fetchall()
+        return [dict(r) for r in rows]
+
+    def insert_evidence_bundle(self, *, evidence_id: str, kind: str,
+                               run_id: str = "", work_id: str = "",
+                               source_uri: str = "", cas_hash: str = "",
+                               content_type: str = "", producer: str = "",
+                               input_hash: str = "",
+                               config_version: str = "") -> dict[str, Any]:
+        self._conn.execute(
+            "INSERT INTO evidence_bundle_v1 (evidence_id, run_id, work_id,"
+            " kind, source_uri, cas_hash, content_type, producer,"
+            " input_hash, config_version, created_at)"
+            " VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+            (evidence_id, run_id, work_id, kind, source_uri, cas_hash,
+             content_type, producer, input_hash, config_version, _utcnow()))
+        self._conn.commit()
+        return self.get_evidence_bundle(evidence_id)
+
+    def get_evidence_bundle(self, evidence_id: str
+                            ) -> dict[str, Any] | None:
+        return _row_to_dict(self._conn.execute(
+            "SELECT * FROM evidence_bundle_v1 WHERE evidence_id=?",
+            (evidence_id,)).fetchone())
+
+    def rebuild_work_projection(self) -> dict[str, Any]:
+        """从事件重建 current 投影（幂等）；hash/count 可对账。
+
+        规则：command.accepted→running；run.succeeded→done；
+        run.failed→blocked；run.cancelled→cancelled；按事件 seq 演进。
+        """
+        events = self.list_events()
+        state: dict[str, dict[str, Any]] = {}
+        for e in events:
+            wid = e.get("work_id") or ""
+            if not wid:
+                continue
+            st = state.setdefault(wid, {
+                "work_id": wid, "status": "todo",
+                "subject_type": "", "subject_id": "",
+                "run_id": e.get("run_id", "")})
+            t = e["event_type"]
+            if t == "command.accepted":
+                st["status"] = "running"
+            elif t == "run.succeeded":
+                st["status"] = "done"
+                st["subject_type"] = e.get("subject_type") or st["subject_type"]
+                st["subject_id"] = e.get("subject_id") or st["subject_id"]
+            elif t == "run.failed":
+                st["status"] = "blocked"
+                st["subject_type"] = e.get("subject_type") or st["subject_type"]
+                st["subject_id"] = e.get("subject_id") or st["subject_id"]
+            elif t == "run.cancelled":
+                st["status"] = "cancelled"
+        items = sorted(state.values(), key=lambda x: x["work_id"])
+        # 同步到 work_item_v2（重建不丢失原始行，只更新状态/主体）
+        for it in items:
+            row = self.get_work_item_v2(it["work_id"])
+            if row is not None and (row["status"] != it["status"]
+                                    or row["subject_id"] != it["subject_id"]):
+                self.set_work_item_v2_status(
+                    it["work_id"], it["status"],
+                    subject_type=it["subject_type"],
+                    subject_id=it["subject_id"])
+        canonical = json.dumps(
+            [{"work_id": i["work_id"], "status": i["status"],
+              "subject_id": i["subject_id"]} for i in items],
+            sort_keys=True, ensure_ascii=False)
+        return {"count": len(items), "items": items,
+                "hash": hashlib.sha256(canonical.encode()).hexdigest()}
 
     def list_review_tasks_active(self, *, limit: int = 5000
                                  ) -> list[dict[str, Any]]:

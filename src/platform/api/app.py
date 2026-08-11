@@ -118,6 +118,15 @@ def create_app(
         from src.platform.api.goals import create_goals_router
         app.include_router(create_goals_router(
             bundle.store, auth=AuthService(bundle.store)))
+        # ABOSV2 Phase B：统一 Work/Event/Usage 控制平面（Command Gateway
+        # + 对账）；Web/API/Agent 共用同一命令入口。
+        from src.platform.control_plane import CommandGateway
+        from src.platform.api.control_plane_api import (
+            create_control_plane_router)
+        gateway = CommandGateway(bundle.store, profiles_service,
+                                 rec_adapter)
+        app.include_router(create_control_plane_router(
+            bundle.store, gateway, auth=AuthService(bundle.store)))
         # U2-2：数据中心 Asset API（真实台账 source_asset_inventory_v1）
         from src.platform.api.assets import create_assets_router
         app.include_router(create_assets_router(bundle.store))
