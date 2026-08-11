@@ -622,6 +622,11 @@ export interface RecognitionTaskRow {
   created_by: string;
   created_at: string;
   error: string;
+  recognition_profile_id?: string;
+  service_tier?: string;
+  source?: string;
+  project_id?: string;
+  trace_id?: string;
 }
 
 export interface RecognitionTaskView {
@@ -629,6 +634,40 @@ export interface RecognitionTaskView {
   results: Array<Record<string, unknown> & { name?: string }>;
   errors: string[];
   elapsed_ms: number;
+  // ABOS T7：冻结契约回显
+  recognition_profile_id?: string;
+  profile_components?: string[];
+  profile_status?: string;
+  service_tier?: string;
+  source?: string;
+  trace_id?: string;
+  idempotent_replay?: boolean;
+}
+
+// ABOS T7：识别请求选项（Profile 必须真正进入请求）
+export interface RecognitionRequestOpts {
+  recognition_profile_id: string;
+  service_tier?: string;
+  source?: "web" | "api" | "agent";
+  project_id?: string;
+}
+
+export interface RecognitionProfileRow {
+  profile_id: string;
+  status: "enabled" | "disabled";
+  blockers: string[];
+  tags: string[];
+  components: string[];
+  scopes: string[];
+}
+
+export async function fetchRecognitionProfiles(): Promise<{
+  count: number;
+  profiles: RecognitionProfileRow[];
+}> {
+  const r = await fetch("/api/v1/recognition/profiles");
+  if (!r.ok) throw new Error(`recognition profiles HTTP ${r.status}`);
+  return r.json();
 }
 
 async function postFormWithCsrf(url: string, form: FormData, extra?: Record<string, string>): Promise<Response> {
@@ -638,9 +677,16 @@ async function postFormWithCsrf(url: string, form: FormData, extra?: Record<stri
   return fetch(url, { method: "POST", headers, body: form });
 }
 
-export async function uploadRecognitionFiles(files: File[]): Promise<RecognitionTaskView> {
+export async function uploadRecognitionFiles(
+  files: File[], opts?: RecognitionRequestOpts,
+): Promise<RecognitionTaskView> {
   const form = new FormData();
   for (const f of files) form.append("files", f);
+  form.append("recognition_profile_id",
+    opts?.recognition_profile_id ?? "production_legacy");
+  form.append("service_tier", opts?.service_tier ?? "standard");
+  form.append("source", opts?.source ?? "web");
+  if (opts?.project_id) form.append("project_id", opts.project_id);
   // 幂等键（UMT-109）：同一次提交重试不会重复创建任务
   const idem = { "Idempotency-Key": crypto.randomUUID() };
   const r = await postFormWithCsrf("/api/v1/recognition/tasks/upload", form, idem);
@@ -648,9 +694,18 @@ export async function uploadRecognitionFiles(files: File[]): Promise<Recognition
   return r.json();
 }
 
-export async function recognizeByUrl(url: string): Promise<RecognitionTaskView> {
+export async function recognizeByUrl(
+  url: string, opts?: RecognitionRequestOpts,
+): Promise<RecognitionTaskView> {
   const idem = { "Idempotency-Key": crypto.randomUUID() };
-  const r = await postJson("/api/v1/recognition/tasks/url", { url }, idem);
+  const r = await postJson("/api/v1/recognition/tasks/url", {
+    url,
+    recognition_profile_id:
+      opts?.recognition_profile_id ?? "production_legacy",
+    service_tier: opts?.service_tier ?? "standard",
+    source: opts?.source ?? "web",
+    project_id: opts?.project_id ?? "",
+  }, idem);
   if (!r.ok) throw await parseError(r, "recognition url");
   return r.json();
 }
@@ -936,5 +991,30 @@ export async function fetchBlackboard(): Promise<{ count: number; events: any[] 
 export async function fetchTaskboard(): Promise<{ states: Record<string, any[]> }> {
   const r = await fetch("/api/v1/taskboard");
   if (!r.ok) throw new Error(`taskboard HTTP ${r.status}`);
+  return r.json();
+}
+
+// ---------- ABOS T6：Agent 命令审批（服务端持久化 + 审计） ----------
+export async function approveAgentCommand(commandId: string): Promise<any> {
+  const r = await postJson(
+    `/api/agent/v1/commands/${commandId}/approve`, {});
+  if (!r.ok) throw await parseError(r, "command approve");
+  return r.json();
+}
+export async function rejectAgentCommand(commandId: string): Promise<any> {
+  const r = await postJson(
+    `/api/agent/v1/commands/${commandId}/reject`, {});
+  if (!r.ok) throw await parseError(r, "command reject");
+  return r.json();
+}
+export async function createAgentSession(title: string): Promise<string> {
+  const r = await postJson("/api/agent/v1/sessions", { title });
+  if (!r.ok) throw await parseError(r, "agent session");
+  return (await r.json()).session_id;
+}
+export async function agentChat(sessionId: string, text: string): Promise<any> {
+  const r = await postJson("/api/agent/v1/chat",
+    { session_id: sessionId, text });
+  if (!r.ok) throw await parseError(r, "agent chat");
   return r.json();
 }

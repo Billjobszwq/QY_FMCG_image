@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useState } from "react";
-import ModuleTabs from "./ModuleTabs";
 import {
   AssetRow, AssetsSummary, buildGoldQueue, claimReviewTask, csrfToken,
   exportReview, fetchAssetsList, fetchAssetsSummary, fetchGoldConfusion,
@@ -62,8 +61,7 @@ function GoldSection() {
   if (!gold) return <p className="muted">金标准加载中…</p>;
   return (
     <>
-      <span className="kicker">04 · 数据仓库 · data-agent</span>
-      <ModuleTabs active="/assets" items={[{ to: "/assets", label: "数据资产" }, { to: "/assets", label: "质量门禁" }, { to: "/assets", label: "血缘/泄漏门禁" }]} />
+      <span className="kicker">数据与资产 · data_steward</span>
       <h3>人工质量金标准（分层抽样，不可变）</h3>
       <div className="cards">
         <div className="card"><div className="num">{gold.waiting_human}</div><div className="muted">等待人工（waiting_human）</div></div>

@@ -1,0 +1,85 @@
+/* ABOS T4：Design Tokens —— 中性操作界面 + 模块 accent 色。
+   原则：模块色仅作 accent/soft surface；状态色与模块色分离；
+   所有页面使用的 CSS 变量必须在此有定义（红测试强制）。 */
+:root {
+  /* ---- 中性表面 ---- */
+  --bg: #f4f5f7;
+  --surface: #ffffff;
+  --surface-2: #f0f2f5;
+  --surface-3: #e7eaef;
+  --border: #d7dce3;
+  --border-strong: #b7bfca;
+  --ink: #16181d;
+  --text: #16181d;
+  --text-muted: #5b6472;
+  --text-faint: #8a93a3;
+
+  /* ---- 状态色（与模块色分离：绿=成功 黄=警告 红=错误 灰=停用） ---- */
+  --ok: #148a4c;
+  --ok-soft: #e2f5ea;
+  --warn: #b3760a;
+  --warn-soft: #fdf2d8;
+  --err: #c92f2f;
+  --err-soft: #fbe7e7;
+  --info: #0b6fd6;
+  --info-soft: #e3eefc;
+  --disabled: #8a93a3;
+  --disabled-soft: #eceff3;
+
+  /* ---- 模块 accent（一级模块一色系；仅 accent/soft 使用） ---- */
+  --accent-violet: #7048c8;
+  --accent-violet-soft: #f0eafc;
+  --accent-amber: #b07a10;
+  --accent-amber-soft: #fbf1d9;
+  --accent-cyan: #0d8aa8;
+  --accent-cyan-soft: #e0f4f9;
+  --accent-emerald: #157f56;
+  --accent-emerald-soft: #e1f4ec;
+  --accent-blue: #1668d6;
+  --accent-blue-soft: #e5eefc;
+  --accent-indigo: #4d52c9;
+  --accent-indigo-soft: #e9eafb;
+  --accent-purple: #8a4bb8;
+  --accent-purple-soft: #f3eafa;
+  --accent-rose: #c0366c;
+  --accent-rose-soft: #fae7ef;
+  --accent-slate: #4d5666;
+  --accent-slate-soft: #eceff3;
+
+  /* ---- 主管便签语言（仅强调区域） ---- */
+  --note-yellow: #fff3bf;
+  --note-yellow-border: #e3c65f;
+  --note-ink: #4a3c05;
+
+  /* ---- 旧版色板兼容（过渡页面仍引用；迁移完成后移除） ---- */
+  --red: #ea3737;
+  --orange: #ff8e0a;
+  --coral: #ff5c38;
+  --card-coral: #ffe4de;
+  --card-orange: #ffeeda;
+  --card-yellow: #fff6d6;
+  --yellow: #ffdb08;
+  --amber: #ffb200;
+  --green: #1be349;
+  --green-nav: #00aa3c;
+  --blue: #16a6ff;
+  --blue-nav: #0072e3;
+  --violet: #ab54f7;
+  --lavender: #c79dfc;
+  --deep-violet: #6c2fad;
+  --white: #fff;
+  --r: 24px;
+  --r-sm: 10px;
+  --font-ui: "Aeonik Pro", system-ui, -apple-system, "Helvetica Neue",
+    arial, "PingFang SC", "Microsoft YaHei", sans-serif;
+  --font-display: "Bunch", "Alfabet", "Archivo Black", "Aeonik Pro",
+    system-ui, arial;
+  --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --shadow-1: 0 1px 2px rgba(16, 20, 28, 0.06),
+    0 1px 6px rgba(16, 20, 28, 0.05);
+  --shadow-2: 0 4px 16px rgba(16, 20, 28, 0.12);
+  --topbar-h: 52px;
+  --nav-w: 224px;
+  --nav-w-collapsed: 64px;
+  --side-w: 360px;
+}

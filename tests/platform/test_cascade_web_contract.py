@@ -122,11 +122,14 @@ def test_new_packaging_page_business_language():
 
 
 def test_app_routes_and_nav():
+    """ABOS T5：旧路由保留兼容（redirect/深链接），二级导航来自
+    Module Registry 投影；级联/驻留/新包装仍可深链接到达。"""
     src = _read("App.tsx")
     for route in ("/cascade", "/models-runtime", "/packaging"):
-        assert f'"{route}"' in src, f"App.tsx 缺少路由 {route}"
-    for label in ("级联任务", "模型驻留", "新包装"):
-        assert label in src, f"App.tsx NAV 缺少 {label}"
+        assert f'"{route}"' in src, f"App.tsx 缺少兼容路由 {route}"
+    # 新信息架构：真实二级路由 + Registry 驱动二级导航
+    for label in ("snav", "/vision/recognize", "/vision/tasks"):
+        assert label in src, f"App.tsx 缺少 {label}"
 
 
 def test_api_ts_functions():

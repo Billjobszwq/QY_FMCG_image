@@ -59,18 +59,19 @@ def test_app_rail_not_hardcoded():
 
 def test_biz_routes_not_same_component():
     app = _read(WEB / "App.tsx")
-    # 不允许 /biz、/biz/api、/biz/alert、/biz/cfg 全部渲染同一组件
+    # 不允许多个 /biz 页面路由渲染同一业务组件；Navigate 重定向豁免
     biz_routes = re.findall(r'path="(/biz[^"]*)"\s+element=\{<(\w+)', app)
+    biz_routes = [(p, c) for p, c in biz_routes if c != "Navigate"]
     comps = {c for _, c in biz_routes}
     assert len(biz_routes) <= 1 or len(comps) > 1 or not biz_routes
 
 
 def test_module_tabs_unique_routes():
-    """ModuleTabs 不得出现多个标签指向同一 URL。"""
-    tabs = _read(WEB / "pages" / "ModuleTabs.tsx")
-    assert "unique" in tabs or len(set(re.findall(
-        r'to:\s*"([^"]+)"', tabs))) == len(re.findall(
-        r'to:\s*"([^"]+)"', tabs))
+    """假三级菜单（ModuleTabs 同 URL 重复标签）必须已移除；
+    二级导航由 AppShell snav 从 Registry 投影生成。"""
+    assert not (WEB / "pages" / "ModuleTabs.tsx").exists()
+    app = _read(WEB / "App.tsx")
+    assert "snav" in app, "二级导航必须来自模块 Registry 投影"
 
 
 # ---- 4. 识别 Profile 进入请求 ----
@@ -82,19 +83,23 @@ def test_recognition_task_contract_includes_profile():
 
 
 def test_frontend_recognition_passes_profile():
-    rec = _read(WEB / "pages" / "Recognition.tsx")
     api = _read(WEB / "api.ts")
-    assert ("recognition_profile_id" in api) or (
-        "recognition_profile_id" in rec), (
+    assert "recognition_profile_id" in api, (
         "前端识别入口必须把所选 profile 传入请求")
+    vision = _read(WEB / "pages" / "Vision.tsx")
+    assert "recognition_profile_id" in vision and "ProfilePicker" in vision
 
 
 # ---- 5. Agent 响应消费 ----
 
-def test_agentchat_consumes_ui_intents_and_commands():
-    chat = _read(WEB / "pages" / "AgentChat.tsx")
-    assert "ui_intents" in chat, "AgentChat 必须消费 ui_intents"
-    assert ("command" in chat), "AgentChat 必须渲染命令预览/审批"
+def test_workbench_consumes_ui_intents_and_commands():
+    """主管工作台必须实际消费 ui_intents/command_previews/evidence。"""
+    ws = _read(WEB / "platform" / "SupervisorWorkspace.tsx")
+    assert "ui_intents" in ws, "SupervisorWorkspace 必须消费 ui_intents"
+    assert "command_previews" in ws, "必须渲染命令预览"
+    assert "approveAgentCommand" in ws and "rejectAgentCommand" in ws, (
+        "批准/拒绝必须调用服务端 API 落库")
+    assert "evidence_refs" in ws or "evidence" in ws
 
 
 def test_supervisor_no_unimported_path():
@@ -107,8 +112,9 @@ def test_supervisor_no_unimported_path():
 # ---- 6. CSS 变量与类 ----
 
 def test_css_variables_all_defined():
-    css = _read(WEB / "styles.css")
-    defined = set(re.findall(r"^\s*(--[\w-]+)\s*:", css, re.M))
+    defined: set[str] = set()
+    for f in WEB.rglob("*.css"):
+        defined |= set(re.findall(r"^\s*(--[\w-]+)\s*:", _read(f), re.M))
     used = set()
     for f in list(WEB.rglob("*.css")) + list(WEB.rglob("*.tsx")):
         used |= set(re.findall(r"var\((--[\w-]+)", _read(f)))

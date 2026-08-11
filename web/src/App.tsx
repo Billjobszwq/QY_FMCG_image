@@ -1,36 +1,102 @@
-import { useEffect, useState } from "react";
-import { NavLink, Route, Routes } from "react-router-dom";
-import { AuthMe, fetchHealth, fetchMe, HealthBody, login, logout } from "./api";
-import Overview from "./pages/Overview";
+// ABOS T2/T5：Agentic Business OS 工作台壳层。
+// 一级导航来自 Module Registry 投影（不硬编码）；二级为真实 route；
+// 旧路由保留 redirect；身份/production 全部来自实时 API。
+import { useEffect, useMemo, useState } from "react";
+import { NavLink, Navigate, Route, Routes, useLocation } from
+  "react-router-dom";
+import "./platform/design/tokens.css";
+import "./platform/design/shell.css";
+import "./styles.css";
+import {
+  AuthMe, HealthBody, fetchAgents, fetchHealth, fetchMe, login, logout,
+} from "./api";
+import {
+  ModuleView, PlatformIdentity, ProductionInfo, STATUS_CN,
+  accentVar, fetchIdentity, fetchModules, fetchProduction,
+} from "./platform/registry";
+import { PlannedModule } from "./platform/components";
+import SupervisorWorkspace from "./platform/SupervisorWorkspace";
+import Home from "./pages/Home";
 import GraphRuns from "./pages/GraphRuns";
-import Recognition from "./pages/Recognition";
-import Annotation from "./pages/Annotation";
-import Assets from "./pages/Assets";
-import Training from "./pages/Training";
 import SystemStatus from "./pages/SystemStatus";
-import CascadeTasks from "./pages/CascadeTasks";
-import ModelRuntime from "./pages/ModelRuntime";
+import {
+  RecognizeNow, VisionAnnotation, VisionDatasets, VisionEvidence,
+  VisionModels, VisionTasks,
+} from "./pages/Vision";
 import NewPackaging from "./pages/NewPackaging";
-import AgentChat from "./pages/AgentChat";
-import TaskBoard from "./pages/TaskBoard";
-import Workflow from "./pages/Workflow";
-import LabelStudioHub from "./pages/LabelStudioHub";
-import BizIntel from "./pages/BizIntel";
+import CascadeTasks from "./pages/CascadeTasks";
 
-// 一级模块：一模块一色系一 Agent；二级功能见各页 ModuleTabs；三级操作在页内。
-const RAIL = [
-  { to: "/", label: "总览·主管", c: "var(--violet)" },
-  { to: "/recognition", label: "图像识别", c: "var(--blue)" },
-  { to: "/labelstudio", label: "标注中心", c: "var(--green)" },
-  { to: "/assets", label: "数据仓库", c: "var(--yellow)" },
-  { to: "/training", label: "模型训练", c: "var(--orange)" },
-  { to: "/workflow", label: "工作流", c: "var(--lavender)" },
-  { to: "/biz", label: "经营智能", c: "var(--red)" },
-  { to: "/status", label: "系统", c: "var(--green)" },
-];
+// ---- 工作流 / Agent 矩阵（二级：/workflow/agents） ----
+function AgentsMatrix({ modules }: { modules: ModuleView[] }) {
+  const [agents, setAgents] = useState<any[] | null>(null);
+  useEffect(() => {
+    fetchAgents().then((d) => setAgents(d.agents as any[])).catch(
+      () => setAgents([]));
+  }, []);
+  const byId = useMemo(() => {
+    const m: Record<string, string> = {};
+    for (const mod of modules) {
+      for (const a of mod.agents) m[a] = mod.name;
+    }
+    return m;
+  }, [modules]);
+  return (
+    <div className="page">
+      <div className="page-header"><h1>Agent 矩阵</h1>
+        <span className="desc">AgentManifest 注册、权限范围与所属模块</span>
+      </div>
+      <div className="card">
+        {agents === null ? <p className="muted">加载中…</p> : (
+          <table className="table">
+            <thead><tr><th>Agent</th><th>域</th><th>风险</th>
+              <th>所属模块</th></tr></thead>
+            <tbody>
+              {agents.map((a) => (
+                <tr key={a.agent_id}>
+                  <td className="k">{a.agent_id}</td>
+                  <td>{a.domain}</td>
+                  <td>{a.risk_level}</td>
+                  <td>{byId[a.agent_id] ?? "平台"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+    </div>
+  );
+}
 
+// ---- reference.echo：非识别模块证明内核通用 ----
+function ReferenceEcho() {
+  const [out, setOut] = useState<string | null>(null);
+  useEffect(() => {
+    fetch("/api/v1/reference/echo?text=hello-from-workbench")
+      .then((r) => r.json()).then((d) => setOut(JSON.stringify(d, null, 2)))
+      .catch((e) => setOut(String(e)));
+  }, []);
+  return (
+    <div className="page">
+      <div className="page-header"><h1>参考模块 Echo</h1>
+        <span className="desc">最小非业务 Domain Pack：注册即可发现/调用</span>
+      </div>
+      <div className="card">
+        <h3>GET /api/v1/reference/echo</h3>
+        <pre>{out ?? "调用中…"}</pre>
+      </div>
+    </div>
+  );
+}
+
+function ModulePage({ modules, moduleId }:
+  { modules: ModuleView[]; moduleId: string }) {
+  const m = modules.find((x) => x.module_id === moduleId);
+  if (!m) return <div className="page">模块未注册</div>;
+  return <div className="page"><PlannedModule module={m} /></div>;
+}
 
 export default function App() {
+  const location = useLocation();
   const [health, setHealth] = useState<HealthBody | null>(null);
   const [me, setMe] = useState<AuthMe | null>(null);
   const [authChecked, setAuthChecked] = useState(false);
@@ -38,22 +104,26 @@ export default function App() {
   const [password, setPassword] = useState("");
   const [loginError, setLoginError] = useState<string | null>(null);
   const [loginBusy, setLoginBusy] = useState(false);
-  const [gate, setGate] = useState<string>("");
+  const [modules, setModules] = useState<ModuleView[]>([]);
+  const [identity, setIdentity] = useState<PlatformIdentity | null>(null);
+  const [prod, setProd] = useState<ProductionInfo | null>(null);
 
   useEffect(() => {
     fetchMe().then(setMe).catch(() => setMe(null))
       .finally(() => setAuthChecked(true));
-  }, []);
-  useEffect(() => {
-    fetch("/api/v1/platform/gate").then((r) => r.json())
-      .then((d) => setGate(d.gate ?? "")).catch(() => {});
+    fetchIdentity().then(setIdentity).catch(() => {});
+    fetchProduction().then(setProd).catch(() => {});
+    fetchModules().then(setModules).catch(() => {});
   }, []);
   useEffect(() => {
     let stop = false;
-    const load = () => fetchHealth().then((h) => !stop && setHealth(h))
-      .catch(() => !stop && setHealth(null));
+    const load = () => {
+      if (document.visibilityState !== "visible") return; // 后台降频
+      fetchHealth().then((h) => !stop && setHealth(h))
+        .catch(() => !stop && setHealth(null));
+    };
     load();
-    const t = setInterval(load, 15000);
+    const t = setInterval(load, 20000);
     return () => { stop = true; clearInterval(t); };
   }, []);
 
@@ -64,90 +134,180 @@ export default function App() {
     finally { setLoginBusy(false); }
   };
 
-  if (!authChecked) return <div className="main">…</div>;
+  if (!authChecked) {
+    return <div className="login-wrap"><p className="muted">加载中…</p></div>;
+  }
+
   if (!me) {
     return (
-      <div className="main" style={{ maxWidth: 520, margin: "10vh auto" }}>
-        <span className="kicker">qy · sku recognition</span>
-        <div className="display">进入工作台。</div>
-        <div className="blk c-white" style={{ minHeight: 0 }}>
-          <input placeholder="用户名" value={username}
+      <div className="login-wrap">
+        <div className="login-card">
+          <span className="login-brand">
+            {identity?.product_name ?? "Agentic Business OS"}</span>
+          <h1 className="login-title">进入工作台</h1>
+          <p className="login-sub">
+            {identity?.definition ?? "Graph+Loop 驱动的智能业务操作系统"}
+          </p>
+          <input placeholder="用户名" aria-label="用户名" value={username}
             onChange={(e) => setUsername(e.target.value)} />
-          <input placeholder="口令" type="password" value={password}
+          <input placeholder="口令" aria-label="口令" type="password"
+            value={password}
             onChange={(e) => setPassword(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && onLogin()} />
-          {loginError && <span className="pill on-red">{loginError}</span>}
-          <button className="btn" disabled={loginBusy} onClick={onLogin}>
-            进入 →
-          </button>
+          {loginError && <div className="banner banner-error">
+            {loginError}</div>}
+          <button className="btn primary" disabled={loginBusy}
+            onClick={onLogin}>{loginBusy ? "登录中…" : "进入"}</button>
         </div>
       </div>
     );
   }
 
-  const mq = ` micro-gold 200 条待人工审核 ✦ Gate：${gate || "—"} ✦ ` +
-    `production 未切换 ✦ 服务：${health?.status ?? "—"} ✦` +
-    " 候选模型待 micro-gold 解禁 ✦ Agent + Workflow 驱动 ✦";
+  // 当前模块：按导航 route 前缀匹配（一级 active 唯一）
+  const currentModule = modules.find((m) =>
+    location.pathname === m.primary_route
+    || m.navigation.some((n) => location.pathname === n.route
+      || (n.route !== m.primary_route
+        && location.pathname.startsWith(n.route + "/"))));
+  const navModules = modules.filter((m) => m.module_id !== "reference.echo");
 
   return (
-    <div>
-      <div className="marquee"><div>{mq}{mq}</div></div>
-      <div style={{ display: "flex", justifyContent: "space-between",
-        alignItems: "center", padding: "14px 40px 0 100px" }}>
-        <span style={{ fontWeight: 900, fontFamily: "var(--font-display)",
-          fontSize: 20 }}>qy·sku.</span>
-        <span style={{ display: "flex", gap: 8 }}>
-          <span className="pill on-blue">{me.actor}</span>
-          <button className="btn black" style={{ padding: "8px 18px" }}
-            onClick={async () => { await logout(); setMe(null); }}>
-            退出
-          </button>
+    <div className="abos-app">
+      <header className="topbar">
+        <span className="topbar-brand">
+          {identity?.short ?? "qy·abos"} · {identity?.product_name_zh ??
+            "智能业务操作系统"}</span>
+        <span className="topbar-env">
+          {identity?.environment ?? "local"} · {me.actor}</span>
+        <span className="topbar-spacer" />
+        <span className="topbar-prod">
+          production：{prod?.found ? (prod.bundle_id ?? "未知") : "未加载"}
         </span>
-      </div>
-      <div className="layout">
-        <nav className="rail">
-          {RAIL.map((n, i) => (
-            <NavLink key={n.to} to={n.to} end={n.to === "/"}
-              style={{ background: n.c }}
-              className={({ isActive }) => (isActive ? "active" : "")}>
-              <span className="top">
-                <span>0{i + 1}</span><span>→</span>
-              </span>
-              <span>{n.label}</span>
+        <button className="btn small"
+          onClick={async () => { await logout(); setMe(null); }}>退出</button>
+      </header>
+      <div className="shell-body">
+        <nav className="pnav" aria-label="一级模块导航">
+          {navModules.map((m) => (
+            <NavLink key={m.module_id}
+              to={m.navigation[0]?.route ?? m.primary_route}
+              className={({ isActive }) => (isActive
+                || (currentModule?.module_id === m.module_id)
+                ? "pnav-item active" : "pnav-item")}>
+              <span className="pnav-dot"
+                style={{ background: accentVar(m.theme_token) }} />
+              <span className="label">{m.name}</span>
+              <span className={`pnav-status ${m.status}`}>
+                {STATUS_CN[m.status] ?? m.status}</span>
             </NavLink>
           ))}
-
         </nav>
-        <main className="content">
+        <div className="main-col">
+          {currentModule && currentModule.navigation.length > 0 && (
+            <nav className="snav" aria-label="二级功能导航">
+              {currentModule.navigation.map((n) => (
+                <NavLink key={n.route} to={n.route}
+                  className={({ isActive }) => isActive ? "active" : ""}>
+                  {n.label}</NavLink>
+              ))}
+            </nav>
+          )}
           <Routes>
-            <Route path="/" element={<Overview health={health} />} />
-            <Route path="/taskboard" element={<TaskBoard />} />
-            <Route path="/workflow" element={<Workflow />} />
-            <Route path="/runs" element={<GraphRuns />} />
-            <Route path="/recognition" element={<Recognition />} />
-            <Route path="/labelstudio" element={<LabelStudioHub />} />
-            <Route path="/annotation" element={<Annotation health={health} />} />
-            <Route path="/assets" element={<Assets />} />
-            <Route path="/training" element={<Training />} />
-            <Route path="/cascade" element={<CascadeTasks />} />
-            <Route path="/models-runtime" element={<ModelRuntime />} />
-            <Route path="/packaging" element={<NewPackaging />} />
-            <Route path="/biz" element={<BizIntel />} />
-            <Route path="/biz/api" element={<BizIntel />} />
-            <Route path="/biz/alert" element={<BizIntel />} />
-            <Route path="/biz/cfg" element={<BizIntel />} />
-            <Route path="/status" element={<SystemStatus health={health} />} />
+            <Route path="/" element={<Home health={health}
+              modules={modules} identity={identity} />} />
+            <Route path="/home" element={<Home health={health}
+              modules={modules} identity={identity} />} />
+            {/* 智能识别域：六条真实二级路由 */}
+            <Route path="/vision" element={<Navigate to="/vision/recognize"
+              replace />} />
+            <Route path="/vision/recognize"
+              element={<div className="page wide">
+                <RecognizeNow health={health} /></div>} />
+            <Route path="/vision/tasks"
+              element={<div className="page wide"><VisionTasks /></div>} />
+            <Route path="/vision/annotation"
+              element={<div className="page wide">
+                <VisionAnnotation health={health} /></div>} />
+            <Route path="/vision/datasets"
+              element={<div className="page wide"><VisionDatasets /></div>} />
+            <Route path="/vision/models"
+              element={<div className="page wide"><VisionModels /></div>} />
+            <Route path="/vision/evidence"
+              element={<div className="page wide"><VisionEvidence /></div>} />
+            {/* 数据与资产 */}
+            <Route path="/data/assets"
+              element={<div className="page wide">
+                <VisionDatasets /></div>} />
+            <Route path="/data/quality"
+              element={<div className="page wide"><VisionEvidence /></div>} />
+            {/* 工作流与 Agent */}
+            <Route path="/workflow" element={<Navigate to="/workflow/runs"
+              replace />} />
+            <Route path="/workflow/runs"
+              element={<GraphRuns />} />
+            <Route path="/workflow/agents"
+              element={<AgentsMatrix modules={modules} />} />
+            {/* 系统与开发者 */}
+            <Route path="/status"
+              element={<SystemStatus health={health} />} />
+            {/* planned 模块：诚实插槽 */}
+            <Route path="/survey/*"
+              element={<ModulePage modules={modules} moduleId="survey" />} />
+            <Route path="/geo/*"
+              element={<ModulePage modules={modules} moduleId="geo" />} />
+            <Route path="/analytics/*"
+              element={<ModulePage modules={modules}
+                moduleId="analytics" />} />
+            <Route path="/finance/*"
+              element={<ModulePage modules={modules}
+                moduleId="finance" />} />
+            <Route path="/reference/echo" element={<ReferenceEcho />} />
+            {/* 兼容旧路由（redirect，deprecated） */}
+            <Route path="/recognition" element={<Navigate
+              to="/vision/recognize" replace />} />
+            <Route path="/cascade" element={<Navigate to="/vision/tasks"
+              replace />} />
+            <Route path="/labelstudio" element={<Navigate
+              to="/vision/annotation" replace />} />
+            <Route path="/annotation" element={<Navigate
+              to="/vision/annotation" replace />} />
+            <Route path="/assets" element={<Navigate to="/data/assets"
+              replace />} />
+            <Route path="/training" element={<Navigate to="/vision/models"
+              replace />} />
+            <Route path="/models-runtime" element={<Navigate
+              to="/vision/models" replace />} />
+            <Route path="/packaging" element={<Navigate
+              to="/vision/datasets" replace />} />
+            <Route path="/biz" element={<Navigate to="/analytics/bi"
+              replace />} />
+            <Route path="/biz/*" element={<Navigate to="/analytics/bi"
+              replace />} />
+            <Route path="/taskboard" element={<Navigate to="/home"
+              replace />} />
+            <Route path="/runs" element={<Navigate to="/workflow/runs"
+              replace />} />
+            {/* 专业子页保留深链接（三级内容） */}
+            <Route path="/vision/cascade" element={<CascadeTasks />} />
+            <Route path="/vision/packaging" element={<NewPackaging />} />
+            <Route path="*" element={<div className="page">
+              <div className="state-view">
+                <div className="title">页面不存在</div>
+                <div className="next">请从左侧模块导航进入，
+                  或回到 <NavLink to="/">主管工作台</NavLink></div>
+              </div></div>} />
           </Routes>
-          <footer className="footer">
-            <div className="logo">qy·sku.</div>
-            <div className="fine">
-              © 2026 QY · Agent + Workflow 驱动的 SKU 识别系统 ·
-              非 SaaS · production=prod_20260805_v5_r1（人工批准制）
-            </div>
+          <footer style={{ padding: "14px 24px", fontSize: 12,
+            color: "var(--text-muted)",
+            borderTop: "1px solid var(--border)" }}>
+            {identity?.product_name ?? "Agentic Business OS"} ·
+            Graph+Loop 驱动 · 识别为首个 Domain Pack ·
+            production={prod?.found ? (prod.bundle_id ?? "未知") : "—"}
+            （实时读取，人工批准制）
           </footer>
-        </main>
+        </div>
+        <SupervisorWorkspace />
       </div>
-      <AgentChat />
     </div>
   );
 }

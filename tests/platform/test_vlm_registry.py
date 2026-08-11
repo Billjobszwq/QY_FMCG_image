@@ -151,8 +151,10 @@ def test_bundle_without_cascade_adapters_keeps_legacy_only(tmp_path) -> None:
         db_path=tmp_path / "p.sqlite", cas_root=tmp_path / "cas"
     )
     ids = {c["capability_id"] for c in bundle.capabilities.capabilities()}
+    # ABOS T3：基线 = 三个 legacy 能力 + reference.echo 参考模块；
+    # 未注入 cascade adapter 时不得出现级联能力。
     assert ids == {"legacy.recognition.v2", "legacy.training.monitor",
-                   "legacy.label_studio"}
+                   "legacy.label_studio", "reference.echo"}
 
 
 # ---------- 依赖方向守卫 ----------

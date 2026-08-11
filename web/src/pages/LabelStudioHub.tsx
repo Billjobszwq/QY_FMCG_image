@@ -1,5 +1,4 @@
 import { useEffect, useState } from "react";
-import ModuleTabs from "./ModuleTabs";
 
 // 标注中心：Label Studio 融合页。
 // - 内嵌 LS 项目 22（micro-gold 人工审核，唯一有效入口）
@@ -16,8 +15,7 @@ export default function LabelStudioHub() {
   }, []);
   return (
     <div>
-      <span className="kicker">03 · 标注中心 · annotation-agent</span>
-      <ModuleTabs active="/labelstudio" items={[{ to: "/labelstudio", label: "micro-gold 审核" }, { to: "/labelstudio", label: "辅助标注" }, { to: "/labelstudio", label: "操作逻辑" }]} />
+      <span className="kicker">智能识别 · 标注与审核</span>
 
       <div className="grid" style={{ marginBottom: 24 }}>
         <div className="tile" style={{ background: "var(--green)" }}>

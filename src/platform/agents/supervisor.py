@@ -2,7 +2,7 @@
 
 原则：
 - 平台定位唯一：智能业务操作系统（Graph+Loop 内核 + Domain Pack）；
-  识别只是首个 Domain Pack，不再自称 SKU 识别系统。
+  识别只是首个 Domain Pack，不再以单一识别工具自居。
 - 不硬编码过期业务事实：所有状态类答案经 Query Tool 从 store/注册表/
   运行态实时读取；查不到就诚实说查不到。
 - 统一响应契约：message/evidence_refs/ui_intents/command_previews/
