@@ -40,13 +40,13 @@
 
 | # | 任务 | 状态 | 依赖 | 验收 | 证据 |
 |---|---|---|---|---|---|
-| C-1 | canonical WorkflowDefinition/Version/Node/Edge/Trigger/Variable/Policy | NOT_STARTED | B | schema+不可变版本 | — |
-| C-2 | 14 类节点支持 | NOT_STARTED | C-1 | 节点库来自已注册 Capability | — |
-| C-3 | draft/lint/simulate/shadow/approve/publish/deprecate 生命周期 | NOT_STARTED | C-1 | 状态机测试 | — |
-| C-4 | runtime checkpoint/retry/pause/resume/cancel/dead-letter | NOT_STARTED | C-1 | 重启可恢复 | — |
-| C-5 | Studio 七页签 UI + Workflow Agent draft（人工批准门） | NOT_STARTED | C-1..C-4 | 浏览器验收 | — |
-| C-6 | WorkflowExecutorAdapter：Native 完整；n8n/Dify 边界 PoC 或诚实 blocked | NOT_STARTED | C-1 | SPI 契约测试 | — |
-| C-7 | 首个照片识别模板真实贯通 | NOT_STARTED | C-1..C-6 | 同一 Work/Run/Event/Usage 时间线 | — |
+| C-1 | canonical WorkflowDefinition/Version/Node/Edge/Trigger/Variable/Policy | VERIFIED_LOCAL | B | schema+不可变版本 | commit `aa7ba378` migration 034；发布后修改拒绝测试 |
+| C-2 | 15 类节点支持 | VERIFIED_LOCAL | C-1 | 节点库来自已注册 Capability | node-library 端点；15 类型；fail-closed 测试 |
+| C-3 | draft/lint/simulate/shadow/approve/publish/deprecate 生命周期 | VERIFIED_LOCAL | C-1 | 状态机测试 | 现场 409 拦截未批准发布；shadow 合并入 simulate（诚实披露） |
+| C-4 | runtime checkpoint/retry/pause/resume/cancel/dead-letter | VERIFIED_LOCAL | C-1 | 重启可恢复 | checkpoint 表 + 死信表；测试覆盖失败→重试→恢复 |
+| C-5 | Studio 七页签 UI + Workflow Agent draft（人工批准门） | VERIFIED_LOCAL | C-1..C-4 | 浏览器验收 | 浏览器 6/6（DOM/a11y，截图通道故障已披露） |
+| C-6 | WorkflowExecutorAdapter：Native 完整；n8n/Dify 边界 PoC 或诚实 blocked | VERIFIED_LOCAL | C-1 | SPI 契约测试 | N8n/Dify available()=False + start() 抛 blocked（许可未确认） |
+| C-7 | 首个照片识别模板真实贯通 | VERIFIED_LOCAL | C-1..C-6 | 同一 Work/Run/Event/Usage 时间线 | wf-d63bc03b2f → run-50adc9a8f9a6 → 子 run/task/trace/evidence/usage 全链报告 |
 
 ## Phase D · IAM 与主数据（Gate G4）
 

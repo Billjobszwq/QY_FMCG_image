@@ -112,3 +112,43 @@
 
 - Phase C：Workflow Studio MVP（canonical WorkflowDefinition/节点类型/
   生命周期/runtime checkpoint/Studio UI/Executor Adapter SPI）。
+
+## 2026-08-11 · Phase C 完成（commit aa7ba378），Gate G3 通过
+
+- migration 034：workflow_definition_v1（definition_id+version 主键，发布不可
+  原地改）/ workflow_node_execution_v1（checkpoint）/ workflow_dead_letter_v1
+  （append-only）。run 状态机扩展 paused / waiting_human。
+- WorkflowService（src/platform/workflow.py）：
+  - 生命周期 draft→linted→simulated→approved→published→deprecated；
+    publish 必须先人工 approve（409 现场验证两次拦截）；
+  - lint：未知 capability fail-closed、不可达节点、缺 trigger/end、
+    loop 有界、subflow 必须已发布、connector 许可预警（warn）；
+  - runtime：15 节点类型；command 节点经 Command Gateway（parent_run_id/
+    correlation 贯通）；human_approval 生成 approval WorkItem 并等待，
+    批准/拒绝是节点事件；checkpoint 每节点留痕；失败按 policy.retry
+    自动重试，耗尽进死信 + run failed；pause/resume/cancel/retry 端点；
+  - Workflow Agent：NL→draft 仅预览/模拟，发布必须人工（测试守卫）。
+- WorkflowExecutorAdapter SPI：Native 完整；N8n/Dify adapter available()=False，
+  start() 抛 WorkflowExecutorBlocked（许可未确认，诚实 blocked，无第三方代码）。
+- 节点库：GET /api/v1/workflows/node-library 来自 Capability Registry +
+  Gateway SUPPORTED_COMMANDS（fail-closed）；现场 15 类型 + 4 命令/模型节点。
+- Studio 七页签（module_catalog workflow v1.1.0）：搭建/模板库/运行中心/
+  待办与批准/连接器/Agent 与模型/证据与用量；浏览器验证 6/6 通过
+  （截图通道 DevTools 超时，以 DOM/a11y 断言为准，已如实披露）。
+- 实跑首批模板（G3 要求“只保存画布 JSON 不算完成”）：
+  模板实例化 wf-d63bc03b2f → lint [] → simulate succeeded → approve →
+  publish（published_at 非空）→ 真实货架照片运行：
+  run-50adc9a8f9a6 succeeded；checkpoints start/recognize/check/end 全
+  succeeded；子 run-912429a999484a9d（parent=wf run）→ task
+  9c35e188f110a5ae0bbf6c07b0b808b2 / trace tr-d6f5c8e0e72a /
+  evidence evid-732bb8cc9d484347；usage recognition_photo×1 +
+  model_compute_ms×141.31；sku_count=1；reconcile consistent=true
+  （17 事件全 dispatched）。
+- 失败→人工批准→恢复/拒绝路径由 test_abos_v2_workflow.py 覆盖（waiting_human、
+  approval WorkItem、denied→cancelled、approved→succeeded、connector→死信）。
+- 全量 hermetic：1213 passed, 1 skipped, 6 deselected。
+
+## 下一动作
+
+- Phase D：IAM 与主数据（tenant/customer/project scope、角色/permission
+  bundle、批准矩阵/审计；SKU/客户/项目库；两测试客户隔离证明）。

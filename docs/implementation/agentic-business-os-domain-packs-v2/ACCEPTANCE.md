@@ -27,7 +27,17 @@
 - [x] 失败恢复演示（run-637bcd55272842c5 failed → retry 同一 run succeeded）
 - [x] 红测试先红后绿（test_abos_v2_control_plane.py 7 项）；全量 1201 passed
 
-## Gate G3–G9（未开始）
+## Gate G3 · Phase C（已通过，2026-08-11）
+
+- [x] 照片识别模板真实运行（非画布 JSON）：wf-d63bc03b2f → run-50adc9a8f9a6 → 子识别 run/task/trace/evidence/usage
+- [x] 人工批准门：未 approve 发布被 409 拦截（现场两次）
+- [x] 失败节点可重试 / waiting_human 批准/拒绝 / 连接器死信（测试覆盖）
+- [x] 版本不可变：发布后修改拒绝，只能新版本（测试覆盖）
+- [x] 预算/权限越界 fail-closed：未注册 capability lint 报错（测试覆盖）
+- [x] n8n/Dify 诚实 blocked（无第三方源码）；reconcile consistent=true
+- [x] 红测试 12 项先红后绿；全量 1213 passed
+
+## Gate G4–G9（未开始）
 
 - 见 IMPLEMENTATION-LIST 对应行。
 
