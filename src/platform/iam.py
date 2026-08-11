@@ -269,9 +269,9 @@ class IAMService:
                 return True
         return False
 
-    def visible_customers(self, username: str) -> str | None:
+    def visible_customers(self, username: str) -> list[str] | None:
         """返回 None=全部可见（平台角色）；否则返回受限 customer_id
-        （多客户受限取第一个，MVP 单客户作用域）。"""
+        列表。ABOSV3-P1-015：多客户授权必须全部可见，不得只取第一个。"""
         roles = self.roles_of(username)
         if "owner" in roles or "platform_admin" in roles:
             return None
@@ -281,8 +281,8 @@ class IAMService:
             " WHERE p.username=? AND m.customer_id != ''",
             (username,)).fetchall()
         if not rows:
-            return "__none__"  # 无任何客户作用域 → 不可见任何客户数据
-        return rows[0]["customer_id"]
+            return []  # 无任何客户作用域 → 不可见任何客户数据
+        return sorted(r["customer_id"] for r in rows)
 
     def check_approval(self, username: str, action: str) -> bool:
         """批准矩阵：矩阵未收录的动作 fail-closed 仅平台管理员。"""
@@ -365,7 +365,7 @@ class MasterDataService:
         for r in rows:
             d = dict(r)
             d["is_test_fixture"] = bool(d["is_test_fixture"])
-            if limit_to is not None and d["customer_id"] != limit_to:
+            if limit_to is not None and d["customer_id"] not in limit_to:
                 continue
             out.append(d)
         return out

@@ -168,11 +168,11 @@ def create_survey_router(store: Any, survey: SurveyService,
         p = require_principal(auth, request, csrf=False)
         _guard(iam, p["actor"], p["role"], "survey.read",
                customer_id=customer_id)
-        cid = customer_id
-        if not _platform(iam, p["actor"], p["role"]):
-            limit = iam.visible_customers(p["actor"])
-            cid = limit if limit and limit != "__none__" else "__none__"
-        rows = survey.list_assignments(customer_id=cid)
+        rows = survey.list_assignments(customer_id=customer_id)
+        if not _platform(iam, p["actor"], p["role"]) and not customer_id:
+            # ABOSV3-P1-015：多客户授权全部可见，不得只取第一个
+            limit = iam.visible_customers(p["actor"]) or []
+            rows = [r for r in rows if r.get("customer_id") in limit]
         return {"count": len(rows), "assignments": rows}
 
     @router.post("/api/v1/survey/responses")
@@ -212,11 +212,11 @@ def create_survey_router(store: Any, survey: SurveyService,
         p = require_principal(auth, request, csrf=False)
         _guard(iam, p["actor"], p["role"], "survey.read",
                customer_id=customer_id)
-        cid = customer_id
-        if not _platform(iam, p["actor"], p["role"]):
-            limit = iam.visible_customers(p["actor"])
-            cid = limit if limit and limit != "__none__" else "__none__"
-        rows = survey.list_responses(survey_id=survey_id, customer_id=cid)
+        rows = survey.list_responses(survey_id=survey_id,
+                                     customer_id=customer_id)
+        if not _platform(iam, p["actor"], p["role"]) and not customer_id:
+            limit = iam.visible_customers(p["actor"]) or []
+            rows = [r for r in rows if r.get("customer_id") in limit]
         return {"count": len(rows), "responses": rows}
 
     # ---- 拍照题 ----
@@ -271,9 +271,13 @@ def create_survey_router(store: Any, survey: SurveyService,
             if not iam.authorize(p["actor"], "survey.read",
                                  customer_id=customer_id or None):
                 raise HTTPException(403, "无权访问该客户的问卷报表")
-            limit = iam.visible_customers(p["actor"])
-            if limit and limit != "__none__":
-                customer_id = limit
+            if not customer_id:
+                limit = iam.visible_customers(p["actor"]) or []
+                if len(limit) != 1:
+                    raise HTTPException(
+                        400, "多客户作用域用户必须指定 customer_id"
+                             "（不得跨客户混合汇总）")
+                customer_id = limit[0]
         try:
             return survey.report(survey_id=survey_id,
                                  customer_id=customer_id)

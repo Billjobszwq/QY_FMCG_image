@@ -3422,7 +3422,9 @@ class PlatformStore:
             sets.append("started_at=?"); vals.append(_utcnow())
         if status in ("succeeded", "failed", "cancelled"):
             sets.append("ended_at=?"); vals.append(_utcnow())
-        if error:
+        # ABOSV3-P0-003：succeeded 不得残留上次失败的 current error；
+        # 旧错误仍保留在 run.failed 事件/attempt 历史中。
+        if error or status == "succeeded":
             sets.append("error=?"); vals.append(error)
         if current_node is not None:
             sets.append("current_node=?"); vals.append(current_node)
@@ -3476,6 +3478,11 @@ class PlatformStore:
         if blockers is not None:
             sets.append("blockers_json=?")
             vals.append(json.dumps(blockers, ensure_ascii=False))
+        elif status in ("done", "cancelled"):
+            # ABOSV3-P0-003：完成/取消后 current blockers 必须清除；
+            # 历史 blocker 仍在 run.failed 事件中可查。
+            sets.append("blockers_json=?")
+            vals.append("[]")
         self._conn.execute(
             f"UPDATE work_item_v2 SET {', '.join(sets)} WHERE work_id=?",
             (*vals, work_id))
@@ -3603,8 +3610,12 @@ class PlatformStore:
     def rebuild_work_projection(self) -> dict[str, Any]:
         """从事件重建 current 投影（幂等）；hash/count 可对账。
 
-        规则：command.accepted→running；run.succeeded→done；
-        run.failed→blocked；run.cancelled→cancelled；按事件 seq 演进。
+        规则（ABOSV3-P0-001：workflow.* 与 run.* 语义统一）：
+        command.accepted/workflow.started/run.retried/workflow.retried
+        →running；run.succeeded/workflow.succeeded→done；
+        run.failed/workflow.failed→blocked；
+        run.cancelled/workflow.cancelled→cancelled；
+        run.waiting_human→waiting；按事件 seq 演进。
         """
         events = self.list_events()
         self.dispatch_outbox()  # 至少一次投递：重建时统一消费 pending
@@ -3618,20 +3629,24 @@ class PlatformStore:
                 "subject_type": "", "subject_id": "",
                 "run_id": e.get("run_id", "")})
             t = e["event_type"]
-            if t == "command.accepted":
+            if t in ("command.accepted", "workflow.started",
+                     "run.retried", "workflow.retried"):
                 st["status"] = "running"
-            elif t == "run.succeeded":
+            elif t in ("run.succeeded", "workflow.succeeded"):
                 st["status"] = "done"
                 st["subject_type"] = e.get("subject_type") or st["subject_type"]
                 st["subject_id"] = e.get("subject_id") or st["subject_id"]
-            elif t == "run.failed":
+            elif t in ("run.failed", "workflow.failed"):
                 st["status"] = "blocked"
                 st["subject_type"] = e.get("subject_type") or st["subject_type"]
                 st["subject_id"] = e.get("subject_id") or st["subject_id"]
-            elif t == "run.cancelled":
+            elif t in ("run.cancelled", "workflow.cancelled"):
                 st["status"] = "cancelled"
+            elif t in ("run.waiting_human", "workflow.waiting_human"):
+                st["status"] = "waiting"
         items = sorted(state.values(), key=lambda x: x["work_id"])
-        # 同步到 work_item_v2（重建不丢失原始行，只更新状态/主体）
+        # 同步到 work_item_v2（重建不丢失原始行，只更新状态/主体）；
+        # 完成/取消时 blockers 随状态机清除（set_work_item_v2_status）。
         for it in items:
             row = self.get_work_item_v2(it["work_id"])
             if row is not None and (row["status"] != it["status"]
@@ -3640,6 +3655,24 @@ class PlatformStore:
                     it["work_id"], it["status"],
                     subject_type=it["subject_type"],
                     subject_id=it["subject_id"])
+            elif row is not None and it["status"] in ("done", "cancelled"):
+                blk = json.loads(row.get("blockers_json") or "[]")
+                if blk:
+                    self.set_work_item_v2_status(it["work_id"],
+                                                 it["status"])
+            # 投影项补齐业务字段（首页/主管/日历同源消费）
+            row = self.get_work_item_v2(it["work_id"])
+            if row is not None:
+                it.update({
+                    "title": row["title"],
+                    "owner_type": row["owner_type"],
+                    "owner_id": row["owner_id"],
+                    "due_at": row.get("due_at"),
+                    "customer_id": row.get("customer_id", ""),
+                    "project_id": row.get("project_id", ""),
+                    "blockers": json.loads(
+                        row.get("blockers_json") or "[]"),
+                })
         canonical = json.dumps(
             [{"work_id": i["work_id"], "status": i["status"],
               "subject_id": i["subject_id"]} for i in items],

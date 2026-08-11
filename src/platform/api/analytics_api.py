@@ -89,10 +89,23 @@ def create_analytics_router(store: Any, svc: AnalyticsService,
         p = require_principal(auth, request, csrf=False)
         reps = svc.list_report_specs()
         if not _platform(iam, p["actor"], p["role"]):
-            limit = iam.visible_customers(p["actor"])
+            limit = iam.visible_customers(p["actor"]) or []
             reps = [r for r in reps
-                    if limit is None or r["customer_id"] == limit]
+                    if r["customer_id"] in limit]
         return {"count": len(reps), "reports": reps}
+
+    @router.get("/api/v1/analytics/reports/{spec_id}/versions")
+    def report_versions(spec_id: str, request: Request) -> dict:
+        """ABOSV3-P0-004：v1/v2 分别可见、可比较；旧版不被覆盖。"""
+        p = require_principal(auth, request, csrf=False)
+        try:
+            versions = svc.list_report_versions(spec_id)
+        except AnalyticsError as e:
+            raise HTTPException(404, str(e))
+        _guard(iam, p["actor"], p["role"], "analytics.read",
+               customer_id=versions[-1]["customer_id"])
+        return {"spec_id": spec_id, "count": len(versions),
+                "versions": versions}
 
     @router.post("/api/v1/analytics/reports/{spec_id}/approve")
     def approve(spec_id: str, request: Request) -> dict:
@@ -150,9 +163,13 @@ def create_analytics_router(store: Any, svc: AnalyticsService,
         _guard(iam, p["actor"], p["role"], customer_id)
         cid = customer_id
         if not _platform(iam, p["actor"], p["role"]):
-            limit = iam.visible_customers(p["actor"])
-            cid = limit if limit and limit != "__none__" else "__none__"
-        rows = svc.list_anomalies(customer_id=cid)
+            limit = iam.visible_customers(p["actor"]) or []
+            rows = svc.list_anomalies(customer_id=cid)
+            if not cid:
+                rows = [r for r in rows
+                        if r.get("customer_id") in limit]
+        else:
+            rows = svc.list_anomalies(customer_id=cid)
         return {"count": len(rows), "anomalies": rows}
 
     @router.post("/api/v1/analytics/anomalies/{anomaly_id}/answer")

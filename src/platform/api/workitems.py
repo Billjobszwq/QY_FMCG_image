@@ -97,6 +97,32 @@ def collect_workitems(store: Any,
     blocked: list[str] = []
     next_steps: list[str] = []
 
+    # ---- ABOSV3-P0-002：WorkItemV2 控制平面主线（统一 current 真相）
+    # 首页/主管/任务板必须消费同一投影；不得另建平行任务源。
+    proj = store.rebuild_work_projection()
+    _V2_STAGE = {"todo": "todo", "running": "active", "waiting": "todo",
+                 "approval": "approval", "blocked": "blocked",
+                 "done": "done", "cancelled": "done"}
+    _V2_TEXT = {"todo": "待处理", "running": "运行中",
+                "waiting": "等待人工", "approval": "待批准",
+                "blocked": "阻断", "done": "已完成",
+                "cancelled": "已取消"}
+    for it in proj["items"]:
+        st = it["status"]
+        items.append({
+            "id": it["work_id"],
+            "kind": "work_item_v2",
+            "status": st,
+            "status_text": _V2_TEXT.get(st, st),
+            "stage": _V2_STAGE.get(st, "todo"),
+            "title": it.get("title") or f"控制平面工作：{it['work_id'][:16]}",
+            "owner": it.get("owner_id") or "系统",
+            "detail": {"run_id": it.get("run_id", ""),
+                       "subject_type": it.get("subject_type", ""),
+                       "subject_id": it.get("subject_id", ""),
+                       "blockers": it.get("blockers", [])},
+        })
+
     # ---- 人工审核（唯一事实源 = DB 事件推导，不得伪造完成） ----
     progress = review_progress(store)
     review_tasks = progress["active"]["tasks"]

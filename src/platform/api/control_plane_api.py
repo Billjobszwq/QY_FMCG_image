@@ -86,9 +86,46 @@ def create_control_plane_router(store: Any, gateway: CommandGateway,
         return {"count": proj["count"], "items": proj["items"],
                 "hash": proj["hash"]}
 
+    # ABOSV3-P0-002：首页/主管/任务板/日历共用的唯一 current 事实。
+    # WorkItemV2 主线（控制平面）+ 遗留域工作（审核/训练/Job/标注，
+    # 经 supersession 账本排除被取代族）；不得再有平行真相。
+    _RUN_TO_WORK = {"succeeded": "done", "failed": "blocked",
+                    "cancelled": "cancelled", "waiting_human": "waiting",
+                    "paused": "waiting", "running": "running",
+                    "queued": "running"}
+
+    @router.get("/api/v1/control/current-work")
+    def current_work() -> dict:
+        proj = store.rebuild_work_projection()
+        items = [{"id": i["work_id"], "work_id": i["work_id"],
+                  "kind": "work_item_v2", "source": "control_plane",
+                  "status": i["status"], "title": i.get("title", ""),
+                  "owner": i.get("owner_id", ""),
+                  "due_at": i.get("due_at"),
+                  "run_id": i.get("run_id", ""),
+                  "subject_type": i.get("subject_type", ""),
+                  "subject_id": i.get("subject_id", ""),
+                  "customer_id": i.get("customer_id", ""),
+                  "project_id": i.get("project_id", ""),
+                  "blockers": i.get("blockers", [])}
+                 for i in proj["items"]]
+        try:
+            from .workitems import collect_workitems
+            legacy = collect_workitems(store, projection="current")
+            for w in legacy["items"]:
+                items.append({**w, "source": "legacy_domain"})
+        except Exception:
+            pass
+        return {"count": len(items), "items": items,
+                "projection": "current", "hash": proj["hash"]}
+
     @router.get("/api/v1/control/reconcile")
     def reconcile() -> dict:
-        """事件↔投影↔outbox 对账（只读）。"""
+        """事件↔投影↔outbox↔BusinessRun 业务事实对账（只读+自愈）。
+
+        ABOSV3 要求：不得只和错误 reducer 自洽；必须逐个对照
+        business_run_v1 的当前状态与 work 投影，漂移即修复并计数。
+        """
         proj = store.rebuild_work_projection()
         proj2 = store.rebuild_work_projection()
         events = store.list_events()
@@ -96,10 +133,25 @@ def create_control_plane_router(store: Any, gateway: CommandGateway,
             "SELECT status, count(*) c FROM outbox_v1"
             " GROUP BY status").fetchall()
         outbox = {r["status"]: r["c"] for r in outbox_rows}
+        # BusinessRun 业务事实对账：run 状态 → 期望 work 状态
+        drift_fixed = 0
+        runs = store._conn.execute(
+            "SELECT run_id, work_id, status FROM business_run_v1"
+            " WHERE work_id != ''").fetchall()
+        for r in runs:
+            expected = _RUN_TO_WORK.get(r["status"])
+            if expected is None:
+                continue
+            work = store.get_work_item_v2(r["work_id"])
+            if work is not None and work["status"] != expected:
+                store.set_work_item_v2_status(r["work_id"], expected)
+                drift_fixed += 1
         consistent = (proj["hash"] == proj2["hash"]
                       and len(events) >= proj["count"]
                       and outbox.get("pending", 0) == 0)
         return {"consistent": consistent,
+                "business_facts_checked": True,
+                "drift_fixed": drift_fixed,
                 "projection": {"count": proj["count"],
                                "hash": proj["hash"]},
                 "event_count": len(events),

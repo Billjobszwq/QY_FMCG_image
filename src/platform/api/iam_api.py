@@ -109,11 +109,16 @@ def create_iam_router(store: Any, auth: AuthService | None) -> APIRouter:
     def whoami(request: Request) -> dict:
         p = require_principal(auth, request, csrf=False)
         actor = p["actor"]
+        vis = iam.visible_customers(actor)
         return {"actor": actor, "session_role": p["role"],
                 "roles": iam.roles_of(actor),
                 "scopes": iam.scopes_of(actor),
                 "memberships": iam.memberships_of(actor),
-                "visible_customer": iam.visible_customers(actor)}
+                # ABOSV3-P1-015：多客户授权全部返回（None=平台角色）
+                "visible_customers": vis,
+                # 兼容字段：旧前端消费，仅作显示
+                "visible_customer": None if vis is None else (
+                    vis[0] if vis else "")}
 
     @router.post("/api/v1/iam/principals")
     def create_principal(body: PrincipalBody, request: Request) -> dict:

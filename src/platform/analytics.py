@@ -154,10 +154,22 @@ class AnalyticsService:
         return d
 
     def list_report_specs(self) -> list[dict]:
+        """ABOSV3-P0-004：每个 spec 只出现一次（取最新版本）；
+        不得对每个版本行再取 latest 造成 v2 重复、v1 消失。
+        历史版本经 list_report_versions 单独可查。"""
         rows = self.store._conn.execute(
-            "SELECT spec_id FROM bi_report_spec_v1"
-            " ORDER BY spec_id, version").fetchall()
-        return [self.get_report_spec(r["spec_id"]) for r in rows]
+            "SELECT spec_id, max(version) v FROM bi_report_spec_v1"
+            " GROUP BY spec_id ORDER BY spec_id").fetchall()
+        return [self.get_report_spec(r["spec_id"], r["v"]) for r in rows]
+
+    def list_report_versions(self, spec_id: str) -> list[dict]:
+        """同一 spec 的全部版本（v1 不得消失；旧版不可被覆盖）。"""
+        rows = self.store._conn.execute(
+            "SELECT version FROM bi_report_spec_v1 WHERE spec_id=?"
+            " ORDER BY version", (spec_id,)).fetchall()
+        if not rows:
+            raise AnalyticsError(f"报表不存在: {spec_id}")
+        return [self.get_report_spec(spec_id, r["version"]) for r in rows]
 
     def approve_report(self, spec_id: str, *, actor: str) -> dict:
         d = self.get_report_spec(spec_id)
