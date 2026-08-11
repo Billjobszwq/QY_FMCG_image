@@ -84,17 +84,32 @@ class AuthService:
 
     def login(self, username: str, password: str) -> dict[str, Any]:
         rec = self._users.get(username)
-        if rec is None or not verify_password(password, rec[0]):
-            raise PermissionError("用户名或口令错误")
+        if rec is not None and verify_password(password, rec[0]):
+            role = rec[1]
+        else:
+            # ABOSV2 Phase D：IAM 身份库回退（user/service_account），
+            # session role 取首个成员角色（fail-closed 无角色则拒绝）。
+            iam_row = None
+            try:
+                from .iam import IAMService
+                iam_row = IAMService(self.store).verify_login(
+                    username, password)
+            except Exception:
+                iam_row = None
+            if iam_row is None:
+                raise PermissionError("用户名或口令错误")
+            from .iam import IAMService
+            roles = IAMService(self.store).roles_of(username)
+            role = roles[0] if roles else "read_only"
         session_id = secrets.token_urlsafe(32)
         csrf = secrets.token_urlsafe(32)
         now = _utcnow()
         self.store.create_auth_session(
-            session_id=session_id, actor=username, role=rec[1],
+            session_id=session_id, actor=username, role=role,
             csrf_token=csrf, created_at=now.isoformat(),
             expires_at=(now + timedelta(seconds=SESSION_TTL_SECONDS))
             .isoformat())
-        return {"actor": username, "role": rec[1], "session_id": session_id,
+        return {"actor": username, "role": role, "session_id": session_id,
                 "csrf_token": csrf}
 
     def principal(self, session_id: str | None) -> dict[str, Any] | None:

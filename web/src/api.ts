@@ -827,6 +827,31 @@ export async function fetchControlReconcile(): Promise<{
   return r.json();
 }
 
+// ---------- IAM 与主数据（ABOSV2 Phase D） ----------
+
+export async function iamWhoami(): Promise<{
+  actor: string; session_role: string; roles: string[]; scopes: string[];
+  memberships: Array<{ role: string; customer_id: string;
+    project_id: string }>;
+  visible_customer: string | null;
+}> {
+  const r = await fetch("/api/v1/iam/whoami");
+  if (!r.ok) throw new Error(`whoami HTTP ${r.status}`);
+  return r.json();
+}
+
+export async function iamPost(path: string, body: unknown): Promise<any> {
+  const r = await postJson(`/api/v1/${path.replace(/^\/+/, "")}`, body);
+  if (!r.ok) throw await parseError(r, path);
+  return r.json();
+}
+
+export async function iamGet(path: string): Promise<any> {
+  const r = await fetch(`/api/v1/${path.replace(/^\/+/, "")}`);
+  if (!r.ok) throw await parseError(r, path);
+  return r.json();
+}
+
 export interface RecognitionTaskView {
   task: RecognitionTaskRow;
   results: Array<Record<string, unknown> & { name?: string }>;

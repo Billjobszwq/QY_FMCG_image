@@ -45,6 +45,10 @@
   --accent-rose-soft: #fae7ef;
   --accent-slate: #4d5666;
   --accent-slate-soft: #eceff3;
+  --accent-teal: #0f766e;
+  --accent-teal-soft: #dcf2f0;
+  --accent-gold: #a16207;
+  --accent-gold-soft: #f8efd8;
 
   /* ---- 主管便签语言（仅强调区域） ---- */
   --note-yellow: #fff3bf;

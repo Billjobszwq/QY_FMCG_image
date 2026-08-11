@@ -134,6 +134,11 @@ def create_app(
         wf_service = WorkflowService(bundle.store, cap_registry, gateway)
         app.include_router(create_workflow_router(
             bundle.store, wf_service, auth=AuthService(bundle.store)))
+        # ABOSV2 Phase D：IAM 与主数据（账号/角色/作用域/审计/批准矩阵
+        # + 客户/项目/SKU 库，含客户隔离概览）。
+        from src.platform.api.iam_api import create_iam_router
+        app.include_router(create_iam_router(
+            bundle.store, auth=AuthService(bundle.store)))
         # U2-2：数据中心 Asset API（真实台账 source_asset_inventory_v1）
         from src.platform.api.assets import create_assets_router
         app.include_router(create_assets_router(bundle.store))

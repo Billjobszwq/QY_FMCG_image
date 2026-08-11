@@ -25,6 +25,9 @@ import {
 } from "./pages/Workflow";
 import SystemStatus from "./pages/SystemStatus";
 import {
+  IamAccounts, IamAudit, MasterCustomers, MasterProjects, MasterSkus,
+} from "./pages/IamMaster";
+import {
   RecognizeNow, VisionAnnotation, VisionDatasets, VisionEvidence,
   VisionModels, VisionTasks,
 } from "./pages/Vision";
@@ -271,6 +274,23 @@ export default function App() {
             <Route path="/workflow/evidence"
               element={<div className="page wide">
                 <WorkflowEvidenceUsage /></div>} />
+            {/* 账号与权限 / 客户与主数据（ABOSV2 Phase D） */}
+            <Route path="/iam" element={<Navigate to="/iam/accounts"
+              replace />} />
+            <Route path="/iam/accounts"
+              element={<div className="page wide"><IamAccounts /></div>} />
+            <Route path="/iam/audit"
+              element={<div className="page wide"><IamAudit /></div>} />
+            <Route path="/master" element={<Navigate
+              to="/master/customers" replace />} />
+            <Route path="/master/customers"
+              element={<div className="page wide">
+                <MasterCustomers /></div>} />
+            <Route path="/master/projects"
+              element={<div className="page wide">
+                <MasterProjects /></div>} />
+            <Route path="/master/skus"
+              element={<div className="page wide"><MasterSkus /></div>} />
             {/* 系统与开发者 */}
             <Route path="/status"
               element={<SystemStatus health={health} />} />

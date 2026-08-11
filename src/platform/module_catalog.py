@@ -208,6 +208,46 @@ def build_default_module_registry() -> ModuleRegistry:
         health_checks=(),
     ))
     reg.register(ModuleManifestV2(
+        module_id="iam", name="账号与权限", version="1.0.0",
+        domain="iam", status="live", theme_token="teal",
+        primary_route="/iam",
+        navigation=(
+            NavRoute(route="/iam/accounts", label="账号与角色",
+                     description="用户/服务账号/Agent 身份、角色与成员作用域",
+                     actions=("开设账号", "授权", "查看成员")),
+            NavRoute(route="/iam/audit", label="审计与批准矩阵",
+                     description="append-only 审计事件与高风险动作批准矩阵",
+                     actions=("查看审计", "批准检查")),
+        ),
+        commands=("iam.principal.create", "iam.grant"),
+        queries=("iam.principals.list", "iam.audit.list"),
+        api_prefix="/api/v1/iam", openapi_tag="iam",
+        permission_scopes=("iam.read", "iam.manage"),
+        billing_units=(),
+    ))
+    reg.register(ModuleManifestV2(
+        module_id="master", name="客户与主数据", version="1.0.0",
+        domain="master", status="live", theme_token="gold",
+        primary_route="/master",
+        navigation=(
+            NavRoute(route="/master/customers", label="客户库",
+                     description="客户/组织/保留策略；test fixture 显式标记",
+                     actions=("新建客户", "隔离概览")),
+            NavRoute(route="/master/projects", label="项目库",
+                     description="项目↔客户/SKU 范围/预算",
+                     actions=("新建项目",)),
+            NavRoute(route="/master/skus", label="SKU 库",
+                     description="别名/客户显示名/有效期/新旧包装",
+                     actions=("新建 SKU", "supersede", "别名")),
+        ),
+        commands=("master.customer.create", "master.sku.create"),
+        queries=("master.customers.list", "master.skus.list"),
+        api_prefix="/api/v1/master", openapi_tag="master",
+        data_products=("master.customers_v1", "master.skus_v1"),
+        permission_scopes=("master.read", "master.manage"),
+        billing_units=(),
+    ))
+    reg.register(ModuleManifestV2(
         module_id="finance", name="财务与结算", version="0.1.0",
         domain="finance", status="planned", theme_token="rose",
         primary_route="/finance",

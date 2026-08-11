@@ -194,7 +194,8 @@ class CommandGateway:
 
         task = out["task"]
         task_id = task["task_id"]
-        # 用量：真实计量（按照片 + 实际计算时长），immutable 账本
+        # 用量：真实计量（按照片 + 实际计算时长），immutable 账本；
+        # customer/project 作用域随 run 继承（G4 隔离依据）
         evidence_ref = f"recognition_task:{task_id}"
         store.insert_usage_event_v2(
             usage_id=_new_id("usage"), unit="recognition_photo",
@@ -202,14 +203,20 @@ class CommandGateway:
             work_id=work_id, node="recognition",
             capability="vision.recognition.create",
             profile_id=out.get("recognition_profile_id", ""),
-            tier=out.get("service_tier", ""), source_evidence=evidence_ref)
+            tier=out.get("service_tier", ""),
+            customer_id=run.get("customer_id", ""),
+            project_id=run.get("project_id", ""),
+            source_evidence=evidence_ref)
         store.insert_usage_event_v2(
             usage_id=_new_id("usage"), unit="model_compute_ms",
             quantity=float(out.get("elapsed_ms") or 0), run_id=run_id,
             work_id=work_id, node="recognition",
             capability="vision.recognition.create",
             profile_id=out.get("recognition_profile_id", ""),
-            tier=out.get("service_tier", ""), source_evidence=evidence_ref)
+            tier=out.get("service_tier", ""),
+            customer_id=run.get("customer_id", ""),
+            project_id=run.get("project_id", ""),
+            source_evidence=evidence_ref)
         # 证据 bundle：输入 hash + 产物引用 + 生成者/配置版本
         input_hash = hashlib.sha256(json.dumps(
             [[n, hashlib.sha256(d).hexdigest()] for n, d in images],

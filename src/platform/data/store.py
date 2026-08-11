@@ -1358,6 +1358,127 @@ CREATE TRIGGER IF NOT EXISTS workflow_dead_letter_v1_no_update
     END;
 """
 
+# ABOSV2 Phase D：IAM（账号/角色/permission bundle/成员/审计/批准矩阵）
+# + 主数据（客户/项目/SKU 库，含别名与新旧包装）。
+_M035 = """
+CREATE TABLE IF NOT EXISTS iam_principal_v1 (
+    principal_id TEXT PRIMARY KEY,
+    kind TEXT NOT NULL,
+    username TEXT NOT NULL UNIQUE,
+    display_name TEXT NOT NULL DEFAULT '',
+    tenant_id TEXT NOT NULL DEFAULT 'local',
+    status TEXT NOT NULL DEFAULT 'active',
+    password_hash TEXT NOT NULL DEFAULT '',
+    created_by TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS iam_role_v1 (
+    role_id TEXT PRIMARY KEY,
+    name TEXT NOT NULL UNIQUE,
+    builtin INTEGER NOT NULL DEFAULT 0,
+    description TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS iam_permission_bundle_v1 (
+    bundle_id TEXT PRIMARY KEY,
+    scope TEXT NOT NULL,
+    version TEXT NOT NULL DEFAULT 'v1',
+    UNIQUE(scope, version)
+);
+CREATE TABLE IF NOT EXISTS iam_role_permission_v1 (
+    role_id TEXT NOT NULL,
+    bundle_id TEXT NOT NULL,
+    PRIMARY KEY (role_id, bundle_id)
+);
+CREATE TABLE IF NOT EXISTS iam_membership_v1 (
+    principal_id TEXT NOT NULL,
+    role_id TEXT NOT NULL,
+    tenant_id TEXT NOT NULL DEFAULT 'local',
+    customer_id TEXT NOT NULL DEFAULT '',
+    project_id TEXT NOT NULL DEFAULT '',
+    granted_by TEXT NOT NULL DEFAULT '',
+    granted_at TEXT NOT NULL,
+    PRIMARY KEY (principal_id, role_id, customer_id, project_id)
+);
+CREATE TABLE IF NOT EXISTS iam_audit_event_v1 (
+    audit_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    occurred_at TEXT NOT NULL,
+    actor_id TEXT NOT NULL,
+    action TEXT NOT NULL,
+    resource TEXT NOT NULL DEFAULT '',
+    detail_json TEXT NOT NULL DEFAULT '{}',
+    tenant_id TEXT NOT NULL DEFAULT 'local',
+    customer_id TEXT NOT NULL DEFAULT ''
+);
+CREATE TABLE IF NOT EXISTS iam_approval_matrix_v1 (
+    matrix_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    action TEXT NOT NULL,
+    approver_role TEXT NOT NULL,
+    min_approvers INTEGER NOT NULL DEFAULT 1,
+    UNIQUE(action, approver_role)
+);
+CREATE TABLE IF NOT EXISTS md_customer_v1 (
+    customer_id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    tenant_id TEXT NOT NULL DEFAULT 'local',
+    is_test_fixture INTEGER NOT NULL DEFAULT 0,
+    status TEXT NOT NULL DEFAULT 'active',
+    retention_policy TEXT NOT NULL DEFAULT '',
+    created_by TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS md_project_v1 (
+    project_id TEXT PRIMARY KEY,
+    customer_id TEXT NOT NULL,
+    name TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'active',
+    started_at TEXT,
+    ended_at TEXT,
+    sku_scope_json TEXT NOT NULL DEFAULT '[]',
+    budget_json TEXT NOT NULL DEFAULT '{}',
+    created_by TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS md_sku_v1 (
+    sku_id TEXT PRIMARY KEY,
+    canonical_name TEXT NOT NULL,
+    brand TEXT NOT NULL DEFAULT '',
+    category TEXT NOT NULL DEFAULT '',
+    volume TEXT NOT NULL DEFAULT '',
+    barcode TEXT NOT NULL DEFAULT '',
+    status TEXT NOT NULL DEFAULT 'active',
+    valid_from TEXT,
+    valid_to TEXT,
+    package_version TEXT NOT NULL DEFAULT 'v1',
+    superseded_by TEXT,
+    created_by TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS md_sku_alias_v1 (
+    alias_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    sku_id TEXT NOT NULL,
+    alias TEXT NOT NULL,
+    kind TEXT NOT NULL DEFAULT 'alias',
+    customer_id TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL,
+    UNIQUE(alias, customer_id, kind)
+);
+CREATE TRIGGER IF NOT EXISTS iam_audit_event_v1_no_delete
+    BEFORE DELETE ON iam_audit_event_v1
+    BEGIN
+        SELECT RAISE(ABORT, 'iam_audit_event_v1 不可变：禁止 DELETE');
+    END;
+CREATE TRIGGER IF NOT EXISTS iam_audit_event_v1_no_update
+    BEFORE UPDATE ON iam_audit_event_v1
+    BEGIN
+        SELECT RAISE(ABORT, 'iam_audit_event_v1 不可变：禁止 UPDATE');
+    END;
+"""
+
 MIGRATIONS: tuple[tuple[str, str], ...] = (
     ("001_platform_init", _M001),
     ("002_labeling_inbox", _M002),
@@ -1393,6 +1514,7 @@ MIGRATIONS: tuple[tuple[str, str], ...] = (
     ("032_goal_draft_v1", _M032),
     ("033_work_event_usage_control_plane", _M033),
     ("034_workflow_studio_v1", _M034),
+    ("035_iam_master_data_v1", _M035),
 )
 
 
@@ -3114,15 +3236,16 @@ class PlatformStore:
                               work_id: str = "", node: str = "",
                               capability: str = "", model: str = "",
                               profile_id: str = "", tier: str = "",
+                              customer_id: str = "", project_id: str = "",
                               source_evidence: str = "") -> dict[str, Any]:
         self._conn.execute(
-            "INSERT INTO usage_event_v2 (usage_id, run_id, work_id, node,"
-            " capability, model, profile_id, tier, unit, quantity,"
-            " source_evidence, occurred_at)"
-            " VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
-            (usage_id, run_id, work_id, node, capability, model,
-             profile_id, tier, unit, float(quantity), source_evidence,
-             _utcnow()))
+            "INSERT INTO usage_event_v2 (usage_id, customer_id, project_id,"
+            " run_id, work_id, node, capability, model, profile_id, tier,"
+            " unit, quantity, source_evidence, occurred_at)"
+            " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            (usage_id, customer_id, project_id, run_id, work_id, node,
+             capability, model, profile_id, tier, unit, float(quantity),
+             source_evidence, _utcnow()))
         self._conn.commit()
         return _row_to_dict(self._conn.execute(
             "SELECT * FROM usage_event_v2 WHERE usage_id=?",
