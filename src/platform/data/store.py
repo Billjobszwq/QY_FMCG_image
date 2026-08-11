@@ -1938,6 +1938,31 @@ CREATE INDEX IF NOT EXISTS idx_workflow_timer_pending
     ON workflow_timer_v1(status, fire_at);
 """
 
+# ABOSV3 T7：route_plan_v1 主键改为 (plan_id, version)，支持同一
+# 计划的人工调整新版本（旧版保留，不原地改写）。
+_M045 = """
+CREATE TABLE IF NOT EXISTS route_plan_v1_new (
+    plan_id TEXT NOT NULL,
+    customer_id TEXT NOT NULL DEFAULT '',
+    version INTEGER NOT NULL DEFAULT 1,
+    task_ids_json TEXT NOT NULL DEFAULT '[]',
+    constraints_json TEXT NOT NULL DEFAULT '{}',
+    stops_json TEXT NOT NULL DEFAULT '[]',
+    cost_json TEXT NOT NULL DEFAULT '{}',
+    unassigned_json TEXT NOT NULL DEFAULT '[]',
+    status TEXT NOT NULL DEFAULT 'draft',
+    created_by TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL,
+    PRIMARY KEY (plan_id, version)
+);
+INSERT OR IGNORE INTO route_plan_v1_new
+    SELECT plan_id, customer_id, version, task_ids_json,
+           constraints_json, stops_json, cost_json, unassigned_json,
+           status, created_by, created_at FROM route_plan_v1;
+DROP TABLE route_plan_v1;
+ALTER TABLE route_plan_v1_new RENAME TO route_plan_v1;
+"""
+
 MIGRATIONS: tuple[tuple[str, str], ...] = (
     ("001_platform_init", _M001),
     ("002_labeling_inbox", _M002),
@@ -1983,6 +2008,7 @@ MIGRATIONS: tuple[tuple[str, str], ...] = (
     ("042_import_center_v1", _M042),
     ("043_agent_runtime_v3", _M043),
     ("044_workflow_timer_v1", _M044),
+    ("045_route_plan_versions", _M045),
 )
 
 

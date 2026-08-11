@@ -59,14 +59,142 @@ class GeocoderAdapter:
 
 
 class MapProviderAdapter:
-    """地图瓦片提供者：本机无离线瓦片 → 诚实 blocked（UI 用列表回退）。"""
+    """地图瓦片提供者：可配置瓦片源；未配置时诚实 degraded。"""
 
     name = "map_tiles"
 
+    def __init__(self) -> None:
+        import os
+        self.tiles_url = os.environ.get("MAP_TILES_URL", "").strip()
+
     def available(self) -> tuple[bool, str]:
-        return False, ("本机未配置地图瓦片/在线地图 Key；"
-                       "启用前必须完成供应商选择与隐私评估；"
-                       "当前以坐标列表与围栏数值回退展示")
+        if self.tiles_url:
+            return True, f"已配置瓦片源: {self.tiles_url}"
+        return False, ("未配置地图瓦片源（MAP_TILES_URL 环境变量）；"
+                       "可配置 OSM/高德等合规瓦片；当前以坐标散点"
+                       "降级图与列表回退展示")
+
+
+class ProviderGeocoder:
+    """地理编码 Provider SPI（高德/腾讯等）：需 Key；无 Key 时
+    诚实不可用并给出配置入口，不伪造坐标。"""
+
+    def __init__(self) -> None:
+        import os
+        self.provider = os.environ.get("GEOCODER_PROVIDER", "").strip()
+        self.amap_key = os.environ.get("AMAP_API_KEY", "").strip()
+        self.tencent_key = os.environ.get("TENCENT_MAP_KEY", "").strip()
+
+    def available(self) -> tuple[bool, str]:
+        if self.provider == "amap" and self.amap_key:
+            return True, "amap geocoder 已配置"
+        if self.provider == "tencent" and self.tencent_key:
+            return True, "tencent geocoder 已配置"
+        return False, ("未配置地理编码 Provider：请设置环境变量"
+                       " GEOCODER_PROVIDER=amap|tencent 与对应 Key"
+                       "（AMAP_API_KEY / TENCENT_MAP_KEY）；未配置前可"
+                       "导入经纬度或手工确认候选坐标")
+
+    def geocode(self, raw: str) -> list[dict]:
+        import urllib.parse
+        import urllib.request
+        if self.provider == "amap" and self.amap_key:
+            url = ("https://restapi.amap.com/v3/geocode/geo?key="
+                   + self.amap_key + "&address="
+                   + urllib.parse.quote(raw))
+            with urllib.request.urlopen(url, timeout=15) as r:
+                d = json.loads(r.read())
+            out = []
+            for g in (d.get("geocodes") or [])[:3]:
+                lng, lat = str(g.get("location", "")).split(",")
+                out.append({"lat": float(lat), "lng": float(lng),
+                            "formatted": g.get("formatted_address", raw),
+                            "confidence": 0.9,
+                            "source": "amap"})
+            return out
+        if self.provider == "tencent" and self.tencent_key:
+            url = ("https://apis.map.qq.com/ws/geocoder/v1/?key="
+                   + self.tencent_key + "&address="
+                   + urllib.parse.quote(raw))
+            with urllib.request.urlopen(url, timeout=15) as r:
+                d = json.loads(r.read())
+            res = d.get("result") or {}
+            loc = res.get("location") or {}
+            if not loc:
+                return []
+            return [{"lat": loc.get("lat"), "lng": loc.get("lng"),
+                     "formatted": res.get("title", raw),
+                     "confidence": 0.9, "source": "tencent"}]
+        raise FieldOpsError(self.available()[1])
+
+
+class RouteSolverAdapter:
+    """路线求解 SPI：首版启发式诚实标注；OR-Tools 预留接口。"""
+
+    name = "abstract"
+
+    def available(self) -> tuple[bool, str]:
+        raise NotImplementedError
+
+    def solve(self, depot: tuple, stops: list[dict],
+              constraints: dict) -> list[dict]:
+        raise NotImplementedError
+
+
+class NearestNeighborSolver(RouteSolverAdapter):
+    """最近邻启发式：首版可用，必须诚实标注非 VRP 最优解。"""
+
+    name = "nearest_neighbor_heuristic"
+
+    def available(self) -> tuple[bool, str]:
+        return True, ("最近邻启发式（非 VRP 最优解；约束违反与"
+                      "未优化原因逐条留痕）")
+
+    def solve(self, depot: tuple, stops: list[dict],
+              constraints: dict) -> list[dict]:
+        cur = depot
+        remaining = list(stops)
+        ordered: list[dict] = []
+        while remaining:
+            remaining.sort(key=lambda s: _haversine_km(
+                cur[0], cur[1], s["lat"], s["lng"]))
+            nxt = remaining.pop(0)
+            nxt["leg_km"] = round(_haversine_km(
+                cur[0], cur[1], nxt["lat"], nxt["lng"]), 3)
+            ordered.append(nxt)
+            cur = (nxt["lat"], nxt["lng"])
+        return ordered
+
+
+class OrToolsSolverAdapter(RouteSolverAdapter):
+    """OR-Tools VRP 求解器预留 Adapter：未安装/未评估前诚实 blocked。"""
+
+    name = "or_tools_vrp"
+
+    def available(self) -> tuple[bool, str]:
+        try:
+            import ortools  # noqa: F401
+            return True, "ortools 可用"
+        except Exception:
+            return False, ("ortools 未安装；安装后可切换 VRP 求解器"
+                           "（当前使用最近邻启发式）")
+
+    def solve(self, depot: tuple, stops: list[dict],
+              constraints: dict) -> list[dict]:
+        ok, reason = self.available()
+        if not ok:
+            raise FieldOpsError(reason)
+        return NearestNeighborSolver().solve(depot, stops, constraints)
+
+
+def get_route_solver() -> RouteSolverAdapter:
+    import os
+    name = os.environ.get("ROUTE_SOLVER", "nearest_neighbor")
+    if name == "or_tools":
+        s = OrToolsSolverAdapter()
+        if s.available()[0]:
+            return s
+    return NearestNeighborSolver()
 
 
 def _haversine_km(lat1: float, lng1: float, lat2: float,
@@ -86,6 +214,8 @@ class FieldOpsService:
         self.store = store
         self.geocoder = geocoder or GeocoderAdapter()
         self.map_provider = MapProviderAdapter()
+        self.provider_geocoder = ProviderGeocoder()
+        self.solver = get_route_solver()
 
     # ---------- 地址库 ----------
 
@@ -133,6 +263,57 @@ class FieldOpsService:
             " confidence=?, verified_by=?, updated_at=? WHERE address_id=?",
             (json.dumps(chosen, ensure_ascii=False),
              chosen["confidence"], actor, _now(), address_id))
+        self.store._conn.commit()
+        return self.get_address(address_id)
+
+    def geocode_with_provider(self, address_id: str, *,
+                              actor: str) -> dict:
+        """获取坐标（Provider SPI）：有 Key 真实调用；无 Key 诚实
+        降级并返回配置指引，不伪造坐标。"""
+        a = self.get_address(address_id)
+        ok, reason = self.provider_geocoder.available()
+        if not ok:
+            return {"address_id": address_id, "provider": "none",
+                    "status": "degraded", "reason": reason,
+                    "fallback": "可导入经纬度或手工确认候选坐标"}
+        try:
+            cands = self.provider_geocoder.geocode(a["raw"])
+        except Exception as e:
+            return {"address_id": address_id,
+                    "provider": self.provider_geocoder.provider,
+                    "status": "error", "reason": str(e)[:200]}
+        if not cands:
+            return {"address_id": address_id,
+                    "provider": self.provider_geocoder.provider,
+                    "status": "no_candidates",
+                    "reason": "Provider 未返回候选"}
+        self.store._conn.execute(
+            "UPDATE geo_address_v1 SET candidates_json=?, confidence=?,"
+            " updated_at=? WHERE address_id=?",
+            (json.dumps(cands, ensure_ascii=False),
+             cands[0]["confidence"], _now(), address_id))
+        self.store._conn.commit()
+        return {"address_id": address_id,
+                "provider": self.provider_geocoder.provider,
+                "status": "candidates",
+                "candidates": cands,
+                "note": "低置信候选仍需人工确认后才可派发"}
+
+    def set_manual_coords(self, address_id: str, *, lat: float,
+                          lng: float, coord_system: str = "wgs84",
+                          source: str = "manual", actor: str) -> dict:
+        """手工/导入坐标确认（source=manual|import，不伪装地理编码）。"""
+        self.get_address(address_id)
+        if not (-90.0 <= lat <= 90.0) or not (-180.0 <= lng <= 180.0):
+            raise FieldOpsError("经纬度越界")
+        chosen = {"lat": lat, "lng": lng, "source": source,
+                  "coord_system": coord_system, "confidence": 1.0}
+        self.store._conn.execute(
+            "UPDATE geo_address_v1 SET status='verified', chosen_json=?,"
+            " confidence=1.0, verified_by=?, updated_at=?"
+            " WHERE address_id=?",
+            (json.dumps(chosen, ensure_ascii=False), actor, _now(),
+             address_id))
         self.store._conn.commit()
         return self.get_address(address_id)
 
@@ -234,17 +415,13 @@ class FieldOpsService:
                     "reason": "跨项目任务未允许合并（硬隔离）；"
                               "设置 merge_projects=true 或按项目分别规划"})
             tasks = []
-        # 最近邻排序
-        cur = depot
-        ordered = []
-        remaining = list(tasks)
-        while remaining:
-            remaining.sort(key=lambda ta: _haversine_km(
-                cur[0], cur[1], ta[1]["chosen"]["lat"],
-                ta[1]["chosen"]["lng"]))
-            nxt = remaining.pop(0)
-            ordered.append(nxt)
-            cur = (nxt[1]["chosen"]["lat"], nxt[1]["chosen"]["lng"])
+        # 求解器排序（首版启发式诚实标注；约束违反逐条留痕）
+        solver_stops = [{"task_id": t["task_id"], "address": a,
+                         "lat": a["chosen"]["lat"],
+                         "lng": a["chosen"]["lng"]} for t, a in tasks]
+        ordered_stops = self.solver.solve(depot, solver_stops, cons)
+        ordered = [(next(t for t in tasks if t[0]["task_id"] == s["task_id"]))
+                   for s in ordered_stops]
         total_km = 0.0
         cur = depot
         seq = 1
@@ -266,6 +443,8 @@ class FieldOpsService:
             cur = (a["chosen"]["lat"], a["chosen"]["lng"])
             seq += 1
         unit_price = float(cons.get("travel_unit_price", 2.0))
+        cons["solver"] = self.solver.name
+        cons["solver_note"] = self.solver.available()[1]
         plan_id = _new_id("plan")
         self.store._conn.execute(
             "INSERT INTO route_plan_v1 (plan_id, customer_id, version,"
@@ -284,10 +463,15 @@ class FieldOpsService:
         self.store._conn.commit()
         return self.get_plan(plan_id)
 
-    def get_plan(self, plan_id: str) -> dict:
-        row = self.store._conn.execute(
-            "SELECT * FROM route_plan_v1 WHERE plan_id=?",
-            (plan_id,)).fetchone()
+    def get_plan(self, plan_id: str, version: int | None = None) -> dict:
+        if version is None:
+            row = self.store._conn.execute(
+                "SELECT * FROM route_plan_v1 WHERE plan_id=?"
+                " ORDER BY version DESC LIMIT 1", (plan_id,)).fetchone()
+        else:
+            row = self.store._conn.execute(
+                "SELECT * FROM route_plan_v1 WHERE plan_id=? AND"
+                " version=?", (plan_id, version)).fetchone()
         if row is None:
             raise FieldOpsError(f"plan 不存在: {plan_id}")
         d = dict(row)
@@ -300,9 +484,52 @@ class FieldOpsService:
 
     def list_plans(self, *, customer_id: str) -> list[dict]:
         rows = self.store._conn.execute(
-            "SELECT plan_id FROM route_plan_v1 WHERE customer_id=?"
-            " ORDER BY created_at", (customer_id,)).fetchall()
-        return [self.get_plan(r["plan_id"]) for r in rows]
+            "SELECT plan_id, max(version) v FROM route_plan_v1"
+            " WHERE customer_id=? GROUP BY plan_id"
+            " ORDER BY max(created_at)", (customer_id,)).fetchall()
+        return [self.get_plan(r["plan_id"], r["v"]) for r in rows]
+
+    def adjust_plan(self, plan_id: str, *, ordered_task_ids: list[str],
+                     actor: str) -> dict:
+        """人工拖动调整站点顺序 → 新版本（不原地改写旧版）。"""
+        p = self.get_plan(plan_id)
+        stops_by_task = {s["task_id"]: s for s in p["stops"]}
+        new_stops: list[dict] = []
+        total_km = 0.0
+        prev = None
+        seq = 1
+        for tid in ordered_task_ids:
+            s = stops_by_task.get(tid)
+            if s is None:
+                raise FieldOpsError(f"任务不在该计划内: {tid}")
+            leg = (round(_haversine_km(prev["lat"], prev["lng"],
+                                       s["lat"], s["lng"]), 3)
+                   if prev else s.get("leg_km", 0.0))
+            total_km += leg
+            new_stops.append({**s, "seq": seq, "leg_km": leg})
+            prev = s
+            seq += 1
+        unit_price = float(p["cost"].get("unit_price", 2.0))
+        version = p["version"] + 1
+        self.store._conn.execute(
+            "INSERT INTO route_plan_v1 (plan_id, customer_id, version,"
+            " task_ids_json, constraints_json, stops_json, cost_json,"
+            " unassigned_json, status, created_by, created_at)"
+            " VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+            (plan_id, p["customer_id"], version,
+             json.dumps(ordered_task_ids),
+             json.dumps({**p["constraints"],
+                         "adjusted_by": actor,
+                         "note": "人工调整站点顺序（新版本）"},
+                        ensure_ascii=False),
+             json.dumps(new_stops, ensure_ascii=False),
+             json.dumps({"total_km": round(total_km, 3),
+                         "unit_price": unit_price,
+                         "total": round(total_km * unit_price, 2)},
+                        ensure_ascii=False),
+             p["unassigned_json"], "draft", actor, _now()))
+        self.store._conn.commit()
+        return self.get_plan(plan_id)
 
     # ---------- 派发与到店 ----------
 

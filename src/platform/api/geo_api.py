@@ -20,6 +20,17 @@ class VerifyBody(BaseModel):
     chosen_index: int = 0
 
 
+class ManualCoordsBody(BaseModel):
+    lat: float
+    lng: float
+    coord_system: str = "wgs84"
+    source: str = "manual"
+
+
+class AdjustPlanBody(BaseModel):
+    ordered_task_ids: list[str] = []
+
+
 class EmployeeBody(BaseModel):
     customer_id: str
     name: str
@@ -123,6 +134,88 @@ def create_geo_router(store: Any, svc: FieldOpsService, iam: IAMService,
         p = require_principal(auth, request, csrf=True)
         return {"address": _wrap(svc.verify_address)(
             address_id, chosen_index=body.chosen_index, actor=p["actor"])}
+
+    # ---- ABOSV3 T7：Provider SPI / 手工坐标 / 地图数据 / 预设 / 调版 ----
+
+    @router.get("/api/v1/geo/providers")
+    def providers() -> dict:
+        """地理编码/瓦片/求解器状态与配置指引（无 Key 诚实降级）。"""
+        gok, greason = svc.provider_geocoder.available()
+        mok, mreason = svc.map_provider.available()
+        sok, sreason = svc.solver.available()
+        return {"geocoder": {"available": gok, "reason": greason},
+                "map": {"available": mok, "reason": mreason,
+                        "tiles_url": svc.map_provider.tiles_url},
+                "solver": {"name": svc.solver.name, "available": sok,
+                           "reason": sreason}}
+
+    @router.post("/api/v1/geo/addresses/{address_id}/geocode")
+    def geocode(address_id: str, request: Request) -> dict:
+        p = require_principal(auth, request, csrf=True)
+        return _wrap(svc.geocode_with_provider)(address_id,
+                                                actor=p["actor"])
+
+    @router.post("/api/v1/geo/addresses/{address_id}/manual-coords")
+    def manual_coords(address_id: str, body: ManualCoordsBody,
+                      request: Request) -> dict:
+        p = require_principal(auth, request, csrf=True)
+        return {"address": _wrap(svc.set_manual_coords)(
+            address_id, lat=body.lat, lng=body.lng,
+            coord_system=body.coord_system, source=body.source,
+            actor=p["actor"])}
+
+    @router.get("/api/v1/geo/route-presets")
+    def route_presets(request: Request) -> dict:
+        require_principal(auth, request, csrf=False)
+        rows = store._conn.execute(
+            "SELECT * FROM route_constraint_preset_v1"
+            " ORDER BY created_at DESC LIMIT 200").fetchall()
+        out = []
+        for r in rows:
+            d = dict(r)
+            import json as _json
+            d["constraints"] = _json.loads(d["constraints_json"])
+            out.append(d)
+        return {"count": len(out), "presets": out}
+
+    @router.post("/api/v1/geo/plans/{plan_id}/adjust")
+    def adjust_plan(plan_id: str, body: AdjustPlanBody,
+                    request: Request) -> dict:
+        p = require_principal(auth, request, csrf=True)
+        return {"plan": _wrap(svc.adjust_plan)(
+            plan_id, ordered_task_ids=body.ordered_task_ids,
+            actor=p["actor"])}
+
+    @router.get("/api/v1/geo/map-data")
+    def map_data(request: Request, customer_id: str) -> dict:
+        """地图图层数据：点位/围栏/路线/未分配任务（真实事实）。"""
+        p = require_principal(auth, request, csrf=False)
+        _guard(iam, p["actor"], p["role"], customer_id)
+        addrs = svc.list_addresses(customer_id=customer_id)
+        points = [{"id": a["address_id"], "raw": a["raw"],
+                   "status": a["status"],
+                   "lat": (a["chosen"] or {}).get("lat"),
+                   "lng": (a["chosen"] or {}).get("lng")}
+                  for a in addrs]
+        fences = [{"fence_id": f["fence_id"], "name": f["name"],
+                   "lat": f["lat"], "lng": f["lng"],
+                   "radius_m": f["radius_m"]} for f in
+                  svc.list_fences(customer_id=customer_id)]
+        tasks = svc.list_tasks(customer_id=customer_id)
+        unassigned = [t["task_id"] for t in tasks
+                      if t["status"] in ("draft", "planned")]
+        plans = []
+        for pl in svc.list_plans(customer_id=customer_id):
+            plans.append({"plan_id": pl["plan_id"],
+                          "version": pl["version"],
+                          "status": pl["status"],
+                          "stops": pl["stops"], "cost": pl["cost"],
+                          "solver": pl["constraints"].get("solver")})
+        return {"points": points, "fences": fences,
+                "unassigned_tasks": unassigned, "plans": plans,
+                "map": {"available": svc.map_provider.available()[0],
+                        "tiles_url": svc.map_provider.tiles_url,
+                        "reason": svc.map_provider.available()[1]}}
 
     @router.post("/api/v1/geo/employees")
     def add_employee(body: EmployeeBody, request: Request) -> dict:

@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { iamGet, iamPost } from "../api";
 import { EmptyState, ErrorState, Loading, PageHeader }
   from "../platform/components";
+import { GeoMapPanel } from "./GeoMap";
 
 function useLoad<T>(path: string | null): {
   data: T | null; err: string | null; reload: () => void;
@@ -20,14 +21,51 @@ function useLoad<T>(path: string | null): {
 }
 
 function MapNotice() {
-  const mp = useLoad<any>("geo/map-provider");
+  const mp = useLoad<any>("geo/providers");
   if (!mp.data) return null;
   return (
-    <p className="v" style={{ fontSize: 12, color: "var(--text-muted)" }}>
-      地图：{mp.data.available ? "可用" : `诚实状态 blocked —— ${mp.data.reason
-        }（回退：${mp.data.fallback}）`}
-    </p>
+    <div className="card">
+      <p className="v" style={{ fontSize: 12 }}>
+        地理编码：{mp.data.geocoder.available ? "可用" : (
+          <span style={{ color: "var(--warn)" }}>
+            {mp.data.geocoder.reason}</span>)}
+        {" "}· 地图：{mp.data.map.available
+          ? `可用（${mp.data.map.tiles_url}）`
+          : <span style={{ color: "var(--warn)" }}>
+            {mp.data.map.reason}</span>}
+        {" "}· 路线求解：{mp.data.solver?.name}
+      </p>
+    </div>
   );
+}
+
+function ManualCoordsForm({ addressId, onDone }: {
+  addressId: string; onDone: (msg: string) => void;
+}) {
+  const [lat, setLat] = useState("");
+  const [lng, setLng] = useState("");
+  const [open, setOpen] = useState(false);
+  if (!open) return (
+    <button className="btn small"
+      onClick={() => setOpen(true)}>手工/导入坐标</button>);
+  return (
+    <span style={{ display: "inline-flex", gap: 4 }}>
+      <input style={{ width: 80 }} placeholder="纬度" value={lat}
+        aria-label="纬度"
+        onChange={(e) => setLat(e.target.value)} />
+      <input style={{ width: 80 }} placeholder="经度" value={lng}
+        aria-label="经度"
+        onChange={(e) => setLng(e.target.value)} />
+      <button className="btn small primary" onClick={async () => {
+        try {
+          await iamPost(`geo/addresses/${addressId}/manual-coords`, {
+            lat: Number(lat), lng: Number(lng), source: "manual" });
+          onDone("手工坐标已确认（source=manual）");
+        } catch (e) {
+          onDone(`手工坐标失败：${e instanceof Error ? e.message : e}`);
+        }
+      }}>确认</button>
+    </span>);
 }
 
 // ---- 1. 地址与地理编码 ----
@@ -42,6 +80,7 @@ export function GeoAddresses() {
       <PageHeader title="地址与地理编码"
         desc="候选经纬度 + 置信度；低置信度必须人工确认后才可派发" />
       <MapNotice />
+      <GeoMapPanel customerId={cid} />
       <div className="card">
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
           <input placeholder="customer_id" aria-label="客户" value={cid}
@@ -89,8 +128,26 @@ export function GeoAddresses() {
             {a.status === "verified" && a.chosen && (
               <p className="v" style={{ fontSize: 12 }}>
                 已确认：({a.chosen.lat}, {a.chosen.lng}) ·
-                确认人 {a.verified_by}</p>
+                确认人 {a.verified_by}
+                {a.chosen.source ? ` · 来源 ${a.chosen.source}` : ""}</p>
             )}
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap",
+              marginTop: 6 }}>
+              <button className="btn small" onClick={async () => {
+                try {
+                  const r = await iamPost(
+                    `geo/addresses/${a.address_id}/geocode`, {});
+                  setMsg(r.status === "degraded"
+                    ? `获取坐标降级：${r.reason}`
+                    : `获取坐标完成：${r.status}`);
+                  addrs.reload();
+                } catch (e) { setMsg(`获取坐标失败：${e instanceof Error
+                  ? e.message : e}`); }
+              }}>获取坐标（Provider）</button>
+              <ManualCoordsForm onDone={(m2) => {
+                setMsg(m2); addrs.reload();
+              }} addressId={a.address_id} />
+            </div>
           </div>
         )))}
     </>
