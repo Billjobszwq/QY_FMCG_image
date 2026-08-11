@@ -14,7 +14,6 @@ import {
   ModuleView, PlatformIdentity, ProductionInfo, STATUS_CN,
   accentVar, fetchIdentity, fetchModules, fetchProduction,
 } from "./platform/registry";
-import { PlannedModule } from "./platform/components";
 import SupervisorWorkspace from "./platform/SupervisorWorkspace";
 import Home from "./pages/Home";
 import GraphRuns from "./pages/GraphRuns";
@@ -28,6 +27,11 @@ import {
   IamAccounts, IamAudit, MasterCustomers, MasterProjects, MasterSkus,
 } from "./pages/IamMaster";
 import { SurveyDesign, SurveyField, SurveyReport } from "./pages/Survey";
+import {
+  AnalyticsAnomalies, AnalyticsReports, AnalyticsSemantics,
+} from "./pages/Analytics";
+import { GeoAddresses, GeoField, GeoVisit } from "./pages/Geo";
+import { FinanceContracts, FinanceInvoices } from "./pages/Finance";
 import {
   RecognizeNow, VisionAnnotation, VisionDatasets, VisionEvidence,
   VisionModels, VisionTasks,
@@ -97,12 +101,12 @@ function ReferenceEcho() {
   );
 }
 
-function ModulePage({ modules, moduleId }:
-  { modules: ModuleView[]; moduleId: string }) {
-  const m = modules.find((x) => x.module_id === moduleId);
-  if (!m) return <div className="page">模块未注册</div>;
-  return <div className="page"><PlannedModule module={m} /></div>;
+function ModulePage(_props: { modules: ModuleView[]; moduleId: string }) {
+  // ABOSV2 Phase A–F：所有 planned 插槽已被真实路由取代；
+  // 保留组件签名供未来 planned 模块复用（不再被路由引用）。
+  return null;
 }
+void ModulePage;
 
 export default function App() {
   const location = useLocation();
@@ -303,18 +307,41 @@ export default function App() {
             <Route path="/survey/report"
               element={<div className="page wide">
                 <SurveyReport /></div>} />
+            {/* 分析与 BI（ABOSV2 Phase F，真实后端） */}
+            <Route path="/analytics" element={<Navigate
+              to="/analytics/reports" replace />} />
+            <Route path="/analytics/reports"
+              element={<div className="page wide">
+                <AnalyticsReports /></div>} />
+            <Route path="/analytics/anomalies"
+              element={<div className="page wide">
+                <AnalyticsAnomalies /></div>} />
+            <Route path="/analytics/semantics"
+              element={<div className="page wide">
+                <AnalyticsSemantics /></div>} />
+            {/* 位置与外勤（ABOSV2 Phase F，真实后端） */}
+            <Route path="/geo" element={<Navigate to="/geo/addresses"
+              replace />} />
+            <Route path="/geo/addresses"
+              element={<div className="page wide">
+                <GeoAddresses /></div>} />
+            <Route path="/geo/field"
+              element={<div className="page wide"><GeoField /></div>} />
+            <Route path="/geo/visit"
+              element={<div className="page wide"><GeoVisit /></div>} />
+            {/* 财务与结算（ABOSV2 Phase F，真实后端） */}
+            <Route path="/finance" element={<Navigate
+              to="/finance/contracts" replace />} />
+            <Route path="/finance/contracts"
+              element={<div className="page wide">
+                <FinanceContracts /></div>} />
+            <Route path="/finance/invoices"
+              element={<div className="page wide">
+                <FinanceInvoices /></div>} />
             {/* 系统与开发者 */}
             <Route path="/status"
               element={<SystemStatus health={health} />} />
-            {/* planned 模块：诚实插槽（survey 已 live，见上方真实路由） */}
-            <Route path="/geo/*"
-              element={<ModulePage modules={modules} moduleId="geo" />} />
-            <Route path="/analytics/*"
-              element={<ModulePage modules={modules}
-                moduleId="analytics" />} />
-            <Route path="/finance/*"
-              element={<ModulePage modules={modules}
-                moduleId="finance" />} />
+            {/* planned 模块插槽已全部被真实路由取代（ABOSV2 Phase A–F） */}
             <Route path="/reference/echo" element={<ReferenceEcho />} />
             {/* 兼容旧路由（redirect，deprecated） */}
             <Route path="/recognition" element={<Navigate

@@ -1565,6 +1565,213 @@ CREATE TRIGGER IF NOT EXISTS survey_answer_correction_v1_no_update
     END;
 """
 
+# ABOSV2 Phase F：BI 语义层（指标/维度/报表规格/异常/追问）。
+# Agent 只能映射到已注册指标，不得任意 SQL；报表版本化。
+_M037 = """
+CREATE TABLE IF NOT EXISTS bi_metric_v1 (
+    metric_id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    description TEXT NOT NULL DEFAULT '',
+    definition_json TEXT NOT NULL,
+    scope TEXT NOT NULL DEFAULT 'customer',
+    created_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS bi_report_spec_v1 (
+    spec_id TEXT NOT NULL,
+    version INTEGER NOT NULL,
+    name TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'draft',
+    customer_id TEXT NOT NULL DEFAULT '',
+    metrics_json TEXT NOT NULL DEFAULT '[]',
+    dimensions_json TEXT NOT NULL DEFAULT '[]',
+    filters_json TEXT NOT NULL DEFAULT '{}',
+    nl_query TEXT NOT NULL DEFAULT '',
+    note TEXT NOT NULL DEFAULT '',
+    created_by TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    published_at TEXT,
+    PRIMARY KEY (spec_id, version)
+);
+CREATE TABLE IF NOT EXISTS bi_anomaly_v1 (
+    anomaly_id TEXT PRIMARY KEY,
+    metric_id TEXT NOT NULL,
+    customer_id TEXT NOT NULL DEFAULT '',
+    rule_json TEXT NOT NULL,
+    observed REAL NOT NULL,
+    threshold REAL NOT NULL,
+    status TEXT NOT NULL DEFAULT 'open',
+    follow_up_work_id TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL,
+    resolved_at TEXT
+);
+CREATE TABLE IF NOT EXISTS bi_followup_answer_v1 (
+    answer_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    anomaly_id TEXT NOT NULL,
+    answer TEXT NOT NULL,
+    actor TEXT NOT NULL,
+    created_at TEXT NOT NULL
+);
+"""
+
+# ABOSV2 Phase F：位置与外勤（地址/地理编码/任务/路线/围栏/到店证据/差旅费）。
+_M038 = """
+CREATE TABLE IF NOT EXISTS geo_address_v1 (
+    address_id TEXT PRIMARY KEY,
+    customer_id TEXT NOT NULL DEFAULT '',
+    raw TEXT NOT NULL,
+    candidates_json TEXT NOT NULL DEFAULT '[]',
+    chosen_json TEXT NOT NULL DEFAULT '',
+    confidence REAL NOT NULL DEFAULT 0,
+    status TEXT NOT NULL DEFAULT 'pending',
+    verified_by TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS geo_employee_v1 (
+    employee_id TEXT PRIMARY KEY,
+    customer_id TEXT NOT NULL DEFAULT '',
+    name TEXT NOT NULL,
+    skills_json TEXT NOT NULL DEFAULT '[]',
+    vehicle TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS field_task_v1 (
+    task_id TEXT PRIMARY KEY,
+    customer_id TEXT NOT NULL DEFAULT '',
+    project_id TEXT NOT NULL DEFAULT '',
+    address_id TEXT NOT NULL,
+    kind TEXT NOT NULL DEFAULT 'visit',
+    survey_id TEXT NOT NULL DEFAULT '',
+    status TEXT NOT NULL DEFAULT 'draft',
+    route_plan_id TEXT NOT NULL DEFAULT '',
+    assignee TEXT NOT NULL DEFAULT '',
+    require_storefront INTEGER NOT NULL DEFAULT 1,
+    selfie_required INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS route_plan_v1 (
+    plan_id TEXT PRIMARY KEY,
+    customer_id TEXT NOT NULL DEFAULT '',
+    version INTEGER NOT NULL DEFAULT 1,
+    task_ids_json TEXT NOT NULL DEFAULT '[]',
+    constraints_json TEXT NOT NULL DEFAULT '{}',
+    stops_json TEXT NOT NULL DEFAULT '[]',
+    cost_json TEXT NOT NULL DEFAULT '{}',
+    unassigned_json TEXT NOT NULL DEFAULT '[]',
+    status TEXT NOT NULL DEFAULT 'draft',
+    created_by TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS geofence_v1 (
+    fence_id TEXT PRIMARY KEY,
+    customer_id TEXT NOT NULL DEFAULT '',
+    name TEXT NOT NULL,
+    lat REAL NOT NULL,
+    lng REAL NOT NULL,
+    radius_m REAL NOT NULL,
+    created_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS geofence_event_v1 (
+    event_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    fence_id TEXT NOT NULL,
+    task_id TEXT NOT NULL DEFAULT '',
+    employee_id TEXT NOT NULL DEFAULT '',
+    kind TEXT NOT NULL,
+    lat REAL NOT NULL,
+    lng REAL NOT NULL,
+    accuracy REAL NOT NULL DEFAULT 0,
+    at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS field_visit_evidence_v1 (
+    evidence_id TEXT PRIMARY KEY,
+    task_id TEXT NOT NULL,
+    kind TEXT NOT NULL,
+    media_ref TEXT NOT NULL DEFAULT '',
+    at TEXT NOT NULL,
+    location_json TEXT NOT NULL DEFAULT '{}',
+    created_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS travel_cost_v1 (
+    cost_id TEXT PRIMARY KEY,
+    task_id TEXT NOT NULL,
+    route_plan_id TEXT NOT NULL DEFAULT '',
+    km REAL NOT NULL,
+    unit_price REAL NOT NULL,
+    amount REAL NOT NULL,
+    evidence_json TEXT NOT NULL DEFAULT '{}',
+    created_at TEXT NOT NULL
+);
+"""
+
+# ABOSV2 Phase F：财务与计费（contract/rate card/invoice/adjustment）。
+# 账单只能从 immutable usage_event_v2 生成并下钻到 run/node/证据；
+# 调整用 reversal/adjustment，不删除 Usage；已开票金额不随新价格变动。
+_M039 = """
+CREATE TABLE IF NOT EXISTS fin_rate_card_v1 (
+    rate_card_id TEXT NOT NULL,
+    version INTEGER NOT NULL,
+    name TEXT NOT NULL,
+    lines_json TEXT NOT NULL,
+    currency TEXT NOT NULL DEFAULT 'CNY',
+    status TEXT NOT NULL DEFAULT 'active',
+    created_at TEXT NOT NULL,
+    PRIMARY KEY (rate_card_id, version)
+);
+CREATE TABLE IF NOT EXISTS fin_contract_v1 (
+    contract_id TEXT PRIMARY KEY,
+    customer_id TEXT NOT NULL,
+    kind TEXT NOT NULL DEFAULT 'usage',
+    rate_card_id TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'active',
+    started_at TEXT NOT NULL,
+    created_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS fin_invoice_v1 (
+    invoice_id TEXT PRIMARY KEY,
+    customer_id TEXT NOT NULL,
+    contract_id TEXT NOT NULL DEFAULT '',
+    period TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'draft',
+    total REAL NOT NULL DEFAULT 0,
+    currency TEXT NOT NULL DEFAULT 'CNY',
+    rate_card_id TEXT NOT NULL DEFAULT '',
+    rate_card_version INTEGER NOT NULL DEFAULT 1,
+    created_at TEXT NOT NULL,
+    issued_at TEXT
+);
+CREATE TABLE IF NOT EXISTS fin_invoice_line_v1 (
+    line_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    invoice_id TEXT NOT NULL,
+    unit TEXT NOT NULL,
+    quantity REAL NOT NULL,
+    unit_price REAL NOT NULL,
+    amount REAL NOT NULL,
+    usage_ids_json TEXT NOT NULL DEFAULT '[]',
+    drilldown_json TEXT NOT NULL DEFAULT '[]'
+);
+CREATE TABLE IF NOT EXISTS fin_adjustment_v1 (
+    adjustment_id TEXT PRIMARY KEY,
+    invoice_id TEXT NOT NULL,
+    kind TEXT NOT NULL,
+    amount REAL NOT NULL,
+    reason TEXT NOT NULL,
+    actor TEXT NOT NULL,
+    created_at TEXT NOT NULL
+);
+CREATE TRIGGER IF NOT EXISTS fin_adjustment_v1_no_delete
+    BEFORE DELETE ON fin_adjustment_v1
+    BEGIN
+        SELECT RAISE(ABORT, 'fin_adjustment_v1 不可变：禁止 DELETE');
+    END;
+CREATE TRIGGER IF NOT EXISTS fin_adjustment_v1_no_update
+    BEFORE UPDATE ON fin_adjustment_v1
+    BEGIN
+        SELECT RAISE(ABORT, 'fin_adjustment_v1 不可变：禁止 UPDATE');
+    END;
+"""
+
 MIGRATIONS: tuple[tuple[str, str], ...] = (
     ("001_platform_init", _M001),
     ("002_labeling_inbox", _M002),
@@ -1602,6 +1809,9 @@ MIGRATIONS: tuple[tuple[str, str], ...] = (
     ("034_workflow_studio_v1", _M034),
     ("035_iam_master_data_v1", _M035),
     ("036_survey_v1", _M036),
+    ("037_bi_semantic_v1", _M037),
+    ("038_geo_field_v1", _M038),
+    ("039_finance_v1", _M039),
 )
 
 

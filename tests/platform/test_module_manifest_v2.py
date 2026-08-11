@@ -106,10 +106,9 @@ def test_module_agent_association_verifiable():
 def test_planned_modules_have_no_fake_live():
     reg = build_default_module_registry()
     proj = {m["module_id"]: m for m in reg.project()}
-    # ABOSV2 Phase E：survey 已有真实后端 → live；其余仍 planned
-    for mid in ("geo", "analytics", "finance"):
-        assert proj[mid]["status"] == "planned"
-    assert proj["survey"]["status"] == "live"
+    # ABOSV2 Phase E/F：五个域均已有真实后端 → live；不再有 planned 假模块
+    for mid in ("survey", "analytics", "geo", "finance"):
+        assert proj[mid]["status"] == "live"
 
 
 # ---------------- modules API ----------------

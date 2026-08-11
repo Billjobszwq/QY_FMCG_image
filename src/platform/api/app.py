@@ -147,6 +147,24 @@ def create_app(
         app.include_router(create_survey_router(
             bundle.store, survey_service, IAMService(bundle.store),
             auth=AuthService(bundle.store)))
+        # ABOSV2 Phase F：BI 语义层/报表/异常追问（注册制指标，禁任意 SQL）。
+        from src.platform.analytics import AnalyticsService
+        from src.platform.api.analytics_api import create_analytics_router
+        app.include_router(create_analytics_router(
+            bundle.store, AnalyticsService(bundle.store),
+            IAMService(bundle.store), auth=AuthService(bundle.store)))
+        # ABOSV2 Phase F：位置与外勤（地址/路线/围栏/到店/差旅费）。
+        from src.platform.field_ops import FieldOpsService
+        from src.platform.api.geo_api import create_geo_router
+        app.include_router(create_geo_router(
+            bundle.store, FieldOpsService(bundle.store),
+            IAMService(bundle.store), auth=AuthService(bundle.store)))
+        # ABOSV2 Phase F：财务与计费（账单仅来自 immutable Usage）。
+        from src.platform.finance import FinanceService
+        from src.platform.api.finance_api import create_finance_router
+        app.include_router(create_finance_router(
+            bundle.store, FinanceService(bundle.store),
+            IAMService(bundle.store), auth=AuthService(bundle.store)))
         # U2-2：数据中心 Asset API（真实台账 source_asset_inventory_v1）
         from src.platform.api.assets import create_assets_router
         app.include_router(create_assets_router(bundle.store))

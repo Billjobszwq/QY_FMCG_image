@@ -153,13 +153,19 @@ def build_default_module_registry() -> ModuleRegistry:
         billing_units=("response",),
     ))
     reg.register(ModuleManifestV2(
-        module_id="geo", name="位置与外勤", version="0.1.0",
-        domain="geo_field", status="planned", theme_token="emerald",
+        module_id="geo", name="位置与外勤", version="1.0.0",
+        domain="geo_field", status="live", theme_token="emerald",
         primary_route="/geo",
         navigation=(
-            NavRoute(route="/geo/addresses", label="地址管理",
-                     description="planned：地址/地理分析/围栏/路线",
-                     actions=()),
+            NavRoute(route="/geo/addresses", label="地址与地理编码",
+                     description="候选经纬度/置信度；低置信度必须人工确认",
+                     actions=("添加地址", "人工确认")),
+            NavRoute(route="/geo/field", label="任务与路线",
+                     description="外勤任务/VRP 路线/约束/成本/派发",
+                     actions=("建任务", "规划路线", "派发")),
+            NavRoute(route="/geo/visit", label="围栏与到店",
+                     description="围栏事件/门头必拍/差旅费；人脸默认关闭",
+                     actions=("建围栏", "到店", "完成")),
         ),
         api_prefix="/api/v1/geo", openapi_tag="geo",
         data_products=("geo.store_index_v1",),
@@ -167,15 +173,19 @@ def build_default_module_registry() -> ModuleRegistry:
     ))
     reg.register(_vision())
     reg.register(ModuleManifestV2(
-        module_id="analytics", name="分析与 BI", version="0.1.0",
-        domain="analytics", status="planned", theme_token="indigo",
+        module_id="analytics", name="分析与 BI", version="1.0.0",
+        domain="analytics", status="live", theme_token="indigo",
         primary_route="/analytics",
         navigation=(
-            NavRoute(route="/analytics/bi", label="BI 报表",
-                     description="planned：只消费注册 Data Product，"
-                                 "不读取训练指标", actions=()),
-            NavRoute(route="/analytics/alerts", label="数据告警",
-                     description="planned：异常订阅与告警", actions=()),
+            NavRoute(route="/analytics/reports", label="报表与仪表盘",
+                     description="注册制指标报表；版本化；发布须人工批准",
+                     actions=("新建报表", "评估", "发布")),
+            NavRoute(route="/analytics/anomalies", label="异常与追问",
+                     description="异常规则→追问任务→回答→报表刷新",
+                     actions=("检查异常", "回答")),
+            NavRoute(route="/analytics/semantics", label="指标语义层",
+                     description="Metric/维度注册表（禁任意 SQL）",
+                     actions=("查看指标",)),
         ),
         api_prefix="/api/v1/analytics", openapi_tag="analytics",
         data_products=("analytics.kpi_daily_v1",),
@@ -255,13 +265,16 @@ def build_default_module_registry() -> ModuleRegistry:
         billing_units=(),
     ))
     reg.register(ModuleManifestV2(
-        module_id="finance", name="财务与结算", version="0.1.0",
-        domain="finance", status="planned", theme_token="rose",
+        module_id="finance", name="财务与结算", version="1.0.0",
+        domain="finance", status="live", theme_token="rose",
         primary_route="/finance",
         navigation=(
-            NavRoute(route="/finance/ledger", label="成本与账单",
-                     description="planned：usage/cost/price 三层账本",
-                     actions=()),
+            NavRoute(route="/finance/contracts", label="合同与价目卡",
+                     description="contract/rate card 版本化；价格变更限平台角色",
+                     actions=("新建合同", "新版本价目")),
+            NavRoute(route="/finance/invoices", label="账单与结算",
+                     description="仅从 immutable Usage 生成；可下钻 run/node/证据",
+                     actions=("生成账单", "开票", "调整", "结算")),
         ),
         api_prefix="/api/v1/finance", openapi_tag="finance",
         data_products=("usage.cost_ledger_v1",),
