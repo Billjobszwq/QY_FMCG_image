@@ -127,6 +127,13 @@ def create_app(
                                  rec_adapter)
         app.include_router(create_control_plane_router(
             bundle.store, gateway, auth=AuthService(bundle.store)))
+        # ABOSV2 Phase C：Workflow Studio（定义生命周期/运行/节点库/
+        # 模板/Agent 草稿）；节点库来自 Capability Registry。
+        from src.platform.workflow import WorkflowService
+        from src.platform.api.workflow_api import create_workflow_router
+        wf_service = WorkflowService(bundle.store, cap_registry, gateway)
+        app.include_router(create_workflow_router(
+            bundle.store, wf_service, auth=AuthService(bundle.store)))
         # U2-2：数据中心 Asset API（真实台账 source_asset_inventory_v1）
         from src.platform.api.assets import create_assets_router
         app.include_router(create_assets_router(bundle.store))

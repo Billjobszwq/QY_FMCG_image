@@ -704,6 +704,129 @@ export async function fetchRecognitionTaskDetail(
   return r.json();
 }
 
+// ---------- Workflow Studio（ABOSV2 Phase C） ----------
+
+export interface WorkflowDefinition {
+  definition_id: string;
+  version: number;
+  name: string;
+  status: string;
+  spec: Record<string, any>;
+  lint_report: Array<{ level: string; code: string; message: string }>;
+  published_at: string | null;
+  created_by: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export async function fetchWorkflows(): Promise<{
+  count: number; definitions: WorkflowDefinition[];
+}> {
+  const r = await fetch("/api/v1/workflows");
+  if (!r.ok) throw new Error(`workflows HTTP ${r.status}`);
+  return r.json();
+}
+
+export async function fetchWorkflow(definitionId: string,
+  version?: number): Promise<{ definition: WorkflowDefinition }> {
+  const q = version ? `?version=${version}` : "";
+  const r = await fetch(`/api/v1/workflows/${definitionId}${q}`);
+  if (!r.ok) throw new Error(`workflow HTTP ${r.status}`);
+  return r.json();
+}
+
+export async function createWorkflowDraft(opts: {
+  name?: string; spec?: Record<string, any>; template_id?: string;
+}): Promise<{ definition: WorkflowDefinition }> {
+  const r = await postJson("/api/v1/workflows", opts);
+  if (!r.ok) throw await parseError(r, "创建草稿失败");
+  return r.json();
+}
+
+export async function updateWorkflowDraft(definitionId: string, opts: {
+  name?: string; spec?: Record<string, any>;
+}): Promise<{ definition: WorkflowDefinition }> {
+  // FastAPI 路由为 PUT：直接 fetch PUT（postJson 仅支持 POST）
+  const csrfH: Record<string, string> = _csrfToken
+    ? { "X-CSRF-Token": _csrfToken } : {};
+  const r2 = await fetch(`/api/v1/workflows/${definitionId}`, {
+    method: "PUT",
+    headers: { "content-type": "application/json", ...csrfH },
+    body: JSON.stringify(opts),
+  });
+  if (!r2.ok) throw await parseError(r2, "更新草稿失败");
+  return r2.json();
+}
+
+export async function workflowAction(definitionId: string,
+  action: "lint" | "simulate" | "approve" | "publish" | "deprecate"
+    | "new-version",
+  inputs?: Record<string, any>): Promise<any> {
+  const r = await postJson(
+    `/api/v1/workflows/${definitionId}/${action}`,
+    action === "simulate" ? { inputs: inputs ?? {} } : {});
+  if (!r.ok) throw await parseError(r, `${action} 失败`);
+  return r.json();
+}
+
+export async function startWorkflowRun(definitionId: string,
+  inputs: Record<string, any>, version?: number): Promise<any> {
+  const r = await postJson(`/api/v1/workflows/${definitionId}/runs`,
+    { inputs, version: version ?? null });
+  if (!r.ok) throw await parseError(r, "启动运行失败");
+  return r.json();
+}
+
+export async function workflowRunAction(runId: string,
+  action: "approve" | "pause" | "resume" | "cancel" | "retry",
+  body?: Record<string, any>): Promise<any> {
+  const r = await postJson(`/api/v1/workflows/runs/${runId}/${action}`,
+    body ?? (action === "approve" ? { decision: "approved" } : {}));
+  if (!r.ok) throw await parseError(r, `${action} 失败`);
+  return r.json();
+}
+
+export async function fetchWorkflowRun(runId: string): Promise<any> {
+  const r = await fetch(`/api/v1/workflows/runs/${runId}`);
+  if (!r.ok) throw new Error(`workflow run HTTP ${r.status}`);
+  return r.json();
+}
+
+export async function fetchNodeLibrary(): Promise<{
+  node_types: string[];
+  command_nodes: Array<{ node_type: string; capability: string;
+    module: string; kind: string }>;
+  connectors: Record<string, { available: boolean; reason: string }>;
+  templates: Array<{ template_id: string; name: string }>;
+}> {
+  const r = await fetch("/api/v1/workflows/node-library");
+  if (!r.ok) throw new Error(`node-library HTTP ${r.status}`);
+  return r.json();
+}
+
+export async function workflowAgentDraft(text: string): Promise<any> {
+  const r = await postJson("/api/v1/workflows/agent-draft", { text });
+  if (!r.ok) throw await parseError(r, "Agent 草稿失败");
+  return r.json();
+}
+
+export async function fetchControlProjection(): Promise<{
+  count: number; items: any[]; hash: string;
+}> {
+  const r = await fetch("/api/v1/control/projection");
+  if (!r.ok) throw new Error(`projection HTTP ${r.status}`);
+  return r.json();
+}
+
+export async function fetchControlReconcile(): Promise<{
+  consistent: boolean; projection: { count: number; hash: string };
+  event_count: number; outbox: Record<string, number>;
+}> {
+  const r = await fetch("/api/v1/control/reconcile");
+  if (!r.ok) throw new Error(`reconcile HTTP ${r.status}`);
+  return r.json();
+}
+
 export interface RecognitionTaskView {
   task: RecognitionTaskRow;
   results: Array<Record<string, unknown> & { name?: string }>;

@@ -1305,6 +1305,59 @@ CREATE TRIGGER IF NOT EXISTS evidence_bundle_v1_no_update
     END;
 """
 
+# ABOSV2 Phase C：Workflow Studio MVP（02 文档契约）。
+# 定义发布后不可原地修改（新版本）；节点执行 checkpoint；死信诚实留痕。
+_M034 = """
+CREATE TABLE IF NOT EXISTS workflow_definition_v1 (
+    definition_id TEXT NOT NULL,
+    version INTEGER NOT NULL,
+    name TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'draft',
+    tenant_id TEXT NOT NULL DEFAULT 'local',
+    owner TEXT NOT NULL DEFAULT '',
+    spec_json TEXT NOT NULL,
+    spec_hash TEXT NOT NULL DEFAULT '',
+    lint_report_json TEXT NOT NULL DEFAULT '[]',
+    created_by TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    published_at TEXT,
+    PRIMARY KEY (definition_id, version)
+);
+CREATE TABLE IF NOT EXISTS workflow_node_execution_v1 (
+    exec_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    run_id TEXT NOT NULL,
+    node_id TEXT NOT NULL,
+    node_type TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'pending',
+    input_json TEXT NOT NULL DEFAULT '{}',
+    output_json TEXT NOT NULL DEFAULT '{}',
+    error TEXT NOT NULL DEFAULT '',
+    attempts INTEGER NOT NULL DEFAULT 0,
+    started_at TEXT,
+    ended_at TEXT,
+    UNIQUE(run_id, node_id)
+);
+CREATE TABLE IF NOT EXISTS workflow_dead_letter_v1 (
+    dead_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    run_id TEXT NOT NULL,
+    node_id TEXT NOT NULL,
+    reason TEXT NOT NULL,
+    payload_json TEXT NOT NULL DEFAULT '{}',
+    created_at TEXT NOT NULL
+);
+CREATE TRIGGER IF NOT EXISTS workflow_dead_letter_v1_no_delete
+    BEFORE DELETE ON workflow_dead_letter_v1
+    BEGIN
+        SELECT RAISE(ABORT, 'workflow_dead_letter_v1 不可变：禁止 DELETE');
+    END;
+CREATE TRIGGER IF NOT EXISTS workflow_dead_letter_v1_no_update
+    BEFORE UPDATE ON workflow_dead_letter_v1
+    BEGIN
+        SELECT RAISE(ABORT, 'workflow_dead_letter_v1 不可变：禁止 UPDATE');
+    END;
+"""
+
 MIGRATIONS: tuple[tuple[str, str], ...] = (
     ("001_platform_init", _M001),
     ("002_labeling_inbox", _M002),
@@ -1339,6 +1392,7 @@ MIGRATIONS: tuple[tuple[str, str], ...] = (
     ("031_work_item_supersession_v1", _M031),
     ("032_goal_draft_v1", _M032),
     ("033_work_event_usage_control_plane", _M033),
+    ("034_workflow_studio_v1", _M034),
 )
 
 
@@ -2860,8 +2914,11 @@ class PlatformStore:
 
     RUN_TRANSITIONS = {
         "queued": {"running", "cancelled"},
-        "running": {"running", "succeeded", "failed", "cancelled"},
+        "running": {"running", "succeeded", "failed", "cancelled",
+                    "paused", "waiting_human"},
         "failed": {"running"},          # 只能经 retry 重新进入 running
+        "paused": {"running", "cancelled"},
+        "waiting_human": {"running", "cancelled"},
         "succeeded": set(),
         "cancelled": set(),
     }
@@ -3112,6 +3169,7 @@ class PlatformStore:
         run.failed→blocked；run.cancelled→cancelled；按事件 seq 演进。
         """
         events = self.list_events()
+        self.dispatch_outbox()  # 至少一次投递：重建时统一消费 pending
         state: dict[str, dict[str, Any]] = {}
         for e in events:
             wid = e.get("work_id") or ""
@@ -3150,6 +3208,160 @@ class PlatformStore:
             sort_keys=True, ensure_ascii=False)
         return {"count": len(items), "items": items,
                 "hash": hashlib.sha256(canonical.encode()).hexdigest()}
+
+    # ---------- Workflow Studio（ABOSV2 Phase C） ----------
+
+    def insert_workflow_definition(self, *, definition_id: str,
+                                   version: int, name: str,
+                                   spec: dict[str, Any], created_by: str,
+                                   owner: str = "") -> dict[str, Any]:
+        now = _utcnow()
+        spec_json = json.dumps(spec, sort_keys=True, ensure_ascii=False)
+        self._conn.execute(
+            "INSERT INTO workflow_definition_v1 (definition_id, version,"
+            " name, status, owner, spec_json, spec_hash, created_by,"
+            " created_at, updated_at)"
+            " VALUES (?,?,?,?,?,?,?,?,?,?)",
+            (definition_id, version, name, "draft", owner, spec_json,
+             hashlib.sha256(spec_json.encode()).hexdigest(),
+             created_by, now, now))
+        self._conn.commit()
+        return self.get_workflow_definition(definition_id, version)
+
+    def get_workflow_definition(self, definition_id: str,
+                                version: int | None = None
+                                ) -> dict[str, Any] | None:
+        if version is None:
+            row = self._conn.execute(
+                "SELECT * FROM workflow_definition_v1 WHERE definition_id=?"
+                " ORDER BY version DESC LIMIT 1",
+                (definition_id,)).fetchone()
+        else:
+            row = self._conn.execute(
+                "SELECT * FROM workflow_definition_v1"
+                " WHERE definition_id=? AND version=?",
+                (definition_id, version)).fetchone()
+        d = _row_to_dict(row)
+        if d is not None:
+            d["spec"] = json.loads(d["spec_json"])
+            d["lint_report"] = json.loads(d["lint_report_json"] or "[]")
+        return d
+
+    def list_workflow_definitions(self) -> list[dict[str, Any]]:
+        rows = self._conn.execute(
+            "SELECT * FROM workflow_definition_v1"
+            " ORDER BY definition_id, version").fetchall()
+        out = []
+        for r in rows:
+            d = dict(r)
+            d["spec"] = json.loads(d["spec_json"])
+            d["lint_report"] = json.loads(d["lint_report_json"] or "[]")
+            out.append(d)
+        return out
+
+    def update_workflow_definition(self, definition_id: str, version: int,
+                                   *, spec: dict[str, Any] | None = None,
+                                   name: str | None = None,
+                                   status: str | None = None,
+                                   lint_report: list | None = None,
+                                   published: bool = False
+                                   ) -> dict[str, Any]:
+        sets, vals = [], []
+        if spec is not None:
+            spec_json = json.dumps(spec, sort_keys=True, ensure_ascii=False)
+            sets += ["spec_json=?", "spec_hash=?"]
+            vals += [spec_json,
+                     hashlib.sha256(spec_json.encode()).hexdigest()]
+        if name is not None:
+            sets.append("name=?"); vals.append(name)
+        if status is not None:
+            sets.append("status=?"); vals.append(status)
+        if lint_report is not None:
+            sets.append("lint_report_json=?")
+            vals.append(json.dumps(lint_report, ensure_ascii=False))
+        if published:
+            sets.append("published_at=?"); vals.append(_utcnow())
+        sets.append("updated_at=?"); vals.append(_utcnow())
+        n = self._conn.execute(
+            f"UPDATE workflow_definition_v1 SET {', '.join(sets)}"
+            " WHERE definition_id=? AND version=?",
+            (*vals, definition_id, version))
+        if n.rowcount != 1:
+            raise StoreError(
+                f"workflow 定义不存在: {definition_id}@v{version}")
+        self._conn.commit()
+        return self.get_workflow_definition(definition_id, version)
+
+    def upsert_node_execution(self, run_id: str, node_id: str, *,
+                              node_type: str, status: str,
+                              input_data: dict | None = None,
+                              output_data: dict | None = None,
+                              error: str = "",
+                              inc_attempt: bool = False) -> None:
+        row = self._conn.execute(
+            "SELECT exec_id, attempts FROM workflow_node_execution_v1"
+            " WHERE run_id=? AND node_id=?",
+            (run_id, node_id)).fetchone()
+        now = _utcnow()
+        if row is None:
+            self._conn.execute(
+                "INSERT INTO workflow_node_execution_v1 (run_id, node_id,"
+                " node_type, status, input_json, output_json, error,"
+                " attempts, started_at, ended_at)"
+                " VALUES (?,?,?,?,?,?,?,?,?,?)",
+                (run_id, node_id, node_type, status,
+                 json.dumps(input_data or {}, ensure_ascii=False),
+                 json.dumps(output_data or {}, ensure_ascii=False),
+                 error, 1,
+                 now, now if status in ("succeeded", "failed", "skipped")
+                 else None))
+        else:
+            attempts = row["attempts"] + (1 if inc_attempt else 0)
+            self._conn.execute(
+                "UPDATE workflow_node_execution_v1 SET status=?,"
+                " node_type=?, output_json=?, error=?, attempts=?,"
+                " ended_at=? WHERE run_id=? AND node_id=?",
+                (status, node_type,
+                 json.dumps(output_data or {}, ensure_ascii=False),
+                 error, attempts,
+                 now if status in ("succeeded", "failed", "skipped",
+                                   "waiting_approval") else None,
+                 run_id, node_id))
+        self._conn.commit()
+
+    def list_node_executions(self, run_id: str) -> list[dict[str, Any]]:
+        rows = self._conn.execute(
+            "SELECT * FROM workflow_node_execution_v1 WHERE run_id=?"
+            " ORDER BY exec_id", (run_id,)).fetchall()
+        out = []
+        for r in rows:
+            d = dict(r)
+            d["input"] = json.loads(d["input_json"] or "{}")
+            d["output"] = json.loads(d["output_json"] or "{}")
+            out.append(d)
+        return out
+
+    def insert_dead_letter(self, run_id: str, node_id: str, *,
+                           reason: str,
+                           payload: dict | None = None) -> None:
+        self._conn.execute(
+            "INSERT INTO workflow_dead_letter_v1 (run_id, node_id, reason,"
+            " payload_json, created_at) VALUES (?,?,?,?,?)",
+            (run_id, node_id, reason,
+             json.dumps(payload or {}, ensure_ascii=False), _utcnow()))
+        self._conn.commit()
+
+    def list_dead_letters(self, run_id: str | None = None
+                          ) -> list[dict[str, Any]]:
+        if run_id:
+            rows = self._conn.execute(
+                "SELECT * FROM workflow_dead_letter_v1 WHERE run_id=?"
+                " ORDER BY dead_id", (run_id,)).fetchall()
+        else:
+            rows = self._conn.execute(
+                "SELECT * FROM workflow_dead_letter_v1"
+                " ORDER BY dead_id").fetchall()
+        return [dict(r) for r in rows]
 
     def list_review_tasks_active(self, *, limit: int = 5000
                                  ) -> list[dict[str, Any]]:

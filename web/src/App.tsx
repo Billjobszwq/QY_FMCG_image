@@ -18,6 +18,11 @@ import { PlannedModule } from "./platform/components";
 import SupervisorWorkspace from "./platform/SupervisorWorkspace";
 import Home from "./pages/Home";
 import GraphRuns from "./pages/GraphRuns";
+import {
+  WorkflowAgentsAndModels, WorkflowApprovals, WorkflowConnectors,
+  WorkflowEvidenceUsage, WorkflowRunCenter, WorkflowStudio,
+  WorkflowTemplates,
+} from "./pages/Workflow";
 import SystemStatus from "./pages/SystemStatus";
 import {
   RecognizeNow, VisionAnnotation, VisionDatasets, VisionEvidence,
@@ -242,13 +247,30 @@ export default function App() {
                 <VisionDatasets /></div>} />
             <Route path="/data/quality"
               element={<div className="page wide"><VisionEvidence /></div>} />
-            {/* 工作流与 Agent */}
-            <Route path="/workflow" element={<Navigate to="/workflow/runs"
+            {/* 工作流与 Agent（ABOSV2 Phase C：Studio 七页签） */}
+            <Route path="/workflow" element={<Navigate to="/workflow/studio"
               replace />} />
+            <Route path="/workflow/studio"
+              element={<div className="page wide"><WorkflowStudio /></div>} />
+            <Route path="/workflow/templates"
+              element={<div className="page wide">
+                <WorkflowTemplates /></div>} />
             <Route path="/workflow/runs"
-              element={<GraphRuns />} />
+              element={<div className="page wide">
+                <WorkflowRunCenter /><GraphRuns /></div>} />
+            <Route path="/workflow/approvals"
+              element={<div className="page wide">
+                <WorkflowApprovals /></div>} />
+            <Route path="/workflow/connectors"
+              element={<div className="page wide">
+                <WorkflowConnectors /></div>} />
             <Route path="/workflow/agents"
-              element={<AgentsMatrix modules={modules} />} />
+              element={<div className="page wide">
+                <WorkflowAgentsAndModels />
+                <AgentsMatrix modules={modules} /></div>} />
+            <Route path="/workflow/evidence"
+              element={<div className="page wide">
+                <WorkflowEvidenceUsage /></div>} />
             {/* 系统与开发者 */}
             <Route path="/status"
               element={<SystemStatus health={health} />} />

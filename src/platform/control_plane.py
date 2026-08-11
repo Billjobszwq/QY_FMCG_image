@@ -31,6 +31,9 @@ class CommandGatewayError(Exception):
 
 
 class CommandGateway:
+    # 已注册领域命令（fail-closed）：Workflow 节点库与 lint 同源消费
+    SUPPORTED_COMMANDS = ("vision.recognition.create",)
+
     def __init__(self, store: Any, profiles_service: Any | None,
                  recognition_adapter: Any | None) -> None:
         self.store = store
@@ -48,6 +51,7 @@ class CommandGateway:
                correlation_id: str | None = None,
                goal_id: str = "", tenant_id: str = "local",
                customer_id: str = "", project_id: str = "",
+               parent_run_id: str | None = None,
                ) -> dict[str, Any]:
         # 幂等：同一键返回同一 run（不重复执行副作用）
         if idempotency_key:
@@ -59,7 +63,7 @@ class CommandGateway:
                         "status": hit["status"],
                         "idempotent_replay": True,
                         "result": self._result_from_run(hit)}
-        if command_kind != "vision.recognition.create":
+        if command_kind not in self.SUPPORTED_COMMANDS:
             raise CommandGatewayError(
                 f"未注册的命令: {command_kind}（fail-closed）")
         corr = correlation_id or "corr-" + uuid.uuid4().hex[:12]
@@ -76,6 +80,7 @@ class CommandGateway:
             "run_id": run_id, "work_id": work_id, "tenant_id": tenant_id,
             "customer_id": customer_id, "project_id": project_id,
             "trigger_type": "command", "correlation_id": corr,
+            "parent_run_id": parent_run_id,
             "initiator_type": "agent" if source == "agent" else "human",
             "initiator_id": actor, "status": "queued",
             "command_kind": command_kind, "params": stored_params,
