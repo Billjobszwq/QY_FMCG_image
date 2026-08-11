@@ -6,8 +6,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import {
   agentChat, approveAgentCommand, confirmGoal, createAgentSession,
-  fetchGoal, fetchGoals, fetchWorkItems, GoalDraft,
-  rejectAgentCommand, WorkItemsBody,
+  createNote, deleteNote, fetchGoal, fetchGoals, fetchNotes, fetchWorkItems,
+  GoalDraft, HomeNote, rejectAgentCommand, WorkItemsBody,
 } from "../api";
 
 const ALLOWED_INTENTS = ["navigate", "open_panel", "filter", "highlight",
@@ -104,11 +104,37 @@ export default function SupervisorWorkspace() {
   const [msgs, setMsgs] = useState<Msg[]>([]);
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
-  const [notes, setNotes] = useState<string[]>(() => {
-    try { return JSON.parse(localStorage.getItem("abos_notes") ?? "[]"); }
-    catch { return []; }
-  });
+  // ABOSV3-P2-001→服务端：便签不再存 localStorage，服务端持久化
+  const [notes, setNotes] = useState<HomeNote[]>([]);
   const [noteInput, setNoteInput] = useState("");
+  // ABOSV3-P1-001：桌面端可拖拽调宽 360–480px（偏好可持久）
+  const [panelW, setPanelW] = useState<number>(() => {
+    const w = Number(localStorage.getItem("abos_side_w") || 0);
+    return w >= 360 && w <= 480 ? w : 400;
+  });
+  const resizingRef = useRef(false);
+  useEffect(() => {
+    const move = (e: MouseEvent) => {
+      if (!resizingRef.current) return;
+      const w = Math.min(480, Math.max(360, window.innerWidth - e.clientX));
+      setPanelW(w);
+    };
+    const up = () => {
+      if (resizingRef.current) {
+        resizingRef.current = false;
+        setPanelW((w) => {
+          localStorage.setItem("abos_side_w", String(w));
+          return w;
+        });
+      }
+    };
+    window.addEventListener("mousemove", move);
+    window.addEventListener("mouseup", up);
+    return () => {
+      window.removeEventListener("mousemove", move);
+      window.removeEventListener("mouseup", up);
+    };
+  }, []);
   const sidRef = useRef<string | null>(
     localStorage.getItem("agent_session_v2"));
   const boxRef = useRef<HTMLDivElement>(null);
@@ -142,6 +168,11 @@ export default function SupervisorWorkspace() {
         setInput((cur) => cur || d.goals[0].text);
       }
     }).catch(() => { /* 未登录/服务异常：不静默伪造 */ });
+  }, []);
+
+  useEffect(() => {
+    // 便签从服务端加载（刷新/跨浏览器一致）
+    fetchNotes().then((d) => setNotes(d.notes)).catch(() => { /* 未登录 */ });
   }, []);
 
   useEffect(() => {
@@ -227,13 +258,15 @@ export default function SupervisorWorkspace() {
     } finally { setBusy(false); }
   };
 
-  const addNote = () => {
+  const addNote = async () => {
     const t = noteInput.trim();
     if (!t) return;
-    const next = [t, ...notes].slice(0, 12);
-    setNotes(next);
-    setNoteInput("");
-    localStorage.setItem("abos_notes", JSON.stringify(next));
+    try {
+      await createNote(t);
+      setNoteInput("");
+      const d = await fetchNotes();
+      setNotes(d.notes);
+    } catch { /* 保存失败时不静默丢失：输入保留 */ }
   };
 
   const s = work?.summary;
@@ -260,7 +293,13 @@ export default function SupervisorWorkspace() {
           onClick={() => setOpen(true)}>✦</button>
       )}
       {open && (
-    <aside className="side-panel" aria-label="主管工作台">
+    <aside className="side-panel" aria-label="主管工作台"
+      style={window.innerWidth >= 1440 ? { width: panelW } : undefined}>
+      {window.innerWidth >= 1440 && (
+        <div className="side-resize" role="separator"
+          aria-label="拖拽调整主管工作台宽度"
+          onMouseDown={() => { resizingRef.current = true; }} />
+      )}
       <div className="side-tabs" role="tablist">
         <button role="tab" aria-selected={tab === "board"}
           className={tab === "board" ? "active" : ""}
@@ -319,9 +358,17 @@ export default function SupervisorWorkspace() {
               onKeyDown={(e) => e.key === "Enter" && addNote()} />
             <button className="btn small" onClick={addNote}>固定</button>
           </div>
-          {notes.map((n, i) => (
-            <div key={i} className="note-card" style={{ marginTop: 8 }}>
-              {n}</div>
+          {notes.map((n) => (
+            <div key={n.note_id} className="note-card"
+              style={{ marginTop: 8, display: "flex",
+                justifyContent: "space-between", gap: 6 }}>
+              <span>{n.pinned ? "📌 " : ""}{n.content}</span>
+              <button className="btn small" aria-label="删除笔记"
+                onClick={async () => {
+                  await deleteNote(n.note_id);
+                  const d = await fetchNotes(); setNotes(d.notes);
+                }}>×</button>
+            </div>
           ))}
         </div>
       ) : (

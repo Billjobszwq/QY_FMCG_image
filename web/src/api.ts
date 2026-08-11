@@ -232,6 +232,162 @@ export async function confirmGoal(goalId: string): Promise<GoalDraft> {
   return (await r.json()).goal;
 }
 
+// ---------- ABOSV3 T2：首页总控（真实 API，不得硬编码数字） ----------
+
+export interface HomeCalendarEvent {
+  event_id: string;
+  title: string;
+  kind: string;
+  source?: string;
+  starts_at: string;
+  ends_at?: string | null;
+  all_day?: boolean;
+  location?: string;
+  ref_type?: string;
+  ref_id?: string;
+  customer_id?: string;
+  project_id?: string;
+  when?: string;
+}
+
+export interface HomeNote {
+  note_id: string;
+  actor: string;
+  content: string;
+  pinned: number | boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface HomeActivityRow {
+  seq: number;
+  type: string;
+  text: string;
+  at: string;
+  run_id: string;
+  work_id: string;
+  actor: string;
+  subject_type: string;
+  subject_id: string;
+  error: string;
+}
+
+export interface HomeWorkItem {
+  work_id: string;
+  status: string;
+  title?: string;
+  owner_id?: string;
+  due_at?: string | null;
+  run_id?: string;
+  subject_type?: string;
+  subject_id?: string;
+  customer_id?: string;
+  project_id?: string;
+  blockers?: string[];
+}
+
+export interface HomeDashboard {
+  actor: string;
+  todos: Record<string, number>;
+  work_items: HomeWorkItem[];
+  calendar: HomeCalendarEvent[];
+  progress: {
+    projects: { project_id: string; customer_id: string; total: number;
+      done: number; running: number; blocked: number; waiting: number;
+      completion: number }[];
+    runs_by_status: Record<string, number>;
+    work_total: number;
+  };
+  activity: HomeActivityRow[];
+  capacity: {
+    db_bytes: number;
+    tables: number;
+    platform_dir_bytes: number;
+    disk: { total_gb?: number; used_gb?: number; free_gb?: number };
+    outbox_pending: number;
+    jobs: Record<string, number>;
+    migrations: number;
+  };
+  agent_alerts: { kind: string; title: string; ref_type: string;
+    ref_id: string; blockers?: string[] }[];
+  recent: Record<string, Record<string, unknown>[]>;
+  notes: HomeNote[];
+}
+
+export async function fetchHomeDashboard(): Promise<HomeDashboard> {
+  const r = await fetch("/api/v1/home/dashboard");
+  if (!r.ok) throw new Error(`home dashboard HTTP ${r.status}`);
+  return r.json();
+}
+
+export async function fetchCalendarEvents(): Promise<{
+  count: number; events: HomeCalendarEvent[];
+}> {
+  const r = await fetch("/api/v1/calendar/events");
+  if (!r.ok) throw new Error(`calendar HTTP ${r.status}`);
+  return r.json();
+}
+
+export async function createCalendarEvent(body: {
+  title: string; starts_at: string; ends_at?: string;
+  all_day?: boolean; location?: string; kind?: string;
+}): Promise<HomeCalendarEvent> {
+  const r = await postJson("/api/v1/calendar/events", body);
+  if (!r.ok) throw await parseError(r, "日程保存失败");
+  return (await r.json()).event;
+}
+
+export async function deleteCalendarEvent(eventId: string): Promise<void> {
+  const headers: Record<string, string> = {};
+  if (_csrfToken) headers["X-CSRF-Token"] = _csrfToken;
+  const r = await fetch(`/api/v1/calendar/events/${eventId}`,
+    { method: "DELETE", headers });
+  if (!r.ok) throw await parseError(r, "日程删除失败");
+}
+
+export async function fetchNotes(): Promise<{
+  count: number; notes: HomeNote[];
+}> {
+  const r = await fetch("/api/v1/notes");
+  if (!r.ok) throw new Error(`notes HTTP ${r.status}`);
+  return r.json();
+}
+
+export async function createNote(content: string,
+  pinned = false): Promise<HomeNote> {
+  const r = await postJson("/api/v1/notes", { content, pinned });
+  if (!r.ok) throw await parseError(r, "便签保存失败");
+  return (await r.json()).note;
+}
+
+export async function updateNote(noteId: string, body: {
+  content?: string; pinned?: boolean;
+}): Promise<HomeNote> {
+  const headers: Record<string, string> = {
+    "content-type": "application/json" };
+  if (_csrfToken) headers["X-CSRF-Token"] = _csrfToken;
+  const r = await fetch(`/api/v1/notes/${noteId}`, {
+    method: "PUT", headers, body: JSON.stringify(body) });
+  if (!r.ok) throw await parseError(r, "便签更新失败");
+  return (await r.json()).note;
+}
+
+export async function deleteNote(noteId: string): Promise<void> {
+  const headers: Record<string, string> = {};
+  if (_csrfToken) headers["X-CSRF-Token"] = _csrfToken;
+  const r = await fetch(`/api/v1/notes/${noteId}`,
+    { method: "DELETE", headers });
+  if (!r.ok) throw await parseError(r, "便签删除失败");
+}
+
+export async function fetchCurrentWork(): Promise<{
+  count: number; items: Record<string, unknown>[]; hash: string;
+}> {
+  const r = await fetch("/api/v1/control/current-work");
+  if (!r.ok) throw new Error(`current-work HTTP ${r.status}`);
+  return r.json();
+}
+
 // ---------- assets 数据中心（U2-2，真实台账） ----------
 
 export interface AssetsSummary {

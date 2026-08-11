@@ -1789,6 +1789,38 @@ CREATE TRIGGER IF NOT EXISTS platform_flag_auth_lock_no_delete
     END;
 """
 
+# ABOSV3 T2：首页总控 — 用户日程与便签服务端持久化（D-004：
+# 私人日程专表，但必须产生事件与审计；不得只存 localStorage）。
+_M041 = """
+CREATE TABLE IF NOT EXISTS user_calendar_v1 (
+    event_id TEXT PRIMARY KEY,
+    actor TEXT NOT NULL DEFAULT '',
+    title TEXT NOT NULL,
+    kind TEXT NOT NULL DEFAULT 'user',
+    starts_at TEXT NOT NULL,
+    ends_at TEXT,
+    all_day INTEGER NOT NULL DEFAULT 0,
+    location TEXT NOT NULL DEFAULT '',
+    ref_type TEXT NOT NULL DEFAULT '',
+    ref_id TEXT NOT NULL DEFAULT '',
+    customer_id TEXT NOT NULL DEFAULT '',
+    project_id TEXT NOT NULL DEFAULT '',
+    created_by TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_user_calendar_starts
+    ON user_calendar_v1(starts_at);
+CREATE TABLE IF NOT EXISTS user_note_v1 (
+    note_id TEXT PRIMARY KEY,
+    actor TEXT NOT NULL DEFAULT '',
+    content TEXT NOT NULL,
+    pinned INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+"""
+
 MIGRATIONS: tuple[tuple[str, str], ...] = (
     ("001_platform_init", _M001),
     ("002_labeling_inbox", _M002),
@@ -1830,6 +1862,7 @@ MIGRATIONS: tuple[tuple[str, str], ...] = (
     ("038_geo_field_v1", _M038),
     ("039_finance_v1", _M039),
     ("040_auth_credential_lock", _M040),
+    ("041_home_calendar_notes_v1", _M041),
 )
 
 
@@ -3620,14 +3653,24 @@ class PlatformStore:
         events = self.list_events()
         self.dispatch_outbox()  # 至少一次投递：重建时统一消费 pending
         state: dict[str, dict[str, Any]] = {}
+        # 投影基线 = work_item_v2 全部行（含无事件的 approval/追问等
+        # 人工工作）；事件流只覆盖其可推导的状态，不得丢失无事件工作。
+        for row in self.list_work_items_v2():
+            state[row["work_id"]] = {
+                "work_id": row["work_id"], "status": row["status"],
+                "subject_type": row.get("subject_type", ""),
+                "subject_id": row.get("subject_id", ""),
+                "run_id": row.get("run_id", "")}
         for e in events:
             wid = e.get("work_id") or ""
             if not wid:
                 continue
-            st = state.setdefault(wid, {
-                "work_id": wid, "status": "todo",
-                "subject_type": "", "subject_id": "",
-                "run_id": e.get("run_id", "")})
+            st = state.get(wid)
+            if st is None:
+                st = state[wid] = {
+                    "work_id": wid, "status": "todo",
+                    "subject_type": "", "subject_id": "",
+                    "run_id": e.get("run_id", "")}
             t = e["event_type"]
             if t in ("command.accepted", "workflow.started",
                      "run.retried", "workflow.retried"):

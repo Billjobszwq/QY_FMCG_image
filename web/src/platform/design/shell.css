@@ -186,6 +186,10 @@ button:focus-visible, a:focus-visible, [tabindex]:focus-visible {
   height: calc(100vh - var(--topbar-h)); overflow-y: auto;
   display: flex; flex-direction: column;
 }
+/* ABOSV3：桌面端可拖拽调宽（360–480px），不覆盖主内容 */
+.side-resize { position: absolute; left: 0; top: 0; bottom: 0;
+  width: 5px; cursor: col-resize; z-index: 5; }
+.side-resize:hover { background: var(--info-soft); }
 .side-tabs { display: flex; border-bottom: 1px solid var(--border); }
 .side-tabs button {
   flex: 1; padding: 9px 4px; font-size: 12.5px; border: none;
@@ -253,16 +257,28 @@ button:focus-visible, a:focus-visible, [tabindex]:focus-visible {
   gap: 6px 12px; font-size: 13px; margin: 12px 0; }
 .planned-slot dt { color: var(--text-muted); }
 
-/* ---------- 响应式（ABOSV2-P1-006） ---------- */
+/* ---------- 响应式（ABOSV3-P1-001：四视口不遮挡） ---------- */
 @media (max-width: 1280px) {
   :root { --side-w: 320px; }
 }
 /* 1024–1439：主管默认收起（JS 阈值 1440）；打开时为不透明临时
-   抽屉，不占据主内容布局；<1024 抽屉占满宽度。 */
+   抽屉，不占据主内容布局。 */
 @media (max-width: 1439px) {
   .side-panel { position: fixed; right: 0; top: 0; z-index: 40;
     height: 100vh; box-shadow: var(--shadow-2);
     background: var(--surface); }
+}
+/* ABOSV3：≤1024 改为底部可关闭工作区，不再右侧遮挡主内容 */
+@media (max-width: 1024px) {
+  .side-panel { top: auto; bottom: 0; left: 0; right: 0;
+    width: 100% !important; height: 62vh;
+    border-left: none; border-top: 2px solid var(--border-strong);
+    border-radius: 12px 12px 0 0; }
+  .side-resize { display: none; }
+}
+/* ABOSV3：≤768 全屏对话页（可关闭返回） */
+@media (max-width: 768px) {
+  .side-panel { height: 100vh; border-radius: 0; }
 }
 @media (max-width: 1024px) {
   :root { --nav-w: 180px; }

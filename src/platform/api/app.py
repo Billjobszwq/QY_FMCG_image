@@ -118,6 +118,10 @@ def create_app(
         from src.platform.api.goals import create_goals_router
         app.include_router(create_goals_router(
             bundle.store, auth=AuthService(bundle.store)))
+        # ABOSV3 T2：首页总控（日历/日程/进度/活动/容量/便签/提醒）
+        from src.platform.api.home_api import create_home_router
+        app.include_router(create_home_router(
+            bundle.store, auth=AuthService(bundle.store)))
         # ABOSV2 Phase B：统一 Work/Event/Usage 控制平面（Command Gateway
         # + 对账）；Web/API/Agent 共用同一命令入口。
         from src.platform.control_plane import CommandGateway
