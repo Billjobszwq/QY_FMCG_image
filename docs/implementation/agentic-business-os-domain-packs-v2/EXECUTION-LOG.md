@@ -152,3 +152,35 @@
 
 - Phase D：IAM 与主数据（tenant/customer/project scope、角色/permission
   bundle、批准矩阵/审计；SKU/客户/项目库；两测试客户隔离证明）。
+
+## 2026-08-11 · Phase D 完成（commit 55e71271），Gate G4 通过
+
+- migration 035：iam_principal_v1（user/service_account/agent）/ iam_role_v1
+  （11 内置角色）/ iam_permission_bundle_v1（13 版本化 scope）/
+  iam_role_permission_v1 / iam_membership_v1（tenant/customer/project 作用域）/
+  iam_audit_event_v1（append-only）/ iam_approval_matrix_v1 +
+  md_customer_v1 / md_project_v1 / md_sku_v1 / md_sku_alias_v1。
+- IAMService：seed 幂等；账号开设（agent 独立身份不得口令登录）；授权
+  fail-closed（scope + customer/project 作用域）；批准矩阵（矩阵未收录动作
+  非平台角色一律拒绝）；审计 append-only。
+- MasterDataService：客户库（is_test_fixture 显式标记、保留策略）/项目库
+  （必须挂客户）/SKU 库（canonical_name 身份、别名、客户显示名、有效期、
+  新旧包装 supersede 链，历史不删）。
+- gateway usage 写入携带 customer/project 作用域（隔离计费依据）。
+- 现场 G4 隔离证明（两个 test fixture 客户 demo-cust-a/b）：
+  各建项目/用户/agent 身份 + 各跑一条真实识别（task 2287e8e5… /
+  aeb098c6…）；alice 登录只见 cust-a（fixture 标记 True）；
+  overview cust-b → 403；projects cust-b → 403；
+  agent_alice agent.query cust-a=True / cust-b=False；
+  approval-check production.switch alice=False；
+  usage_event_v2 按客户各 2 行无空作用域行。
+- 浏览器验收：首轮发现 3 个真实缺陷（iamGet/iamPost 双斜杠 404、admin
+  平台角色未传入列表过滤、列表组件缺错误分支）→ 修复后复验 5/5 通过
+  （截图 .eval/abosv2_iam_fix_*）。
+- 全量 hermetic：1222 passed, 1 skipped, 6 deselected。
+- 声明：未启动训练；production 未切换；用户资产未触碰。
+
+## 下一动作
+
+- Phase E：问卷纵向切片（题型/版本/跳题 DAG/评分/发布/分配/填写/
+  后台修正事件/拍照题证据 + 识别 suggestion→人工 final）。

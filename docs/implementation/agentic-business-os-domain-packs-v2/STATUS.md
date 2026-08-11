@@ -5,16 +5,18 @@
 
 ## 当前 Gate（唯一）
 
-`PHASE_A/B/C_CLOSED_G1_G2_G3_PASSED → Phase D 待开工`（IAM 与主数据）。
+`PHASE_A/B/C/D_CLOSED_G1–G4_PASSED → Phase E 待开工`（问卷纵向切片）。
 
 - Phase A 证据：commit `4af64f2d` → `79b3a534` → `15a39325`；浏览器四视口 8/8。
 - Phase B 证据：commit `13106320`；实跱全链 ID 对账 + 失败同链恢复。
-- Phase C 证据：commit `aa7ba378`；模板实跱贯通（run-50adc9a8f9a6）+ Studio 6/6；
-  hermetic 1213 passed。
+- Phase C 证据：commit `aa7ba378`；模板实跱贯通（run-50adc9a8f9a6）+ Studio 6/6。
+- Phase D 证据：commit `55e71271`；双 test fixture 客户隔离实跱证明；
+  hermetic 1222 passed。
 
 不是 `READY_FOR_NEXT_DOMAIN_PACK`。Phase A（P0-001/002/004、P1-005/006/007、
-新增 P1-008）、Phase B（P0-003 全链贯通）、Phase C（Workflow Studio MVP）
-已关闭；IAM/问卷/BI/外勤/财务仍为 planned，禁止以导航入口计为完成。
+新增 P1-008）、Phase B（P0-003 全链贯通）、Phase C（Workflow Studio MVP）、
+Phase D（IAM 与主数据）已关闭；问卷/BI/外勤/财务仍为 planned，
+禁止以导航入口计为完成。
 
 ## 已冻结决定
 
@@ -33,7 +35,7 @@
 - P1：P1-002 Manifest 全量交叉验证（部分关闭）；P1-003 App 手写路由；
   P1-004 主管工具化规划（Phase Z/后续关闭）；
 - P2：便签 localStorage、event polling、profile 信息过载；
-- 业务：问卷、BI、Geo/Field、Finance、IAM 仍为 planned，禁止以导航入口计为完成。
+- 业务：问卷、BI、Geo/Field、Finance 仍为 planned，禁止以导航入口计为完成。
 
 ## 现场基线（2026-08-11 实时核验）
 

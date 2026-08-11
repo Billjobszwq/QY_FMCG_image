@@ -37,7 +37,16 @@
 - [x] n8n/Dify 诚实 blocked（无第三方源码）；reconcile consistent=true
 - [x] 红测试 12 项先红后绿；全量 1213 passed
 
-## Gate G4–G9（未开始）
+## Gate G4 · Phase D（已通过，2026-08-11）
+
+- [x] 两个 test fixture 客户隔离证明（数据/任务/Usage/Agent 查询）：现场 403 + fail-closed 证据链
+- [x] test fixture 显式标记，未混入生产数据
+- [x] 账号开设/角色/permission bundle/作用域/批准矩阵/审计（9 项红转绿）
+- [x] SKU 新旧包装/别名/客户显示名/有效期（测试覆盖）
+- [x] 浏览器验收：首轮 3 缺陷修复后复验 5/5（截图 abosv2_iam_fix_*）
+- [x] 全量 1222 passed
+
+## Gate G5–G9（未开始）
 
 - 见 IMPLEMENTATION-LIST 对应行。
 

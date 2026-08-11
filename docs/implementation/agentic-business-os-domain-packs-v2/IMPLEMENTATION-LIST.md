@@ -52,9 +52,9 @@
 
 | # | 任务 | 状态 | 依赖 | 验收 | 证据 |
 |---|---|---|---|---|---|
-| D-1 | 账号/用户/服务账号/Agent 身份/角色/permission bundle/批准矩阵/审计 | NOT_STARTED | C | 契约+越权测试 | — |
-| D-2 | SKU 库/客户库/项目库（新旧包装、别名、客户显示名、有效期） | NOT_STARTED | D-1 | 主数据版本化 | — |
-| D-3 | 两个测试客户隔离证明（数据/任务/Usage/报表/Agent） | NOT_STARTED | D-1,D-2 | 隔离测试；test fixture 标记 | — |
+| D-1 | 账号/用户/服务账号/Agent 身份/角色/permission bundle/批准矩阵/审计 | VERIFIED_LOCAL | C | 契约+越权测试 | commit `55e71271` migration 035；9 项红转绿 |
+| D-2 | SKU 库/客户库/项目库（新旧包装、别名、客户显示名、有效期） | VERIFIED_LOCAL | D-1 | 主数据版本化 | supersede 链/别名/有效期测试；现场建库 |
+| D-3 | 两个测试客户隔离证明（数据/任务/Usage/报表/Agent） | VERIFIED_LOCAL | D-1,D-2 | 隔离测试；test fixture 标记 | 实跱：alice 只见 cust-a、B 403、agent fail-closed；usage 按客户作用域；浏览器 5/5 |
 
 ## Phase E · 问卷纵向切片（Gate G5）
 
