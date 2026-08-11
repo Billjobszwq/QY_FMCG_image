@@ -132,6 +132,7 @@ _PROFILE_DEFS = [
     ("production_legacy", ["prod_20260805_v5_r1_bundle"], [],
      ["production"]),
     ("nextgen_m1_pilot", ["nextgen_detector_pilot_v1"], [], []),
+    ("nextgen_m1_merged_suntory", ["nextgen_detector_merged_v2"], [], ["三得利场景候选"]),
     ("nextgen_m1_m2_pilot", ["nextgen_detector_pilot_v1",
                              "nextgen_segmenter_pilot_v1"], [], []),
     ("canonical38_classifier_e1", ["m3_ablation_e1_v1"],
@@ -169,6 +170,7 @@ ARTIFACT_STATUS_FIX = {
 _PROFILE_SEED = [
     ("production_legacy", ["prod_20260805_v5_r1_bundle"], [], ["production"]),
     ("nextgen_m1_pilot", ["nextgen_detector_pilot_v1"], [], []),
+    ("nextgen_m1_merged_suntory", ["nextgen_detector_merged_v2"], [], ["三得利场景候选"]),
     ("nextgen_m1_m2_pilot", ["nextgen_detector_pilot_v1",
                              "nextgen_segmenter_pilot_v1"], [], []),
     ("canonical38_classifier_e1", ["m3_tvt_e1_v2"], ["canonical38"], []),

@@ -25,14 +25,14 @@ def main() -> int:
     from torchvision import transforms
     from PIL import Image
     from sam2.build_sam import build_sam2
-    from sam2.automatic_mask_generator import SAM2AutomaticMaskGenerator
+    from sam2.sam2_image_predictor import SAM2ImagePredictor
 
     man = json.loads((ROOT / ".sam_checkpoints/manifest.json").read_text())
     e = next(x for x in man["entries"]
              if x["model"] == "sam2.1_hiera_small")
     sam = build_sam2("configs/sam2.1/sam2.1_hiera_s.yaml", e["file"],
                      device=torch.device("mps"))
-    gen = SAM2AutomaticMaskGenerator(sam)
+    pred = SAM2ImagePredictor(sam)
 
     ck = torch.load(ROOT / ".models/nextgen_classifier_grouped_v1/weights"
                     / "best.pt", map_location="cpu", weights_only=False)
@@ -56,12 +56,28 @@ def main() -> int:
         if img is None:
             continue
         H, W = img.shape[:2]
-        masks = gen.generate(cv2.cvtColor(img, cv2.COLOR_BGR2RGB))
+        pred.set_image(cv2.cvtColor(img, cv2.COLOR_BGR2RGB))
+        ys, xs = np.meshgrid(np.linspace(0.12, 0.88, 4) * H,
+                             np.linspace(0.12, 0.88, 4) * W,
+                             indexing="ij")
+        pts = np.stack([xs.ravel(), ys.ravel()], 1).astype(np.float32)
+        labs = np.ones(len(pts), dtype=np.int32)
+        masks, scores, _ = pred.predict(point_coords=pts,
+                                        point_labels=labs,
+                                        multimask_output=True)
         lines = []
-        for mk in masks:
-            x, y, w, h = mk["bbox"]
-            if w * h < 0.003 * W * H or w * h > 0.6 * W * H:
+        seen = set()
+        for m, sc in zip(masks, scores.ravel()):
+            area = m.sum()
+            if not (0.004 <= area / (H * W) <= 0.5):
                 continue
+            yy, xx = np.nonzero(m)
+            x, y = float(xx.min()), float(yy.min())
+            w, h = float(xx.max() - xx.min() + 1), float(yy.max() - yy.min() + 1)
+            key = (int(x), int(y), int(w), int(h))
+            if key in seen:
+                continue
+            seen.add(key)
             crop = img[int(y):int(y + h), int(x):int(x + w)]
             if crop.size == 0:
                 continue
