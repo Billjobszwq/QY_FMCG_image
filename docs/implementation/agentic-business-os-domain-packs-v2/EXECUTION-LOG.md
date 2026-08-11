@@ -305,3 +305,20 @@
 - P1-004：Supervisor 工具化规划运行时（六 Agent 独立对话运行时）；
 - P2-001/002/003：便签服务端化、event SSE、profile 信息架构；
 - rate limit 未实现；地图瓦片供应商未选（blocked 诚实展示）。
+
+## 2026-08-12 · 登录凭据变更并锁定（commit 985d858c，用户指令）
+
+- 统一工作台（8400）登录凭据改为用户名 `bill` + 用户指定口令；口令仅存
+  本机 `.env`（未跟踪，不入 git），提交中不含明文口令。
+- 锁定机制（migration 040_auth_credential_lock）：
+  - 首次启动经 PLATFORM_ADMIN_CREDENTIALS 引导，把哈希写入锁定 flag
+    `auth_locked_credential_v1`（一次性）；
+  - 锁定后环境变量（PLATFORM_USERS/PLATFORM_ADMIN_PASSWORD/改后的
+    CREDENTIALS）一律忽略；
+  - DB 触发器拒绝对锁定 flag 的 UPDATE/DELETE。
+- 现场验证：旧 admin 口令 401；bill 正确口令登录成功（role=admin）；
+  错误口令 401；DB 篡改锁定 flag 被触发器拒绝（UPDATE/DELETE 均报错）。
+- 测试：4 项锁定测试；修复套件污染源（src/common/config.py 导入时把 .env
+  灌入 os.environ 会污染 hermetic 测试）→ 根 conftest autouse fixture 隔离
+  认证环境变量；全量 1264 passed。
+- USER-HANDBOOK 已更新（不写明文口令）。
