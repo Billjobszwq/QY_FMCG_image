@@ -16,7 +16,9 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
-from src.composition.build import build_production_bundle, build_training_router
+from src.composition.build import (build_production_bundle,
+                                   build_profiles_service,
+                                   build_training_router)
 from src.platform.api.app import create_app
 from src.platform.api.health import ServiceSpec, ServiceStatus
 
@@ -40,6 +42,7 @@ def client(tmp_path: Path, monkeypatch):
     app = create_app(services=(), probe=_fake_probe, bundle=bundle,
                      recognition_adapter=fake_rec,
                      training_router=build_training_router(bundle),
+                     profiles_service=build_profiles_service(bundle),
                      web_dist=tmp_path / "none")
     return TestClient(app), bundle
 

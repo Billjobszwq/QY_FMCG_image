@@ -1,7 +1,8 @@
 """SLTF §11：Agent Kernel（通用，不绑 FMCG）。
 
 AgentManifest 注册 + capability scope 白名单 + UIIntent 白名单。
-内置四 Agent：supervisor / modelops / data_steward / workbench。
+内置六 Agent：supervisor / modelops / data_steward / workbench /
+recognition_agent / system_agent（ABOS T6）。
 """
 from __future__ import annotations
 
@@ -16,11 +17,15 @@ GRANTABLE_SCOPES = frozenset({
     "snapshot.build", "sam.teacher", "label_studio.manage",
     "registry.read", "data.query.readonly", "blackboard.append",
     "ui.intent", "evidence.read", "lease.acquire",
+    "recognition.task.create", "recognition.task.read",
+    "system.health.read",
 })
 
+# UIIntent 白名单（ABOS §八）：navigate/open_panel/filter/highlight/
+# compare/pin/show_evidence；禁 HTML/JS 注入。
 UI_INTENT_KINDS = frozenset({
     "navigate", "open_panel", "filter", "highlight",
-    "compare", "pin_card", "show_evidence",
+    "compare", "pin", "pin_card", "show_evidence",
 })
 
 
@@ -83,6 +88,21 @@ _BUILTIN = [
                   ["ui.intent.emit", "taskboard.update"],
                   ["project:*"], "l0_l1", ["drawer", "taskboard"],
                   ["taskboard_graph"], "low", [], "call", "/health"),
+    AgentManifest("recognition_agent", "1", "vision",
+                  ["recognition.task.create", "recognition.task.read",
+                   "evidence.read", "blackboard.append", "ui.intent",
+                   "registry.read"],
+                  ["vision.recognition.create", "command.preview"],
+                  ["project:*"], "l1_l2", ["workspace", "evidence_drawer"],
+                  ["recognition_graph"], "medium",
+                  ["human_approval_for_batch"], "recognition_call",
+                  "/health"),
+    AgentManifest("system_agent", "1", "system",
+                  ["system.health.read", "registry.read", "evidence.read",
+                   "blackboard.append"],
+                  ["system.health.query"],
+                  ["project:*"], "l1_l2", ["status"],
+                  [], "low", [], "call", "/health"),
 ]
 
 

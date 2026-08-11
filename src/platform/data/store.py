@@ -1077,6 +1077,20 @@ CREATE TABLE IF NOT EXISTS recognition_profile_def_v1 (
 );
 """
 
+# ABOS T7：识别任务冻结 Profile 契约（profile/tier/source/project/trace）
+_M030 = """
+ALTER TABLE recognition_task
+    ADD COLUMN recognition_profile_id TEXT NOT NULL DEFAULT '';
+ALTER TABLE recognition_task
+    ADD COLUMN service_tier TEXT NOT NULL DEFAULT '';
+ALTER TABLE recognition_task
+    ADD COLUMN source TEXT NOT NULL DEFAULT '';
+ALTER TABLE recognition_task
+    ADD COLUMN project_id TEXT NOT NULL DEFAULT '';
+ALTER TABLE recognition_task
+    ADD COLUMN trace_id TEXT NOT NULL DEFAULT '';
+"""
+
 MIGRATIONS: tuple[tuple[str, str], ...] = (
     ("001_platform_init", _M001),
     ("002_labeling_inbox", _M002),
@@ -1107,6 +1121,7 @@ MIGRATIONS: tuple[tuple[str, str], ...] = (
     ("027_agent_runtime_v1", _M027),
     ("028_state_projections_v2", _M028),
     ("029_profile_def_v1", _M029),
+    ("030_recognition_task_profile_contract", _M030),
 )
 
 
@@ -2004,16 +2019,21 @@ class PlatformStore:
         file_count: int, sku_count: int, created_by: str,
         result_json: str = "", error: str = "",
         idempotency_key: str | None = None,
+        recognition_profile_id: str = "",
+        service_tier: str = "", source: str = "",
+        project_id: str = "", trace_id: str = "",
     ) -> dict[str, Any]:
         self._conn.execute(
             """INSERT INTO recognition_task
                (task_id, entry, status, file_count, sku_count,
                 created_by, created_at, result_json, error,
-                idempotency_key)
-               VALUES (?,?,?,?,?,?,?,?,?,?)""",
+                idempotency_key, recognition_profile_id, service_tier,
+                source, project_id, trace_id)
+               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
             (task_id, entry, status, file_count, sku_count,
              created_by, _utcnow(), result_json, error,
-             idempotency_key),
+             idempotency_key, recognition_profile_id, service_tier,
+             source, project_id, trace_id),
         )
         self._conn.commit()
         return self.get_recognition_task(task_id)

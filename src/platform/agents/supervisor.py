@@ -1,44 +1,62 @@
-"""SLTF 纠偏 Task 4：Supervisor Agent 真实运行时。
+"""ABOS T6：Supervisor Agent 真实运行时（重写）。
 
-规则意图解析（provider 可替换；本地默认 rules fallback，明确标注
-provider="rules_fallback"，不伪装大模型推理）。
-能力：解析意图→查正式事实源→调 Domain Agent→证据引用→命令预览→
-白名单 UIIntent→高风险要求审批→不自行切生产。
+原则：
+- 平台定位唯一：智能业务操作系统（Graph+Loop 内核 + Domain Pack）；
+  识别只是首个 Domain Pack，不再自称 SKU 识别系统。
+- 不硬编码过期业务事实：所有状态类答案经 Query Tool 从 store/注册表/
+  运行态实时读取；查不到就诚实说查不到。
+- 统一响应契约：message/evidence_refs/ui_intents/command_previews/
+  tasks/delegations/memory_updates/requires_approval/trace_id
+  （保留 answer/commands 兼容字段一个版本）。
+- UIIntent 白名单执行，禁 HTML/JS 注入。
+- 高风险（production.switch/删除/发布/财务终结）一律拒绝或要求人工
+  独立批准；LLM 不可用时明确降级，不伪装智能回答。
 """
 from __future__ import annotations
 
 import json
 import uuid
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any
 
-UI_INTENTS = ("navigate", "open_panel", "filter", "highlight",
-              "compare", "pin_card", "show_evidence")
+from .kernel import UI_INTENT_KINDS, validate_ui_intent
+
+UI_INTENTS = tuple(sorted(UI_INTENT_KINDS))
 HIGH_RISK = ("production.switch", "training.launch_unbounded",
-             "data.delete", "publish.auto")
+             "data.delete", "publish.auto", "finance.finalize")
+
+_REPO_ROOT = Path(__file__).resolve().parents[3]
 
 
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+def _trace_id() -> str:
+    return "tr-" + uuid.uuid4().hex[:12]
 
 
-# ---- DeepSeek LLM provider（规则未命中时兜底）----
+# ---- DeepSeek LLM provider（规则未命中时兜底；不可用时明确降级）----
+
+_SYSTEM_PROMPT = (
+    "你是 Agentic Business OS（智能业务操作系统）的主管 Agent。平台以 "
+    "Graph+Loop 为执行内核，图像识别只是第一个 Domain Pack。基于以下"
+    "平台实时状态回答，简洁、诚实、可执行；不确定就说不确定；"
+    "涉及生产切换/发布/删除/财务终结一律要求人工批准。\n")
+
+
 def _deepseek_answer(text: str, context: str) -> str | None:
     import os
     import urllib.request
     key = os.environ.get("DEEPSEEK_API_KEY", "")
-    model = os.environ.get("DEEPSEEK_MODEL", "deepseek-v4-flash")
+    model = os.environ.get("DEEPSEEK_MODEL", "deepseek-chat")
     if not key:
         return None
     body = {
         "model": model,
         "messages": [
-            {"role": "system", "content":
-             "你是 SKU 识别系统的主管 Agent。基于以下平台实时状态回答，"
-             "简洁、诚实、可执行；涉及生产切换/发布一律要求人工批准。\n"
-             + context},
+            {"role": "system", "content": _SYSTEM_PROMPT + context},
             {"role": "user", "content": text}],
         "temperature": 0.3,
     }
@@ -55,273 +73,301 @@ def _deepseek_answer(text: str, context: str) -> str | None:
         return None
 
 
-def _platform_context(store) -> str:
-    try:
-        gate = store._conn.execute(
-            "SELECT status FROM training_cycle_v1 WHERE cycle_id="
-            "'sku_long_tail_nextgen_cycle_v1'").fetchone()
-        arts = store._conn.execute(
-            "SELECT artifact_id, candidate_status FROM"
-            " model_artifact_registry_v1").fetchall()
-        tasks = store._conn.execute(
-            "SELECT COUNT(*) c FROM task_state_projection_v1").fetchone()
-        return (f"Gate={gate['status'] if gate else '—'}; "
-                f"artifacts={[(a['artifact_id'], a['candidate_status'])
-                              for a in arts]}; 任务数={tasks['c']}; "
-                "micro-gold=LS22 200条待人工; production=prod_20260805_v5_r1 未切换")
-    except Exception:
-        return "平台状态不可用"
+class QueryTool:
+    """Supervisor 的事实查询层：只读 store/注册表/运行态，不写数据。"""
+
+    def __init__(self, store: Any) -> None:
+        self.store = store
+
+    def _safe(self, fn, default):
+        try:
+            return fn()
+        except Exception:
+            return default
+
+    def cycle_summary(self) -> dict | None:
+        def _q():
+            from src.platform.projection import CycleProjectionService
+            return CycleProjectionService(self.store).cycle_summary(
+                "sku_long_tail_nextgen_cycle_v1")
+        return self._safe(_q, None)
+
+    def artifacts(self) -> list[dict]:
+        def _q():
+            return [dict(r) for r in self.store._conn.execute(
+                "SELECT artifact_id, candidate_status, blocker,"
+                " evidence_level FROM model_artifact_registry_v1").fetchall()]
+        return self._safe(_q, [])
+
+    def blockers(self) -> list[dict]:
+        def _q():
+            return [dict(r) for r in self.store._conn.execute(
+                "SELECT payload_json, created_at FROM blackboard_event_v1"
+                " WHERE event_type='Blocker' ORDER BY created_at DESC"
+                " LIMIT 10").fetchall()]
+        return self._safe(_q, [])
+
+    def recognition_tasks(self) -> dict:
+        def _q():
+            total = self.store._conn.execute(
+                "SELECT COUNT(*) c FROM recognition_task").fetchone()["c"]
+            last = self.store._conn.execute(
+                "SELECT task_id, status, entry, sku_count, created_at"
+                " FROM recognition_task ORDER BY id DESC LIMIT 1").fetchone()
+            return {"total": total, "last": dict(last) if last else None}
+        return self._safe(_q, {"total": 0, "last": None})
+
+    def pending_commands(self) -> int:
+        def _q():
+            return self.store._conn.execute(
+                "SELECT COUNT(*) c FROM agent_command_v1"
+                " WHERE status='pending_approval'").fetchone()["c"]
+        return self._safe(_q, 0)
+
+    def training_process(self) -> str:
+        """无训练进程核验（只读 ps，不启停任何进程）。"""
+        import subprocess
+        try:
+            out = subprocess.run(
+                ["ps", "aux"], capture_output=True, text=True,
+                timeout=5).stdout
+            marks = ("ultralytics", "train_v1", "qlora", "finetune_qwen",
+                     "mlx_lm")
+            hits = [ln.split()[1] for ln in out.splitlines()
+                    if any(m in ln for m in marks) and "grep" not in ln]
+            return ("有疑似训练进程: " + ",".join(hits)) if hits \
+                else "当前无训练进程（MPS/MLX 空闲）"
+        except Exception:
+            return "训练进程状态查询失败"
+
+    def production(self) -> dict:
+        f = _REPO_ROOT / ".models" / "bundles" / "CURRENT.json"
+        try:
+            d = json.loads(f.read_text(encoding="utf-8"))
+            return {"bundle_id": d.get("bundle_id"),
+                    "previous": d.get("previous"), "found": True}
+        except Exception:
+            return {"bundle_id": None, "found": False}
+
+    def micro_gold_v2_project(self) -> int | None:
+        f = _REPO_ROOT / ".micro_gold_v2" / "ls_project.json"
+        try:
+            return json.loads(f.read_text(encoding="utf-8"))["project_id"]
+        except Exception:
+            return None
+
+    def sample_photo(self) -> str | None:
+        """仓库内合法样板照片（演示验收用；不进训练/金标准）。"""
+        d = _REPO_ROOT / "bad_samples"
+        try:
+            for f in sorted(d.iterdir()):
+                if f.suffix.lower() in (".jpg", ".jpeg", ".png"):
+                    return str(f.relative_to(_REPO_ROOT))
+        except Exception:
+            pass
+        return None
+
+    def platform_context(self) -> str:
+        cyc = self.cycle_summary()
+        prod = self.production()
+        rec = self.recognition_tasks()
+        cyc_txt = ("—" if not cyc else
+                   f"{cyc.get('done')}/{cyc.get('distinct_nodes')}")
+        return (f"cycle={cyc_txt}; "
+                f"artifacts={len(self.artifacts())}; "
+                f"识别任务={rec['total']}; 待批命令={self.pending_commands()}; "
+                f"production={prod.get('bundle_id') or '未知'}（未切换）")
+
+
+def _intent(kind: str, target: Any) -> dict:
+    it = {"kind": kind, "target": target}
+    validate_ui_intent(it)   # fail-closed：非法 intent 直接抛错
+    return it
 
 
 class SupervisorAgent:
     def __init__(self, store: Any, *, provider: str = "rules_fallback",
                  llm_fn: Any = None) -> None:
         self.store = store
-        self.provider = provider  # 可替换；默认规则 fallback
+        self.provider = provider
         self.llm_fn = llm_fn
+        self.q = QueryTool(store)
 
-    # ---- 事实查询 ----
+    # ---- 统一响应构造 ----
 
-    def _cycle(self) -> dict | None:
-        row = self.store._conn.execute(
-            "SELECT * FROM training_cycle_v1 WHERE cycle_id="
-            "'sku_long_tail_nextgen_cycle_v1'").fetchone()
-        if row is None:
-            return None
-        nodes = self.store._conn.execute(
-            "SELECT node, status FROM training_cycle_node_v1"
-            " WHERE cycle_id=? ORDER BY id", (row["cycle_id"],)).fetchall()
-        return {**dict(row),
-                "nodes": [{"node": n["node"], "status": n["status"]}
-                          for n in nodes]}
+    def _resp(self, session_id: str) -> dict[str, Any]:
+        return {"session_id": session_id,
+                "provider": self.provider,
+                "message": "",
+                "evidence_refs": [],
+                "ui_intents": [],
+                "command_previews": [],
+                "tasks": [],
+                "delegations": [],
+                "memory_updates": [],
+                "requires_approval": False,
+                "trace_id": _trace_id()}
 
-    def _artifacts(self) -> list[dict]:
-        return [dict(r) for r in self.store._conn.execute(
-            "SELECT artifact_id, candidate_status, blocker,"
-            " evidence_level FROM model_artifact_registry_v1").fetchall()]
+    def _delegate(self, resp: dict, agent_id: str, action: str,
+                  result: Any) -> None:
+        resp["delegations"].append({
+            "agent_id": agent_id, "action": action,
+            "status": "ok", "receipt": result, "at": _now()})
 
-    def _tier(self) -> dict | None:
-        row = self.store._conn.execute(
-            "SELECT summary_json FROM evaluation_registry_v1"
-            " WHERE eval_id='sku_readiness_policy'").fetchone()
-        return json.loads(row["summary_json"]) if row else None
-
-    def _blackboard(self, etype: str | None = None) -> list[dict]:
-        q = "SELECT * FROM blackboard_event_v1"
-        args: tuple = ()
-        if etype:
-            q += " WHERE event_type=?"
-            args = (etype,)
-        return [dict(r) for r in self.store._conn.execute(
-            q + " ORDER BY created_at DESC", args).fetchall()]
-
-    # ---- 意图解析 ----
+    # ---- 领域回答（全部走 Query Tool 实时事实）----
 
     def chat(self, session_id: str, text: str, *,
              actor: str) -> dict[str, Any]:
         t = text.strip()
-        resp: dict[str, Any] = {"session_id": session_id,
-                                "provider": self.provider,
-                                "evidence": [], "ui_intents": [],
-                                "commands": [], "requires_approval": False}
+        resp = self._resp(session_id)
+        q = self.q
 
-        if "项目 21" in t or ("21" in t and "审核" in t):
-            resp["answer"] = ("项目 21 不能继续审核：五键及 source-group "
-                              "泄漏门禁未实现（仅输出 crop SHA 对比），已 "
-                              "SUPERSEDED_INVALID_INDEPENDENCE_AUDIT；请进新"
-                              "项目 demo_micro_gold_v2_blind。")
-            resp["evidence"] = ["platform.sqlite:flow_supersession_v1"]
-        elif "0.828" in t and ("降级" in t or "泄漏" in t):
-            resp["answer"] = ("0.828 被降级因 holdout v2 与 QLoRA 训练集 "
-                              "24/84=28.6% 来源组重叠；标记 "
-                              "EXPERIMENTAL_GROUP_LEAKED_EVALUATION。")
-            resp["evidence"] = [
-                "reports/nextgen_v2/m4_three_version_eval_v2.json"]
-        elif "同源" in t and ("micro" in t or "新" in t):
-            resp["answer"] = ("新 micro-gold v2 与训练集不同源：forbidden "
-                              "identity index（20,597 SHA/8,338 group）"
-                              "fail-closed 排除；独立 raw 照片池。")
-            resp["evidence"] = [
-                "reports/nextgen_v2/forbidden_index_v2/"
-                "forbidden_identity_index_v2.audit.json"]
-        elif "新项目" in t and ("ID" in t or "id" in t):
-            import json as _j
-            try:
-                pid = _j.loads((Path(".micro_gold_v2/ls_project.json")
-                       if False else Path(
-                           "/Users/zhangweiqi/Documents/QY/项目/LLM-Image"
-                           "/.micro_gold_v2/ls_project.json")).read_text()
-                       )["project_id"]
-            except Exception:
-                pid = "待导入"
-            resp["answer"] = f"新有效项目 ID={pid}（demo_micro_gold_v2_blind）。"
-        elif "多少条" in t or "完成多少" in t:
-            resp["answer"] = ("用户需完成 200 条主审（120 canonical+40 "
-                              "pending+20 hard+20 negative）；确定性抽 40 "
-                              "二盲，分歧仲裁。")
-        elif "数据" in t and ("不足" in t or "缺" in t):
-            resp["answer"] = ("仍不足：M1/M2 全场景图（≥3,000 补采）、"
-                              "45 pending 人工裁决、micro-gold 人工审核。")
-        elif "候选" in t and ("哪些" in t or "模型是" in t):
-            resp["answer"] = ("候选：M3 E1（m3_tvt_e1_v2，综合优先档）/"
-                              "M3 E5（m3_tvt_e5_v2，calibration 档）/"
-                              "M4 new real adapter，均 "
-                              "CANDIDATE_PENDING_MICRO_GOLD；M1/M2 为 "
-                              "PILOT_NOT_CANDIDATE。")
-            resp["evidence"] = ["platform.sqlite:model_artifact_registry_v1"]
-        elif "E1" in t and "E5" in t and ("区别" in t or "差异" in t):
-            resp["answer"] = ("E1 top1 0.9484/F1 0.94/worst 0.766 领先；"
-                              "E5 ECE 0.013 校准最优；各有优劣，分档保留，"
-                              "不强行选一个。")
-            resp["evidence"] = [".models/m3_tvt_e1_v2/train_report.json",
-                                ".models/m3_tvt_e5_v2/train_report.json"]
-        elif "0.828" in t or ("M4" in t and "真实" in t):
-            resp["answer"] = ("0.828 为三版本真实推理结果（v2 证据版）："
-                              "逐样本 raw output/generation_tokens/wall time/"
-                              "prompt hash/adapter sha 在案；base 0.475/旧 "
-                              "0.656/新 0.828。仍为 "
-                              "CANDIDATE_PENDING_MICRO_GOLD。")
-            resp["evidence"] = [
-                "reports/nextgen_v2/m4_three_version_eval_v2.json",
-                "reports/nextgen_v2/m4_evidence_v2/"
-                "per_sample_new_real_adapter.jsonl"]
-        elif "micro-gold" in t or "micro_gold" in t or "micro gold" in t:
-            resp["answer"] = ("demo_micro_gold_v1 共 200 任务（LS 项目 21）："
-                              "120 canonical+40 pending+20 困难+20 负样本；"
-                              "blind 无 prediction；待人工主审。")
-            resp["evidence"] = [".micro_gold_v1/manifest.json"]
-        elif "训练进程" in t or "正在训练" in t or "训练运行" in t:
-            resp["answer"] = ("当前无训练进程（MPS/MLX 空闲）；"
-                              "本轮只评估不训练。")
-        elif "M1" in t and ("上线" in t or "候选" in t):
-            resp["answer"] = ("M1 不可以上线：pilot mAP50 0.077，仅 894 张"
-                              "全场景图，状态 PILOT_NOT_CANDIDATE；需补采"
-                              "全场景图并独立业务评估。")
-            resp["evidence"] = [".models/nextgen_detector_pilot_v1/"
-                                "train_report.json"]
-        elif "M3" in t and ("最好" in t or "哪个" in t or "胜出" in t):
-            resp["answer"] = ("E1/E5 各有优劣，独立测试"
-                              "（canonical38_train_val_test_v2）完成前不提前"
-                              "判定；两者均 PILOT_PENDING_EVALUATION。")
-            resp["evidence"] = ["reports/nextgen_v2/m3_longtail_ablation.json"]
-        elif "Qwen" in t or "M4" in t or "达标" in t:
-            resp["answer"] = ("KB 检索通过（coverage 1.0/recall@8 1.0），但 VLM"
-                              "裁决准确率尚未评估；M4="
-                              "PILOT_PENDING_EVALUATION，三版本独立对比待跑。")
-            resp["evidence"] = ["reports/nextgen_v2/kb_canonical38_recall.json"]
-        elif "250" in t:
-            resp["answer"] = ("不需要。旧 250 流程已 SUPERSEDED_FOR_DEMO_"
-                              "TRAINING；替代为 demo_micro_gold_v1（待用户"
-                              "启动），不再建议先完成 250 项审核。")
-            resp["evidence"] = ["platform.sqlite:flow_supersession_v1"]
-        elif "训练到哪里" in t or "目前训练" in t or "cycle" in t.lower():
-            from src.platform.projection import (
-                CycleProjectionService)
-            cps = CycleProjectionService(self.store)
-            sm = cps.cycle_summary("sku_long_tail_nextgen_cycle_v1")
-            resp["answer"] = (f"Cycle 16/19 节点完成（{sm['done']}/"
-                              f"{sm['distinct_nodes']}）；剩余 3 个评估/决策"
-                              "节点：DemoEvaluation、"
-                              "AwaitingIndependentEvaluation、"
-                              "AwaitingProductionDecision。")
-            resp["evidence"] = ["platform.sqlite:"
-                                "training_cycle_node_state_v2"]
-            resp["ui_intents"] = [{"kind": "open_panel",
-                                   "target": "training_cycle"}]
-        elif "分类器" in t and ("结果" in t or "打开" in t):
-            a = next((x for x in self._artifacts()
-                      if x["artifact_id"] == "nextgen_classifier_grouped_v1"),
-                     None)
-            resp["answer"] = (f"M3 grouped baseline：val top1 30.7%，"
-                              f"状态 {a['candidate_status'] if a else '未注册'}；"
-                              "random 82.4% 为泄漏证据，不参与排名")
-            resp["evidence"] = [
-                "reports/nextgen_v2/classifier_split_compare.json",
-                "reports/nextgen_v2/m3_classifier_cropped_report.json"]
-            resp["ui_intents"] = [{"kind": "navigate",
-                                   "target": "/training"},
-                                  {"kind": "highlight",
-                                   "target": "m3_grouped"}]
-        elif "SKU" in t and ("最少" in t or "长尾" in t or "尾部" in t):
-            tier = self._tier()
-            worst = (tier or {}).get("worst_ten", [])[:5]
-            resp["answer"] = ("数据最少的类（Tier D 前5）：" +
-                              "、".join(w["display"] for w in worst))
-            resp["evidence"] = [
-                "reports/nextgen_v2/sku_data_readiness_policy_v1.json"]
-            resp["ui_intents"] = [{"kind": "open_panel",
-                                   "target": "long_tail"}]
-        elif "阻塞" in t or "blocker" in t.lower():
-            bl = self._blackboard("Blocker")
-            resp["answer"] = ("当前阻塞 " + str(len(bl)) + " 个：" +
-                              "；".join(json.loads(b["payload_json"])
-                                       .get("text", "") for b in bl[:3]))
-            resp["evidence"] = ["platform.sqlite:blackboard_event_v1"]
-        elif "创建" in t and "计划" in t:
-            resp["answer"] = ("已生成 M3 长尾消融计划预览（E1-E5，grouped "
-                              "split，同预算 10-15 epoch early stop）。"
-                              "批准后才创建 Plan，不直接启动。")
-            cmd_id = "cmd-" + uuid.uuid4().hex[:8]
-            resp["commands"] = [{"command_id": cmd_id,
-                                 "kind": "training.plan.create",
-                                 "params": {"lane": "classifier",
-                                            "experiments": ["E1", "E2", "E3",
-                                                            "E4", "E5"]},
-                                 "status": "pending_approval"}]
-            resp["requires_approval"] = True
-            resp["ui_intents"] = [{"kind": "show_evidence",
-                                   "target": cmd_id}]
-        elif "比较" in t and ("random" in t or "grouped" in t):
-            resp["answer"] = ("random 82.4%（泄漏，INVALID）vs grouped 30.7%"
-                              "（真实基线）；Δ47.7pp")
-            resp["ui_intents"] = [{"kind": "compare",
-                                   "target": ["m3_random", "m3_grouped"]}]
-            resp["evidence"] = [
-                "reports/nextgen_v2/classifier_split_compare.json"]
-        elif "label studio" in t.lower() or "打开LS" in t:
-            resp["answer"] = "打开 Label Studio 项目 19/20（assisted/blind）"
-            resp["ui_intents"] = [{"kind": "navigate",
-                                   "target": "http://127.0.0.1:8300/projects/19"}]
-        elif "qwen" in t.lower() or "M4" in t:
-            resp["answer"] = ("M4 禁训原因：KB canonical38 未建，coverage=0，"
-                              "candidate recall=null。先建 KB，recall@8≥90% "
-                              "才可 pilot。")
-            resp["evidence"] = [
-                "reports/nextgen_v2/qwen_candidate_recall_real.json"]
-            resp["ui_intents"] = [{"kind": "open_panel", "target": "kb"}]
-        elif "停止" in t and "训练" in t:
-            resp["answer"] = ("当前无运行中训练（MPS heavy lease 空）。"
-                              "若有运行中 run，safe-stop 需确认退出证据。")
-            resp["commands"] = [{"command_id": "cmd-" + uuid.uuid4().hex[:8],
-                                 "kind": "training.safe_stop",
-                                 "status": "pending_approval"}]
-            resp["requires_approval"] = True
-        elif "切换生产" in t or "切生产" in t or "production" in t.lower():
-            resp["answer"] = ("拒绝：production 切换为高风险操作，"
-                              "Supervisor 无权自行执行，需人工独立批准。")
+        if "切换生产" in t or "切生产" in t or (
+                "production" in t.lower() and "切换" in t):
+            resp["message"] = ("拒绝：production 切换为高风险操作，"
+                               "Supervisor 无权自行执行，需人工独立批准。")
             resp["requires_approval"] = True
             resp["denied"] = True
+        elif "删除" in t and ("数据" in t or "资产" in t):
+            resp["message"] = ("拒绝：删除数据/资产属于高风险操作，"
+                               "需人工独立批准并明确删除目标。")
+            resp["requires_approval"] = True
+            resp["denied"] = True
+        elif ("识别" in t and ("照片" in t or "这批" in t or "任务" in t
+                               and "创建" in t)) or "发起识别" in t:
+            # 委派 Recognition Agent：生成命令预览，批准后走统一 API
+            cmd_id = "cmd-" + uuid.uuid4().hex[:8]
+            resp["message"] = (
+                "已委派 Recognition Agent 生成识别命令预览：批准后将经 "
+                "POST /api/v1/vision/recognition-tasks 创建统一任务"
+                "（同一 Profile/Service/证据链）。")
+            resp["command_previews"].append({
+                "command_id": cmd_id,
+                "kind": "vision.recognition.create",
+                "params": {"recognition_profile_id": "production_legacy",
+                           "service_tier": "standard", "source": "agent",
+                           "image_path": q.sample_photo()},
+                "impact": "创建识别任务并计入任务历史/计费",
+                "cost_estimate": "按 recognition_call 计量",
+                "idempotency_key": "agent-" + uuid.uuid4().hex[:8],
+                "rollback": "任务可查询/标记，不删除历史",
+                "status": "pending_approval"})
+            resp["requires_approval"] = True
+            resp["ui_intents"].append(_intent("navigate", "/vision/tasks"))
+            self._delegate(resp, "recognition_agent",
+                           "vision.recognition.create.preview", cmd_id)
+        elif "训练" in t and ("进程" in t or "正在" in t or "运行" in t):
+            resp["message"] = q.training_process() + "；本轮只评估不训练。"
+            resp["evidence_refs"].append({"kind": "host",
+                                          "ref": "ps aux（只读）"})
+        elif "训练到哪里" in t or "cycle" in t.lower() or "目前训练" in t:
+            sm = q.cycle_summary()
+            if sm:
+                resp["message"] = (
+                    f"Cycle {sm['done']}/{sm['distinct_nodes']} 节点完成；"
+                    "详情见训练控制面。")
+                resp["evidence_refs"].append(
+                    {"kind": "db", "ref": "training_cycle_node_state_v2"})
+            else:
+                resp["message"] = "未查询到训练 cycle 记录。"
+            resp["ui_intents"].append(_intent("navigate", "/vision/models"))
+        elif "候选" in t and ("哪些" in t or "模型" in t):
+            arts = q.artifacts()
+            if arts:
+                resp["message"] = ("候选模型 " + str(len(arts)) + " 个：" +
+                                   "；".join(f"{a['artifact_id']}="
+                                             f"{a['candidate_status']}"
+                                             for a in arts[:6]))
+                resp["evidence_refs"].append(
+                    {"kind": "db", "ref": "model_artifact_registry_v1"})
+            else:
+                resp["message"] = "未查询到已注册候选模型。"
+        elif "micro-gold" in t and ("新项目" in t or "ID" in t
+                                     or "id" in t):
+            pid = q.micro_gold_v2_project()
+            resp["message"] = (f"micro-gold v2 有效项目 ID={pid}"
+                               if pid else
+                               "micro-gold v2 项目信息未导入（无本地记录）。")
+            resp["evidence_refs"].append(
+                {"kind": "file", "ref": ".micro_gold_v2/ls_project.json"})
+        elif "阻塞" in t or "blocker" in t.lower():
+            bl = q.blockers()
+            resp["message"] = ("当前阻塞 " + str(len(bl)) + " 个" +
+                               ("：" + "；".join(
+                                   json.loads(b["payload_json"]).get(
+                                       "text", "") for b in bl[:3])
+                                if bl else "（无）"))
+            resp["evidence_refs"].append(
+                {"kind": "db", "ref": "blackboard_event_v1"})
+        elif "识别任务" in t or "任务历史" in t:
+            rec = q.recognition_tasks()
+            last = rec["last"]
+            resp["message"] = (
+                f"识别任务共 {rec['total']} 条" +
+                (f"；最近一条 {last['task_id'][:8]}… 状态="
+                 f"{last['status']}（{last['entry']}，SKU "
+                 f"{last['sku_count']}）" if last else "（暂无）"))
+            resp["evidence_refs"].append(
+                {"kind": "db", "ref": "recognition_task"})
+            resp["ui_intents"].append(_intent("navigate", "/vision/tasks"))
+        elif "打开" in t or "跳转" in t:
+            target = self._nav_target(t)
+            resp["message"] = f"已打开 {target}"
+            resp["ui_intents"].append(_intent("navigate", target))
+        elif "这里能做什么" in t or "帮助" in t or "怎么用" in t:
+            resp["message"] = (
+                "这是 Agentic Business OS 主管工作台：我可以汇总待办/审批/"
+                "运行/异常，委派领域 Agent 创建识别任务（需批准），并用 "
+                "UIIntent 打开对应页面。识别入口在“智能识别”模块。")
+            resp["ui_intents"].append(_intent("navigate", "/vision/recognize"))
         else:
-            llm = _deepseek_answer(t, _platform_context(self.store))
+            llm = _deepseek_answer(t, q.platform_context())
             if llm:
-                resp["answer"] = llm
+                resp["message"] = llm
                 resp["provider"] = "deepseek"
             else:
-                resp["answer"] = ("（LLM 暂不可用）可问：训练进度/候选模型/"
-                                  "SKU 长尾/阻塞/创建计划/比较/打开 LS/"
-                                  "M4/切换生产/micro-gold")
+                resp["message"] = (
+                    "（LLM 暂不可用，已降级为规则回答）可问：识别任务/"
+                    "候选模型/训练进度/阻塞/打开某页面/切换生产（将被拒绝）")
                 resp["provider"] = "rules_fallback"
-        # 记录会话消息
+
+        self._persist(session_id, text, actor, resp)
+        # 兼容字段（一个版本后移除）
+        resp["answer"] = resp["message"]
+        resp["commands"] = resp["command_previews"]
+        resp["evidence"] = [e.get("ref", str(e))
+                            for e in resp["evidence_refs"]]
+        return resp
+
+    @staticmethod
+    def _nav_target(t: str) -> str:
+        table = (("识别", "/vision/recognize"),
+                 ("任务", "/vision/tasks"),
+                 ("标注", "/vision/annotation"),
+                 ("数据集", "/vision/datasets"),
+                 ("模型", "/vision/models"), ("训练", "/vision/models"),
+                 ("证据", "/vision/evidence"),
+                 ("资产", "/data/assets"), ("数据", "/data/assets"),
+                 ("状态", "/status"), ("系统", "/status"),
+                 ("工作流", "/workflow/runs"),
+                 ("run", "/workflow/runs"))
+        for kw, route in table:
+            if kw in t.lower():
+                return route
+        return "/"
+
+    def _persist(self, session_id: str, text: str, actor: str,
+                 resp: dict) -> None:
         self.store._conn.execute(
             "INSERT INTO agent_session_msg_v1 (session_id, role, content,"
             " meta_json, created_at) VALUES (?,?,?,?,?)",
             (session_id, "user", text,
              json.dumps({"actor": actor}, ensure_ascii=False), _now()))
+        meta = {k: v for k, v in resp.items()
+                if k not in ("message", "answer")}
         self.store._conn.execute(
             "INSERT INTO agent_session_msg_v1 (session_id, role, content,"
             " meta_json, created_at) VALUES (?,?,?,?,?)",
-            (session_id, "supervisor", resp["answer"],
-             json.dumps({k: v for k, v in resp.items()
-                         if k != "answer"}, ensure_ascii=False), _now()))
+            (session_id, "supervisor", resp["message"],
+             json.dumps(meta, ensure_ascii=False, default=str), _now()))
         self.store._conn.commit()
-        return resp

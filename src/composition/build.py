@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 from pathlib import Path
 from typing import Any, Mapping
@@ -41,6 +42,9 @@ def build_production_bundle(
     capabilities = bootstrap_default_registry(
         recognition_adapter, monitor_adapter, label_studio_adapter
     )
+    # ABOS T3：reference.echo 非识别参考模块（证明内核不绑 FMCG）
+    from src.modules.reference_echo import register_reference_echo
+    register_reference_echo(capabilities)
     if cascade_adapters is not None:
         # VLM-002：FMCG 级联能力由组合根注入；adapter 缺失时 fail-closed。
         from src.modules.fmcg.cascade.manifest import register_fmcg_cascade
@@ -170,6 +174,58 @@ def build_share_router(bundle: PlatformBundle):
     return create_share_router(bundle.store, auth=AuthService(bundle.store))
 
 
+def build_profiles_service(bundle: PlatformBundle):
+    """ABOS T7：Profile 解析服务（定义在领域模块，经组合根注入平台）。"""
+    from src.modules.training_control.profiles import derive_profiles
+
+    class _ProfilesService:
+        def list_profiles(self):
+            return derive_profiles(bundle.store)
+
+    return _ProfilesService()
+
+
+def build_agent_approval_hook(bundle: PlatformBundle, profiles_service):
+    """ABOS T6/T8：命令批准后的领域执行钩子。
+
+    目前支持 vision.recognition.create：经统一 RecognitionTaskService
+    创建真实任务（source=agent）；Agent 不直接写库。
+    """
+    from src.platform.api.recognition_tasks import run_recognition_batch
+    from src.platform.adapters.legacy.recognition import RecognitionV2Adapter
+
+    adapter = RecognitionV2Adapter()
+
+    def on_approved(row: dict):
+        if row.get("kind") != "vision.recognition.create":
+            return None
+        params = json.loads(row.get("params_json") or "{}")
+        image_path = params.get("image_path")
+        if not image_path:
+            return {"status": "requires_input",
+                    "next_action": "请在即时识别页上传照片，或给命令"
+                                   "预览补充 image_path（仅限仓库内样板）"}
+        p = (REPO_ROOT / image_path).resolve()
+        if REPO_ROOT not in p.parents or not p.is_file():
+            raise ValueError(f"image_path 越界或不存在: {image_path}")
+        data = p.read_bytes()
+        out = run_recognition_batch(
+            adapter, [(p.name, data)],
+            conf=float(params.get("conf", 0.25)),
+            store=bundle.store, entry="agent", actor="agent:supervisor",
+            idempotency_key=params.get("idempotency_key"),
+            recognition_profile_id=params.get(
+                "recognition_profile_id", "production_legacy"),
+            service_tier=params.get("service_tier", "standard"),
+            source="agent", profiles_service=profiles_service)
+        return {"status": "created",
+                "task_id": out["task"]["task_id"],
+                "recognition_profile_id": out["recognition_profile_id"],
+                "trace_id": out.get("trace_id")}
+
+    return on_approved
+
+
 def build_app_with_bundle(
     bundle: PlatformBundle | None = None,
     *,
@@ -180,8 +236,12 @@ def build_app_with_bundle(
     if bundle is not None:
         _worker, jobs_router = build_jobs_router(bundle)
         share_router = build_share_router(bundle)
+        profiles_service = build_profiles_service(bundle)
+        agent_on_approved = build_agent_approval_hook(
+            bundle, profiles_service)
     else:
         _worker, jobs_router, share_router = None, None, None
+        profiles_service, agent_on_approved = None, None
     return create_app(
         services=services,
         probe=probe,
@@ -192,4 +252,6 @@ def build_app_with_bundle(
         training_control_router=build_training_control_router(bundle) if bundle is not None else None,
         jobs_router=jobs_router,
         share_router=share_router,
+        profiles_service=profiles_service,
+        agent_on_approved=agent_on_approved,
     )

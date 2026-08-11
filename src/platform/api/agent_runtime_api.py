@@ -28,7 +28,10 @@ def _now() -> str:
 
 
 def create_agent_runtime_router(store: Any,
-                                auth: AuthService | None) -> APIRouter:
+                                auth: AuthService | None,
+                                on_approved: Any = None) -> APIRouter:
+    """on_approved(row_dict) -> result：命令批准后的领域执行钩子
+    （由组合根注入；Agent 不直接写库/执行 SQL）。"""
     router = APIRouter(tags=["agent-runtime"])
 
     @router.post("/api/agent/v1/sessions")
@@ -72,8 +75,8 @@ def create_agent_runtime_router(store: Any,
             raise HTTPException(404, "session not found")
         sup = SupervisorAgent(store)
         resp = sup.chat(body.session_id, body.text, actor=p["actor"])
-        # 命令预览落库
-        for c in resp.get("commands", []):
+        # 命令预览落库（新契约 command_previews，兼容旧 commands）
+        for c in resp.get("command_previews") or resp.get("commands", []):
             store._conn.execute(
                 "INSERT INTO agent_command_v1 (command_id, kind, params_json,"
                 " status, created_by, created_at) VALUES (?,?,?,?,?,?)",
@@ -108,7 +111,21 @@ def create_agent_runtime_router(store: Any,
                  row["params_json"], "approved_not_started", p["actor"],
                  _now(), _now()))
             store._conn.commit()
-        return {"status": "approved"}
+        result = None
+        if on_approved is not None:
+            # 领域执行经组合根注入的钩子（如 vision.recognition.create
+            # → 统一 RecognitionTaskService）；失败不冒充成功
+            try:
+                result = on_approved(dict(row))
+            except Exception as e:
+                store._conn.execute(
+                    "UPDATE agent_command_v1 SET status='approved_failed',"
+                    " decided_at=? WHERE command_id=?",
+                    (_now(), command_id))
+                store._conn.commit()
+                raise HTTPException(502, f"批准后执行失败: {e}")
+        return {"status": "approved",
+                **({"execution": result} if result is not None else {})}
 
     @router.post("/api/agent/v1/commands/{command_id}/reject")
     def reject(command_id: str, request: Request) -> dict:

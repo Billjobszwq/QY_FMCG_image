@@ -39,6 +39,7 @@ def create_app(
     recognition_adapter: RecognitionV2Adapter | None = None,
     monitor_adapter: MonitorAdapter | None = None,
     registry: CapabilityRegistry | None = None,
+    module_registry=None,
     bundle: PlatformBundle | None = None,
     labeling_router=None,
     training_router=None,
@@ -46,9 +47,13 @@ def create_app(
     jobs_router=None,
     share_router=None,
     cascade_router=None,
+    profiles_service=None,
+    agent_on_approved=None,
 ) -> FastAPI:
     app = FastAPI(
-        title="Unified Platform API",
+        title="Agentic Business OS API",
+        description=("以 Graph+Loop 为智能执行内核、以模块化 Domain Pack "
+                     "为业务能力的智能业务操作系统（识别是首个 Domain Pack）"),
         version=PLATFORM_VERSION,
         docs_url="/api/v1/docs",
         openapi_url="/api/v1/openapi.json",
@@ -85,6 +90,10 @@ def create_app(
     rec_adapter = recognition_adapter or RecognitionV2Adapter()
     mon_adapter = monitor_adapter or MonitorAdapter()
     cap_registry = registry or bootstrap_default_registry(rec_adapter, mon_adapter)
+    if module_registry is None:
+        # ABOS T3：唯一模块事实源（ModuleManifestV2 目录投影）
+        from ..module_catalog import build_default_module_registry
+        module_registry = build_default_module_registry()
 
     @app.get("/api/v1/version")
     def version():
@@ -127,11 +136,13 @@ def create_app(
         from src.platform.api.agent_runtime_api import (
             create_agent_runtime_router)
         app.include_router(create_agent_runtime_router(
-            bundle.store, auth=AuthService(bundle.store)))
+            bundle.store, auth=AuthService(bundle.store),
+            on_approved=agent_on_approved))
         from src.platform.api.recon_api import create_recon_router
         from src.platform.api.modules_api import create_modules_router
         app.include_router(create_recon_router(bundle.store))
-        app.include_router(create_modules_router())
+        app.include_router(create_modules_router(
+            module_registry, capability_registry=cap_registry))
         # U5-2/U5-3：Graph+Loop v2 运行（runs/trail 登录只读；
         # start/gate 需 session+CSRF 且仅限 admin）
         from src.platform.api.loops import create_loops_router
@@ -142,7 +153,8 @@ def create_app(
             create_recognition_tasks_router)
         app.include_router(create_recognition_tasks_router(
             bundle.store, rec_adapter,
-            auth=AuthService(bundle.store)))
+            auth=AuthService(bundle.store),
+            profiles_service=profiles_service))
         # VLM-014：若组合根注入 cascade_service，则自动装配统一 cascade API
         if cascade_router is None and bundle.cascade_service is not None:
             from src.platform.api.cascade import create_cascade_router

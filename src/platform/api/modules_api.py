@@ -1,59 +1,78 @@
-"""API 预留：模块注册表。新模块 = manifest 注册（不改数据架构）。"""
+"""ABOS T3：模块注册表 API —— 只消费 ModuleManifestV2 投影。
+
+本文件不再持有任何业务模块常量（唯一事实源在
+src/platform/module_catalog.py + registry.ModuleRegistry）。
+"""
 from __future__ import annotations
 
-from fastapi import APIRouter
+import json
+from pathlib import Path
+from typing import Any
 
-MODULES = [
-    {"module_id": "overview", "name": "总览·主管", "color": "#ab54f7",
-     "agent": "supervisor-agent", "api_prefix": "/api/v1/",
-     "status": "live"},
-    {"module_id": "recognition", "name": "图像识别", "color": "#16a6ff",
-     "agent": "recognition-agent", "api_prefix": "/api/v1/recognition",
-     "status": "live"},
-    {"module_id": "annotation", "name": "标注中心", "color": "#1be349",
-     "agent": "annotation-agent", "api_prefix": "/api/v1/labelstudio",
-     "status": "live"},
-    {"module_id": "data", "name": "数据仓库", "color": "#ffdb08",
-     "agent": "data-agent", "api_prefix": "/api/v1/assets",
-     "status": "live"},
-    {"module_id": "training", "name": "模型训练", "color": "#ff8e0a",
-     "agent": "modelops-agent", "api_prefix": "/api/v1/training",
-     "status": "live"},
-    {"module_id": "workflow", "name": "工作流编排", "color": "#c79dfc",
-     "agent": "workflow-agent", "api_prefix": "/api/v1/workflows",
-     "status": "live"},
-    {"module_id": "biz", "name": "经营智能", "color": "#ea3737",
-     "agent": "biz-agent", "api_prefix": "/api/v1/biz",
-     "status": "planned",
-     "submodules": ["BI 报表", "数据告警", "财务对账", "地理位置分析",
-                    "线库规划", "问卷设置", "数据深度对话", "策略分析"]},
-    {"module_id": "system", "name": "系统", "color": "#00aa3c",
-     "agent": "system-agent", "api_prefix": "/api/v1/system",
-     "status": "live"},
-]
+from fastapi import APIRouter, HTTPException
+
+from ..module_catalog import PLATFORM_IDENTITY
+from ..registry import ModuleRegistry
+
+_REPO_ROOT = Path(__file__).resolve().parents[3]
 
 
-def create_modules_router() -> APIRouter:
+def _current_production() -> dict[str, Any]:
+    """production bundle 实时读取（不硬编码；缺失时诚实返回）。"""
+    f = _REPO_ROOT / ".models" / "bundles" / "CURRENT.json"
+    if not f.is_file():
+        return {"bundle_id": None, "source": str(f), "found": False}
+    try:
+        d = json.loads(f.read_text(encoding="utf-8"))
+        return {"bundle_id": d.get("bundle_id"),
+                "previous": d.get("previous"),
+                "published_at": d.get("published_at"),
+                "source": str(f), "found": True}
+    except Exception as e:  # 读取失败不谎报
+        return {"bundle_id": None, "found": False,
+                "source": str(f), "error": str(e)}
+
+
+def create_modules_router(
+    module_registry: ModuleRegistry,
+    *,
+    capability_registry: Any | None = None,
+    degraded_modules: set[str] | None = None,
+) -> APIRouter:
     router = APIRouter(tags=["modules"])
 
-    @router.get("/api/v1/biz/m3bars")
-    def m3bars() -> dict:
-        import json as _j
-        from pathlib import Path as _P
-        bars = []
-        for e in ("e1", "e2", "e3", "e4", "e5"):
-            f = _P(f".models/m3_ablation_{e}_v1/train_report.json")
-            v = 0.0
-            if f.exists():
-                v = _j.loads(f.read_text()).get("final", {}) \
-                    .get("top1", 0.0)
-            bars.append({"k": e.upper(), "v": round(v, 4)})
-        return {"bars": bars}
+    @router.get("/api/v1/platform/identity")
+    def identity() -> dict:
+        """平台唯一身份（登录/标题/footer/OpenAPI/Agent prompt 共用）。"""
+        return dict(PLATFORM_IDENTITY)
+
+    @router.get("/api/v1/platform/production")
+    def production() -> dict:
+        """当前 production bundle（运行态实时读取）。"""
+        return _current_production()
 
     @router.get("/api/v1/modules")
     def modules() -> dict:
-        return {"count": len(MODULES), "modules": MODULES,
-                "contract": "新模块注册 manifest 即得 API 前缀/色系/agent，"
-                            "不修改底层数据架构"}
+        proj = module_registry.project(degraded=degraded_modules)
+        return {"count": len(proj), "modules": proj,
+                "source": "ModuleManifestV2",
+                "contract": "导航/Agent/API/权限/UI 均由 Module Manifest V2 "
+                            "单一事实源投影；新模块注册 manifest 即接入"}
+
+    @router.get("/api/v1/modules/{module_id}")
+    def module_detail(module_id: str) -> dict:
+        m = module_registry.get(module_id)
+        if m is None:
+            raise HTTPException(404, f"module 未注册: {module_id}")
+        return next(x for x in module_registry.project(
+            degraded=degraded_modules) if x["module_id"] == module_id)
+
+    @router.get("/api/v1/reference/echo")
+    def reference_echo(text: str = "hello") -> dict:
+        """reference.echo：非识别模块证明平台内核没有绑定 FMCG。"""
+        if capability_registry is None:
+            raise HTTPException(503, "capability registry 未装配")
+        adapter = capability_registry.get("reference.echo")
+        return adapter.echo(text)
 
     return router
