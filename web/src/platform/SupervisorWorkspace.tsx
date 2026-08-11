@@ -93,9 +93,10 @@ export default function SupervisorWorkspace() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const [tab, setTab] = useState<"board" | "chat">("board");
-  // 窄屏默认收起，避免遮挡主内容；顶栏/悬浮按钮可展开
+  // ABOSV2-P1-006：≥1440 可 dock；1024–1439 默认收起（打开为不透明
+  // 临时抽屉，不遮挡主内容）；<1024 全屏抽屉。
   const [open, setOpen] = useState<boolean>(() =>
-    typeof window !== "undefined" ? window.innerWidth >= 1024 : true);
+    typeof window !== "undefined" ? window.innerWidth >= 1440 : true);
 
   const [work, setWork] = useState<WorkItemsBody | null>(null);
   const [workErr, setWorkErr] = useState<string | null>(null);
