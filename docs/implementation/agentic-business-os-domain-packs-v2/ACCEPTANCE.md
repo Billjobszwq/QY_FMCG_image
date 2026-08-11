@@ -46,7 +46,16 @@
 - [x] 浏览器验收：首轮 3 缺陷修复后复验 5/5（截图 abosv2_iam_fix_*）
 - [x] 全量 1222 passed
 
-## Gate G5–G9（未开始）
+## Gate G5 · Phase E（已通过，2026-08-11）
+
+- [x] 含全部首批题型的样板问卷实跱 E2E（单选/多选/填空/打分/拍照）
+- [x] 跳题 DAG 校验（循环/不可达/冲突）红测试；已发布不可原地改；分配绑定发布版本
+- [x] 拍照题位置/时间/设备/质量证据；识别 suggestion 人工终审（training_truth=false）
+- [x] correction event + 原因 + 审计 + 评分重算版本（13→15，v1→v2）
+- [x] 报表输入数值可追溯（均分 15，score_version_max=2）；浏览器 5/5
+- [x] 全量 1230 passed
+
+## Gate G6–G9（未开始）
 
 - 见 IMPLEMENTATION-LIST 对应行。
 

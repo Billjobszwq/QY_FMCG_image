@@ -60,9 +60,9 @@
 
 | # | 任务 | 状态 | 依赖 | 验收 | 证据 |
 |---|---|---|---|---|---|
-| E-1 | 题型/版本/跳题 DAG 校验/评分/发布/分配/填写 | NOT_STARTED | D | 样板问卷 E2E | — |
-| E-2 | 拍照题证据 + 识别 suggestion → 人工 final | NOT_STARTED | E-1 | 全链时间线 | — |
-| E-3 | 后台 correction event + 重算版本 | NOT_STARTED | E-1 | 审计留痕 | — |
+| E-1 | 题型/版本/跳题 DAG 校验/评分/发布/分配/填写 | VERIFIED_LOCAL | D | 样板问卷 E2E | commit `fde1b4ae` migration 036；8 项红转绿；实跱 svy-c481cfc33d |
+| E-2 | 拍照题证据 + 识别 suggestion → 人工 final | VERIFIED_LOCAL | E-1 | 全链时间线 | med-35f34f603e42 → run-72dc41349c3c → 接受 → final；training_truth=false 事件 |
+| E-3 | 后台 correction event + 重算版本 | VERIFIED_LOCAL | E-1 | 审计留痕 | 修正 13→15 score_version 2；append-only 触发器测试 |
 
 ## Phase F · BI / 位置外勤 / 财务（Gate G6/G7/G8）
 

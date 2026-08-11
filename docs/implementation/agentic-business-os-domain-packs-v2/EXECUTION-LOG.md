@@ -184,3 +184,33 @@
 
 - Phase E：问卷纵向切片（题型/版本/跳题 DAG/评分/发布/分配/填写/
   后台修正事件/拍照题证据 + 识别 suggestion→人工 final）。
+
+## 2026-08-11 · Phase E 完成（commit fde1b4ae），Gate G5 通过
+
+- migration 036：survey_definition_v1（survey_id+version，发布不可原地改）/
+  survey_assignment_v1 / survey_response_v1（评分版本化）/
+  survey_answer_correction_v1（append-only 触发器）/ survey_media_v1
+  （位置/时间/设备/质量证据 + suggestion 状态机）。
+- SurveyService：样板模板含全部首批题型（单选/多选/填空/打分/拍照，
+  预留类型 lint 报错不伪造）；跳题 DAG lint（循环/不可达/冲突/缺失默认
+  分支）；visible_questions 按答案求值；分配绑定已发布版本（新版本草稿
+  不影响进行中的填写）；提交前必填校验（含拍照最少张数）。
+- 拍照→识别 suggestion：经统一 Command Gateway（真实 run/evidence/usage），
+  pending→人工 accept/reject/modify 才成 final；反馈事件
+  survey.suggestion.reviewed 恒带 training_truth=false（不自动成训练真值）。
+- 后台修正：只走 correction 通道（原值/新值/原因/操作者/批准人）+
+  评分重算 score_version+1；已提交响应禁止绕过修正直接改。
+- 实跑 G5 E2E：svy-c481cfc33d（lint [] → published → v2 draft）→
+  asg-5094bf3e6f02（demo-cust-a）→ rsp-0a90b4f6b56d；真实货架照片
+  med-35f34f603e42（lat/lng/设备/质量证据）→ 识别 run-72dc41349c3c +
+  evidence_bundle → 人工接受 → 提交评分 13.0（v1，sum 公式，含输入证据）
+  → 修正（原因+批准人）→ 15.0（v2）→ 报表输入 submitted=1 avg=15 max_sv=2。
+- 浏览器验收 5/5（截图 .eval/abosv2_survey_*）；小改进项：报表下拉同名
+  问卷多版本未标注版本号（记录，不阻塞 G5）。
+- 契约变更：test_module_manifest_v2 的 survey planned→live 断言更新
+  （真实后端已存在，诚实状态）。
+- 全量 hermetic：1230 passed, 1 skipped, 6 deselected。
+
+## 下一动作
+
+- Phase F：BI 语义层 + 异常追问闭环（G6）→ 位置外勤（G7）→ 财务（G8）。
