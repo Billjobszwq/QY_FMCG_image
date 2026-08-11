@@ -24,8 +24,10 @@ cd /Users/zhangweiqi/Documents/QY/项目/LLM-Image
 ./bin/abos status      # 四服务应全部 UP
 ```
 
-打开 http://127.0.0.1:8400 → 用你的账号登录（平台管理员口令在 `.env`
-的 `PLATFORM_ADMIN_PASSWORD`；其他账号由管理员在“账号与权限”开设）。
+打开 http://127.0.0.1:8400 → 登录。平台登录凭据为 **bill**（口令见本机
+`.env` 的 `PLATFORM_ADMIN_CREDENTIALS`）。该凭据已**锁定**：写入数据库
+锁定 flag 后，环境变量与数据库两条路径都无法再变更（触发器拒绝
+UPDATE/DELETE）；旧的 admin 口令已失效。
 
 ## 2. 角色一：平台管理员（owner / platform_admin）
 
@@ -127,7 +129,7 @@ cd /Users/zhangweiqi/Documents/QY/项目/LLM-Image
 | 症状 | 可能原因 | 处理 |
 |---|---|---|
 | 页面打不开 | 8400 未启动 | `./bin/abos start`；看 `.platform/logs/app.log` |
-| 登录 401 | 口令错误/账号停用 | 联系管理员；admin 口令在 `.env` |
+| 登录 401 | 口令错误/账号停用 | 平台账号为 bill（凭据已锁定，不可变更）；其他账号联系管理员 |
 | 操作 403 | CSRF 缺失或作用域越界 | 重新登录；越界属隔离设计，非故障 |
 | 识别失败 `unreachable` | 8091 掉线 | `./bin/abos status` → `start`；在任务详情点“重试” |
 | 识别 400 `profile_rejected` | 禁用/未注册 Profile | 按返回 blockers 处理；改用 production_legacy |

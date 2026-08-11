@@ -1772,6 +1772,23 @@ CREATE TRIGGER IF NOT EXISTS fin_adjustment_v1_no_update
     END;
 """
 
+# 登录凭据锁定：一旦写入 auth_locked_credential_v1，任何 UPDATE/DELETE
+# 都被触发器拒绝；环境变量也不能覆盖（auth 层忽略）。
+_M040 = """
+CREATE TRIGGER IF NOT EXISTS platform_flag_auth_lock_no_update
+    BEFORE UPDATE ON platform_flag
+    WHEN old.flag = 'auth_locked_credential_v1'
+    BEGIN
+        SELECT RAISE(ABORT, '登录凭据已锁定，不可变更（UPDATE 拒绝）');
+    END;
+CREATE TRIGGER IF NOT EXISTS platform_flag_auth_lock_no_delete
+    BEFORE DELETE ON platform_flag
+    WHEN old.flag = 'auth_locked_credential_v1'
+    BEGIN
+        SELECT RAISE(ABORT, '登录凭据已锁定，不可变更（DELETE 拒绝）');
+    END;
+"""
+
 MIGRATIONS: tuple[tuple[str, str], ...] = (
     ("001_platform_init", _M001),
     ("002_labeling_inbox", _M002),
@@ -1812,6 +1829,7 @@ MIGRATIONS: tuple[tuple[str, str], ...] = (
     ("037_bi_semantic_v1", _M037),
     ("038_geo_field_v1", _M038),
     ("039_finance_v1", _M039),
+    ("040_auth_credential_lock", _M040),
 )
 
 

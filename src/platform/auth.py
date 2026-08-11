@@ -6,9 +6,14 @@
 - role 由服务端 users 配置决定（本机单租户最小 IAM，fail-closed）。
 
 用户配置（按优先级）：
-1. 环境变量 PLATFORM_USERS="name:password:role[,…]"；
-2. 环境变量 PLATFORM_ADMIN_PASSWORD → 内置 admin 账号；
-3. 首次启动随机生成 admin 口令（哈希存 flag，明文仅打印一次）。
+1. 锁定凭据 flag（auth_locked_credential_v1）→ 唯一生效，忽略一切
+   环境变量，且 DB 触发器禁止 UPDATE/DELETE（不可再变更）；
+2. 环境变量 PLATFORM_USERS="name:password:role[,…]"；
+3. 环境变量 PLATFORM_ADMIN_PASSWORD → 内置 admin 账号；
+4. 首次启动随机生成 admin 口令（哈希存 flag，明文仅打印一次）。
+
+首次设置 PLATFORM_ADMIN_CREDENTIALS="name:password" 会把凭据哈希
+写入锁定 flag；此后任何修改（环境变量或数据库）都不再生效。
 """
 from __future__ import annotations
 
@@ -26,6 +31,8 @@ SESSION_COOKIE = "platform_session"
 CSRF_HEADER = "X-CSRF-Token"
 SESSION_TTL_SECONDS = 12 * 3600
 _PBKDF2_ITERS = 60_000
+# 锁定凭据 flag：写入后不可变更（migration 040 触发器保护）
+LOCK_FLAG = "auth_locked_credential_v1"
 
 
 def _utcnow() -> datetime:
@@ -49,7 +56,14 @@ def verify_password(password: str, stored: str) -> bool:
 
 
 def default_users(store: Any) -> dict[str, tuple[str, str]]:
-    """返回 {username: (password_hash, role)}。"""
+    """返回 {username: (password_hash, role)}。
+
+    锁定凭据存在时：它是唯一生效凭据，环境变量全部忽略（不可再变更）。
+    """
+    locked = store.get_flag(LOCK_FLAG)
+    if locked:
+        username, _, pw_hash = locked.partition(":")
+        return {username: (pw_hash, "admin")}
     env_users = os.environ.get("PLATFORM_USERS", "").strip()
     if env_users:
         users: dict[str, tuple[str, str]] = {}
@@ -80,7 +94,26 @@ class AuthService:
     def __init__(self, store: Any,
                  users: dict[str, tuple[str, str]] | None = None) -> None:
         self.store = store
+        self._bootstrap_credential_lock()
         self._users = users if users is not None else default_users(store)
+
+    def _bootstrap_credential_lock(self) -> None:
+        """首次出现 PLATFORM_ADMIN_CREDENTIALS 时锁定凭据。
+
+        锁定后：环境变量不再参与（default_users 优先读 flag），且 DB
+        触发器拒绝 UPDATE/DELETE —— 凭据不可再变更。
+        """
+        if self.store.get_flag(LOCK_FLAG):
+            return
+        raw = os.environ.get("PLATFORM_ADMIN_CREDENTIALS", "").strip()
+        if not raw:
+            return
+        username, _, password = raw.partition(":")
+        if not username or not password:
+            return
+        self.store.set_flag(
+            LOCK_FLAG, f"{username}:{hash_password(password)}",
+            "bootstrap-lock")
 
     def login(self, username: str, password: str) -> dict[str, Any]:
         rec = self._users.get(username)
