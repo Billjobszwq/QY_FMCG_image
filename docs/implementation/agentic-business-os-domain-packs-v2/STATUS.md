@@ -5,18 +5,18 @@
 
 ## 当前 Gate（唯一）
 
-`PHASE_A–F_CLOSED_G1–G8_PASSED → T9 系统级收口待开工`（G9）。
+`READY_FOR_USER_ACCEPTANCE`（机器/浏览器验收全部通过，等待用户验收）。
 
-- Phase A 证据：`4af64f2d` → `79b3a534` → `15a39325`；浏览器四视口 8/8。
-- Phase B 证据：`13106320`；实跱全链 ID 对账 + 失败同链恢复。
-- Phase C 证据：`aa7ba378`；模板实跱贯通 + Studio 6/6。
-- Phase D 证据：`55e71271`；双 test fixture 客户隔离实跱证明。
-- Phase E 证据：`fde1b4ae`；样板问卷实跱 E2E（评分 13→15 v2）。
-- Phase F 证据：`c0be4098`；BI 异常闭环/外勤全链/账单下钻实跱；
-  hermetic 1246 passed；浏览器验收截图齐全。
+- Phase A：`4af64f2d` → `79b3a534` → `15a39325`；浏览器四视口 8/8。
+- Phase B：`13106320`；实跱全链 ID 对账 + 失败同链恢复。
+- Phase C：`aa7ba378`；模板实跱贯通 + Studio 6/6。
+- Phase D：`55e71271`；双 test fixture 客户隔离实跱证明。
+- Phase E：`fde1b4ae`；样板问卷实跱 E2E（评分 13→15 v2）。
+- Phase F：`c0be4098`；BI 异常闭环/外勤全链/账单下钻实跱。
+- T9：`db1692a4`；集成交叉验证 ok=true + 四手册；hermetic 1260 + host_mps 6。
 
-不是 `READY_FOR_USER_ACCEPTANCE`：T9 收口（Z-1 全量交叉验证、Z-2 六个
-Domain Agent、最终验证套件、四手册更新）完成前不得声称用户验收就绪。
+未经用户验收不得写 COMPLETE/PRODUCTION_READY。诚实残留：rate limit
+未实现；P1-004 Supervisor 工具化运行时；P2-001/002/003；地图瓦片 blocked。
 
 ## 已冻结决定
 
@@ -32,10 +32,10 @@ Domain Agent、最终验证套件、四手册更新）完成前不得声称用�
 
 ## 当前未关闭问题
 
-- P1：P1-002 Manifest 全量交叉验证（部分关闭，Z-1 完成）；P1-003 App 手写
-  路由（未关闭，Z-1 ModuleUIRegistry）；P1-004 主管工具化规划（未关闭，Z-2）；
+- P1：P1-004 主管工具化规划运行时（六 Agent 独立对话运行时，未关闭）；
 - P2：便签 localStorage、event polling、profile 信息过载；
-- 业务：五个 Domain Pack 均已 live；待 Z-2 六个 Domain Agent 独立身份化。
+- 其他：rate limit 未实现；地图瓦片供应商未选（诚实 blocked）；
+  问卷报表下拉多版本同名未标版本号（小改进项）。
 
 ## 现场基线（2026-08-11 实时核验）
 

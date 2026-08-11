@@ -76,7 +76,7 @@
 
 | # | 任务 | 状态 | 依赖 | 验收 | 证据 |
 |---|---|---|---|---|---|
-| Z-1 | 模块/Agent 插拔交叉验证（Manifest/Capability/UI slot/节点库/tool registry/OpenAPI fail-closed） | NOT_STARTED | C,D | 缺一环即失败 | — |
-| Z-2 | 新增 6 个 Domain Agent（独立 identity/allowlist/scope/预算/记忆 ACL） | NOT_STARTED | D | 契约测试 | — |
-| Z-3 | 最终验证（hermetic/host_mps、typecheck/build、DB、安全、性能、健康） | NOT_STARTED | ALL | G9 清单 | — |
-| Z-4 | 四手册更新（USER-HANDBOOK/OPERATOR-RUNBOOK/MODULE-AGENT-DEV-GUIDE/CODEX-HANDBOOK） | NOT_STARTED | Z-3 | 按角色可操作 | — |
+| Z-1 | 模块/Agent 插拔交叉验证（Manifest/Capability/UI slot/节点库/tool registry/OpenAPI fail-closed） | VERIFIED_LOCAL | C,D | 缺一环即失败 | commit `db1692a4`；现场首跑捕获 2 漂移→修复 ok=true；14 项契约测试 |
+| Z-2 | 新增 6 个 Domain Agent（独立 identity/allowlist/scope/预算/记忆 ACL） | VERIFIED_LOCAL | D | 契约测试 | 六 Agent manifest 注册 + 白名单校验测试；独立对话运行时列入残余（P1-004） |
+| Z-3 | 最终验证（hermetic/host_mps、typecheck/build、DB、安全、性能、健康） | VERIFIED_LOCAL | ALL | G9 清单 | hermetic 1260 + host_mps 6；integrity ok；401/403 安全快检；p50/p95 采样；四服务 UP |
+| Z-4 | 四手册更新（USER-HANDBOOK/OPERATOR-RUNBOOK/MODULE-AGENT-DEV-GUIDE/CODEX-HANDBOOK） | VERIFIED_LOCAL | Z-3 | 按角色可操作 | USER-HANDBOOK v3 五角色操作流；其余三册增补 |

@@ -266,3 +266,42 @@
   独立身份/allowlist/预算/记忆 ACL（当前 Supervisor+Workflow Agent draft 受控）；
 - 最终验证套件：host_mps 分层、安全（越权/CSRF/SSRF/注入/rate limit）、
   性能 p50/p95、冷启动、四手册更新（USER-HANDBOOK 需按角色重写操作流）。
+
+## 2026-08-12 · T9 系统级收口完成（commit db1692a4）
+
+### Z-1 集成契约交叉验证（P1-002/P1-003 关闭）
+- `src/platform/integration.py` + `GET /api/v1/platform/integration`：
+  agents↔清单、scopes↔IAM、commands↔Gateway/平台命令注册表、导航路由↔
+  UI 组件注册表、api_prefix↔OpenAPI 五环交叉验证，缺失 fail-closed。
+- 现场首跑即捕获 2 个真实漂移（vision/system api_prefix）→ 修复后 ok=true
+  （12 agents / 34 UI 路由 / 190 OpenAPI 路径 / 33 命令）。
+- ModuleUIRegistry（web/src/platform/ui_registry.tsx）取代 App 手写模块路由
+  （P1-003）；前端↔后端镜像↔目录三方一致性由 14 项契约测试强制。
+- Manifest 投影补 commands/queries/events（P1-002）。
+
+### Z-2 六个 Domain Agent
+- workflow/iam/survey/analytics/fieldops/finance_agent 注册（独立身份、
+  capability allowlist 在 GRANTABLE_SCOPES 白名单内、数据 scope、approval
+  规则：human_approval_for_publish / human_final_answer_required /
+  face_compare_requires_explicit_consent / usage_only_billing）。
+- 诚实披露：Agent 执行为 manifest/契约层身份化；独立对话运行时仍由
+  Supervisor 承载（P1-004 未完全关闭，列入残余）。
+
+### Z-3 最终验证
+- hermetic：1260 passed, 1 skipped, 6 deselected；host_mps：6 passed（单独执行）。
+- SQLite integrity ok；迁移幂等至 039（重启自动应用）；reconcile consistent=true。
+- 安全：无 session 读/写 401；无 CSRF 写 403；有 CSRF 200；identity 无敏感泄漏。
+  rate limit 未实现（诚实记录为残余项）。
+- 性能：workitems p50=4.6ms/p95=4.8ms；recognition list p95=1.1ms；
+  reconcile p95=1.3ms（本机 60 次采样）。
+- 服务：四服务 UP；冷启动经 ./bin/abos start 幂等；production 未切换。
+
+### Z-4 四手册
+- USER-HANDBOOK v3：按五个角色（平台管理员/客户管理员/外勤/分析师/财务）
+  给出登录→完成任务操作流；OPERATOR-RUNBOOK 增补对账/集成体检/端点表；
+  MODULE-AGENT-DEV-GUIDE 增补 ABOSV2 接入契约；CODEX-HANDBOOK 追加接续节。
+
+### 残余项（诚实记录，不阻塞用户验收评估）
+- P1-004：Supervisor 工具化规划运行时（六 Agent 独立对话运行时）；
+- P2-001/002/003：便签服务端化、event SSE、profile 信息架构；
+- rate limit 未实现；地图瓦片供应商未选（blocked 诚实展示）。

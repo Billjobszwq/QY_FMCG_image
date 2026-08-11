@@ -76,10 +76,21 @@
 - [x] 调整 append-only + 原因必填；结算后拒绝调整（现场 409）
 - [x] 同期间幂等（已计费 usage 不重复）
 
-## Gate G9 · T9 收口（未开始）
+## Gate G9 · T9 收口（机器验收已通过，2026-08-12）
 
-- 见 IMPLEMENTATION-LIST Z-1/Z-2/Z-3/Z-4。
+- [x] Z-1 集成交叉验证 fail-closed（现场 ok=true；首跑捕获 2 漂移并修复）
+- [x] Z-2 六个 Domain Agent 注册（白名单校验测试）；独立对话运行时列入残余
+- [x] Z-3 最终验证：hermetic 1260 + host_mps 6（单独统计）；typecheck/build；
+      SQLite integrity；迁移幂等；投影重建对账 consistent=true；
+      安全快检 401/403；性能 p50/p95；四服务健康
+- [x] Z-4 四手册更新（USER-HANDBOOK v3 按角色操作流）
+- 诚实残留：rate limit 未实现；P1-004 Supervisor 工具化运行时；
+  P2-001/002/003；地图瓦片 blocked。
 
 ## 人工验收记录
 
-（等待用户验收；机器/浏览器验收通过前不预约人工验收。）
+当前状态 = `READY_FOR_USER_ACCEPTANCE`：机器/浏览器验收证据齐备，
+等待用户验收；未经用户验收不得写 COMPLETE/PRODUCTION_READY。
+建议验收路径：`./bin/abos start` → 登录 8400 → 按 USER-HANDBOOK v3
+任选角色走一遍；重点抽查：首页快速目标→主管、识别任务详情、
+工作流模板运行、问卷填写与修正、账单下钻、集成体检 ok=true。
