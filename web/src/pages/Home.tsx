@@ -35,6 +35,16 @@ const STATUS_CN: Record<string, string> = {
   cancelled: "已取消",
 };
 
+// 服务端为 UTC ISO；展示统一转本地时间（不得显示偏移 8 小时的 UTC）
+function fmtWhen(s?: string | null): string {
+  if (!s) return "";
+  const d = new Date(s);
+  if (Number.isNaN(d.getTime())) return String(s).slice(0, 16);
+  const p = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} `
+    + `${p(d.getHours())}:${p(d.getMinutes())}`;
+}
+
 export default function Home({ health, modules, identity }: {
   health: HealthBody | null;
   modules: ModuleView[];
@@ -158,7 +168,7 @@ export default function Home({ health, modules, identity }: {
                 <div className="meta">
                   {STATUS_CN[w.status] ?? w.status}
                   {w.owner_id ? ` · ${w.owner_id}` : ""}
-                  {w.due_at ? ` · 截止 ${String(w.due_at).slice(0, 10)}`
+                  {w.due_at ? ` · 截止 ${fmtWhen(w.due_at).slice(0, 10)}`
                     : ""}
                   {w.blockers?.length
                     ? ` · ${String(w.blockers[0]).slice(0, 40)}` : ""}
@@ -169,8 +179,9 @@ export default function Home({ health, modules, identity }: {
         {/* 2. 日历（统一读取模型：用户日程+工作截止+外勤+问卷窗口） */}
         <div className="card" style={{ marginBottom: 0 }}>
           <h3>日历（{dash.calendar.length}）</h3>
-          <div style={{ display: "flex", gap: 6, marginBottom: 8 }}>
-            <input style={{ flex: 1 }} placeholder="新日程标题"
+          <div style={{ display: "flex", gap: 6, marginBottom: 8,
+            flexWrap: "wrap" }}>
+            <input style={{ flex: 1, minWidth: 120 }} placeholder="新日程标题"
               aria-label="新日程标题" value={evTitle}
               onChange={(e) => setEvTitle(e.target.value)} />
             <input type="datetime-local" aria-label="日程时间"
@@ -186,8 +197,7 @@ export default function Home({ health, modules, identity }: {
                 <div>
                   <div>{ev.title}</div>
                   <div className="meta">
-                    {String(ev.when ?? ev.starts_at).slice(0, 16)
-                      .replace("T", " ")}
+                    {fmtWhen(ev.when ?? ev.starts_at)}
                     · {ev.kind}
                     {ev.customer_id ? ` · ${ev.customer_id}` : ""}</div>
                 </div>
@@ -241,8 +251,7 @@ export default function Home({ health, modules, identity }: {
                     {" "}· {a.subject_type}:
                     {String(a.subject_id).slice(0, 14)}…</span> : null}
                 </div>
-                <div className="meta">{String(a.at).slice(0, 19)
-                  .replace("T", " ")} · {a.actor || "system"}
+                <div className="meta">{fmtWhen(a.at)} · {a.actor || "system"}
                   {a.error ? <span style={{ color: "var(--err)" }}>
                     {" "}· {a.error.slice(0, 60)}</span> : null}</div>
               </div>))}
