@@ -118,6 +118,19 @@ def create_survey_router(store: Any, survey: SurveyService,
         except SurveyError as e:
             raise HTTPException(404, str(e))
 
+    @router.put("/api/v1/survey/definitions/{survey_id}")
+    def update_def(survey_id: str, body: DraftBody,
+                   request: Request) -> dict:
+        """ABOSV3 T6：Builder 保存草稿（已发布不可原地改）。"""
+        p = require_principal(auth, request, csrf=True)
+        _guard(iam, p["actor"], p["role"], "survey.manage")
+        try:
+            return {"definition": survey.update_draft(
+                survey_id, spec=body.spec,
+                name=body.name or None)}
+        except SurveyError as e:
+            raise HTTPException(409, str(e))
+
     @router.post("/api/v1/survey/definitions/{survey_id}/lint")
     def lint(survey_id: str, request: Request) -> dict:
         p = require_principal(auth, request, csrf=True)

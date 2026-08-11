@@ -19,6 +19,7 @@ import {
   IamAccounts, IamAudit, MasterCustomers, MasterProjects, MasterSkus,
 } from "../pages/IamMaster";
 import { SurveyDesign, SurveyField, SurveyReport } from "../pages/Survey";
+import SurveyBuilder from "../pages/SurveyBuilder";
 import {
   AnalyticsAnomalies, AnalyticsReports, AnalyticsSemantics,
 } from "../pages/Analytics";
@@ -138,7 +139,8 @@ export const MODULE_ROUTES: Record<
   "/master/projects": () => wide(<MasterProjects />),
   "/master/skus": () => wide(<MasterSkus />),
   // 问卷
-  "/survey/design": () => wide(<SurveyDesign />),
+  "/survey/design": () => wide(
+    <><SurveyBuilder /><SurveyDesign /></>),
   "/survey/field": () => wide(<SurveyField />),
   "/survey/report": () => wide(<SurveyReport />),
   // 分析与 BI

@@ -19,7 +19,7 @@ import uuid
 from typing import Any
 
 QUESTION_TYPES = ("single_choice", "multi_choice", "text", "rating",
-                  "photo")
+                  "photo", "matrix", "description")
 
 
 class SurveyError(Exception):
@@ -224,6 +224,12 @@ class SurveyService:
                 issues.append({
                     "level": "error", "code": "no_options",
                     "message": f"{q.get('id')} 缺少选项"})
+            if q.get("type") == "matrix":
+                if not q.get("rows") or not q.get("options"):
+                    issues.append({
+                        "level": "error", "code": "matrix_incomplete",
+                        "message": f"{q.get('id')} 矩阵题需要 rows 与"
+                                   " options"})
         edges = spec.get("logic_edges") or []
         adj: dict[str, list[dict]] = {}
         for e in edges:
@@ -467,8 +473,16 @@ class SurveyService:
         missing = []
         for qid in visible:
             q = qmap[qid]
+            if q["type"] == "description":
+                continue  # 说明题不作答
             if q.get("required") and qid not in r["answers"]:
                 missing.append(qid)
+            if q["type"] == "matrix" and q.get("required"):
+                ans = (r["answers"].get(qid) or {}).get("value") or {}
+                unanswered = [row["id"] for row in q.get("rows", [])
+                              if row["id"] not in ans]
+                if unanswered:
+                    missing.append(f"{qid}(矩阵未填全)")
             if q["type"] == "photo" and q.get("min_count", 0) > 0:
                 medias = self.list_media(response_id, question_id=qid)
                 if len(medias) < q["min_count"]:
@@ -500,7 +514,13 @@ class SurveyService:
                 continue
             weight = float(rule.get("weight") or 1)
             if "map" in rule:
-                pts = float(rule["map"].get(ans.get("value"), 0))
+                val = ans.get("value")
+                if isinstance(val, dict):
+                    # 矩阵题：逐行按 map 计分
+                    pts = sum(float(rule["map"].get(v, 0))
+                              for v in val.values())
+                else:
+                    pts = float(rule["map"].get(val, 0))
             else:
                 try:
                     pts = float(ans.get("value") or 0)

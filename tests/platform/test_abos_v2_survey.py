@@ -119,8 +119,10 @@ class TestDefinitionLifecycle:
             svc.publish(d["survey_id"], actor="admin")
 
     def test_reserved_question_types_not_faked(self, env):
+        # ABOSV3 T6：matrix 已真实实现（转由 builder 测试覆盖）；
+        # 仍未实现的预留类型（signature 等）继续 fail-closed。
         svc = env["svc"]
-        spec = {"questions": [{"id": "q1", "type": "matrix"}],
+        spec = {"questions": [{"id": "q1", "type": "signature"}],
                 "logic_edges": [], "scoring": {}}
         d = svc.create_draft(name="reserved", spec=spec, actor="admin")
         linted = svc.lint(d["survey_id"])
