@@ -23,6 +23,47 @@ const STATUS_CN: Record<string, string> = {
   failed: "失败",
 };
 
+
+const COLORS = ["#ea3737", "#0072e3", "#00aa3c", "#ff8e0a",
+  "#ab54f7", "#ff5c38", "#00aa3c", "#16a6ff"];
+
+function BoxOverlay({ preview, products }:
+  { preview: string; products: any[] }) {
+  const [dim, setDim] = useState<{ w: number; h: number } | null>(null);
+  return (
+    <div style={{ position: "relative", display: "inline-block",
+      maxWidth: "100%" }}>
+      <img src={preview} alt="识别结果" className="rec-img"
+        style={{ width: "100%", height: "auto", display: "block",
+          borderRadius: 18 }}
+        onLoad={(e) => setDim({ w: e.currentTarget.naturalWidth,
+          h: e.currentTarget.naturalHeight })} />
+      {dim && (
+        <svg viewBox={`0 0 ${dim.w} ${dim.h}`}
+          style={{ position: "absolute", inset: 0, width: "100%",
+            height: "100%" }}>
+          {products.map((p, i) => {
+            const [x1, y1, x2, y2] = p.box;
+            const c = COLORS[i % COLORS.length];
+            return (
+              <g key={i}>
+                <rect x={x1} y={y1} width={x2 - x1} height={y2 - y1}
+                  fill="none" stroke={c} strokeWidth={Math.max(2, dim.w / 400)} />
+                <text x={x1} y={Math.max(14, y1 - 6)} fill="#fff"
+                  stroke={c} strokeWidth={4} paintOrder="stroke"
+                  fontSize={Math.max(12, dim.w / 60)} fontWeight={800}>
+                  {i + 1}. {p.name || "unknown"}
+                  {p.confidence ? ` ${(p.confidence * 100).toFixed(0)}%` : ""}
+                </text>
+              </g>
+            );
+          })}
+        </svg>
+      )}
+    </div>
+  );
+}
+
 const TINTS = ["var(--card-yellow)", "var(--lavender)", "var(--green)",
   "var(--blue)", "var(--card-orange)", "var(--card-coral)"];
 
@@ -167,13 +208,16 @@ export default function Recognition() {
       {error && <div className="banner banner-unavailable">识别失败：{error}</div>}
 
       <h3>① 单文件识别（即时结果，不计任务历史）</h3>
-      <label className="upload">
+      <label className="upload"
+        onDragOver={(e) => e.preventDefault()}
+        onDrop={(e) => { e.preventDefault();
+          onFile(e.dataTransfer.files?.[0] ?? null); }}>
         <input type="file" accept="image/*" onChange={(e) => onFile(e.target.files?.[0] ?? null)} />
-        选择照片上传识别
+        拖拽或点击上传货架照片
       </label>
       {preview && result && (
         <div className="rec-grid">
-          <img src={preview} alt={fileName} className="rec-img" />
+          <BoxOverlay preview={preview} products={result.products} />
           <div>
             <p>
               <b>{fileName}</b> · run_id <code>{result.run_id}</code>

@@ -15,21 +15,24 @@ import AgentChat from "./pages/AgentChat";
 import TaskBoard from "./pages/TaskBoard";
 import Workflow from "./pages/Workflow";
 import LabelStudioHub from "./pages/LabelStudioHub";
+import BizIntel from "./pages/BizIntel";
 
+// 一级模块：一模块一色系一 Agent；二级功能见各页 ModuleTabs；三级操作在页内。
 const RAIL = [
-  { to: "/", label: "总览", c: "var(--blue)" },
-  { to: "/taskboard", label: "任务板", c: "var(--orange)" },
-  { to: "/workflow", label: "工作流", c: "var(--white)" },
-  { to: "/recognition", label: "识别", c: "var(--green)" },
-  { to: "/labelstudio", label: "标注", c: "var(--lavender)" },
-  { to: "/training", label: "训练", c: "var(--yellow)" },
-  { to: "/assets", label: "数据", c: "var(--blue)" },
-  { to: "/status", label: "状态", c: "var(--green)" },
+  { to: "/", label: "总览·主管", c: "var(--violet)" },
+  { to: "/recognition", label: "图像识别", c: "var(--blue)" },
+  { to: "/labelstudio", label: "标注中心", c: "var(--green)" },
+  { to: "/assets", label: "数据仓库", c: "var(--yellow)" },
+  { to: "/training", label: "模型训练", c: "var(--orange)" },
+  { to: "/workflow", label: "工作流", c: "var(--lavender)" },
+  { to: "/biz", label: "经营智能", c: "var(--red)" },
+  { to: "/status", label: "系统", c: "var(--green)" },
 ];
 const MORE = [
+  { to: "/taskboard", label: "任务板" },
   { to: "/annotation", label: "审核" },
   { to: "/cascade", label: "级联" },
-  { to: "/models-runtime", label: "模型" },
+  { to: "/models-runtime", label: "模型驻留" },
   { to: "/packaging", label: "新包装" },
   { to: "/runs", label: "Graph" },
 ];
@@ -145,6 +148,8 @@ export default function App() {
             <Route path="/cascade" element={<CascadeTasks />} />
             <Route path="/models-runtime" element={<ModelRuntime />} />
             <Route path="/packaging" element={<NewPackaging />} />
+            <Route path="/biz" element={<BizIntel />} />
+            <Route path="/biz/api" element={<BizIntel />} />
             <Route path="/status" element={<SystemStatus health={health} />} />
           </Routes>
           <footer className="footer">

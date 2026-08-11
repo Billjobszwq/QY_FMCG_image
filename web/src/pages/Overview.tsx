@@ -18,10 +18,15 @@ export default function Overview({ health }: { health: HealthBody | null }) {
     /CANDIDATE|REJECTED/.test(a.candidate_status ?? ""));
   return (
     <div>
-      <span className="kicker">01 · 总览</span>
+      <span className="kicker">01 · 总览 · 主管 Agent</span>
       <div className="display">
-        不止是识别。<br />一种看货架的新方式。
+        不是 SaaS。<br />Agent 驱动的经营操作系统。
       </div>
+      <p style={{ maxWidth: 620, marginBottom: 22 }}>
+        数据仓库 · 问卷 · 地理分析 · 线库规划 · BI 报表 · 数据告警 ·
+        深度对话 · 图像识别 · 工作流编排 · 财务对账 · 策略分析 ——
+        每个模块一个 Agent，模块化注册、自我迭代。
+      </p>
       <div className="collage">
         <div className="blk c-red span5">
           <h2>当前 Gate</h2>
@@ -69,6 +74,26 @@ export default function Overview({ health }: { health: HealthBody | null }) {
             {health?.status ?? "—"}
           </div>
           <p>8091 识别 · 8300 标注 · 8400 工作台 · 8455 LLM</p>
+        </div>
+      </div>
+      <div className="blk c-white span12" style={{ minHeight: 0 }}>
+        <h2>Agent 矩阵（分工 · 后续逐个定义）</h2>
+        <div className="collage" style={{ marginBottom: 0 }}>
+          {[["supervisor-agent", "主管：编排/汇总/审批", "var(--violet)"],
+            ["recognition-agent", "图像识别", "var(--blue)"],
+            ["annotation-agent", "标注中心", "var(--green)"],
+            ["data-agent", "数据仓库", "var(--yellow)"],
+            ["modelops-agent", "模型训练", "var(--orange)"],
+            ["workflow-agent", "工作流编排", "var(--lavender)"],
+            ["biz-agent", "经营智能", "var(--red)"],
+            ["system-agent", "系统/API", "var(--green)"]].map(
+            ([n, d, c]) => (
+              <div key={n} className="blk span3"
+                style={{ background: c as string, minHeight: 110 }}>
+                <h2 style={{ fontSize: 16 }}>{n}</h2>
+                <p>{d}</p>
+              </div>
+            ))}
         </div>
       </div>
       <a className="cta-bar" href="#/workflow">
