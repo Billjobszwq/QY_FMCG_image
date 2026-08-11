@@ -4,7 +4,26 @@
 >
 > 权威边界：本文件不是产品 L0 架构、实施计划、训练启动授权或线上状态接口。它只负责把权威文件、已经发生的工作和下一步入口串起来。若本文件与权威文件或当前代码冲突，以权威文件和重新验证的当前事实为准，并立即修订本文件。
 >
-> 当前快照时间：2026-08-11，Asia/Shanghai。
+> 当前快照时间：2026-08-12，Asia/Shanghai。
+
+## 2026-08-12 · 当前接续入口（优先于下方历史快照）
+
+- 现场 HEAD：`47c01c437a5ccae380e0bf80bc0ca016d4010325`；分支
+  `feat/nextgen-training-cycle-v2`；tracked 工作树干净，历史未跟踪数据/训练资产
+  继续受保护。
+- SQLite：`integrity_check=ok`，107 张表，最新迁移
+  `040_auth_credential_lock`；8091 当前仍加载
+  `bundle:prod_20260805_v5_r1`。
+- 当前唯一实施入口：
+  `docs/implementation/agentic-business-os-operational-workbench-v3/`；
+  直接执行文件为同目录 `AGENT-EXECUTION-PROMPT.md`。
+- 当前 Gate：`OPERATIONAL_WORKBENCH_V3_NOT_STARTED`。旧
+  `READY_FOR_USER_ACCEPTANCE` 已被用户真实体验和 Codex 独立复核撤销。
+- 当前任务不是继续堆 Domain 页面，而是统一首页/任务/日历/日志/进度，建立真实
+  Agent Runtime 和 React Flow 工作流，并使问卷、位置、识别训练、BI、IAM、
+  主数据、Usage 都能由用户从空白创建和贯穿运行。
+- 本轮用户授权：本机 `best/sku_v4_best.pt` 经 shadow/回归/回滚后成为默认
+  standard profile；不授权长时间新训练、远程部署、merge/push 或删除历史资产。
 
 ## 2026-08-11 · 连续任务底座与 Domain Packs V2 接续
 
@@ -63,16 +82,16 @@
 | 项目 | 当前快照 |
 |---|---|
 | Repository | `/Users/zhangweiqi/Documents/QY/项目/LLM-Image` |
-| Branch | `feat/unified-workbench-training-readiness` |
-| 当前代码基线 HEAD | `ce6f614468f88146d85d23a3ee7bcb5391acfb35`；本轮 Codex 只新增/更新文档，后续以实时 `git rev-parse HEAD` 为准 |
-| 最近交付报告测试 | Agent 报告 `1010 passed, 1 skipped, 5 deselected`；2026-08-08 Codex fresh run 为 **`1002 passed, 8 failed, 1 skipped, 5 deselected`**，说明 hermetic/host MPS 分层尚未真正关闭 |
+| Branch | `feat/nextgen-training-cycle-v2` |
+| 当前代码基线 HEAD | `47c01c437a5ccae380e0bf80bc0ca016d4010325`；本轮 Codex 只新增/更新文档，后续以实时 `git rev-parse HEAD` 为准 |
+| 最近独立测试 | 2026-08-12 Codex 在 `1c5cfe24` 后独立复核 hermetic `1260 passed, 1 skipped, 6 deselected`、host MPS `6 passed`；HEAD 后续前进到 47c01c43，实施前必须 fresh run |
 | Python | `/Users/zhangweiqi/miniconda3/bin/python3`，3.13.2 |
-| 工作树 | 四个受保护未跟踪目录 `.quality/ .sam_checkpoints/ .sam_runs/ .superpowers/` 不碰；另有 3 个 backfill JSON 与 1 张 Web QA 截图未跟踪，属于待分类证据，不删除 |
-| 当前生产 bundle | `prod_20260805_v5_r1`，继续使用；本轮不得切换 |
-| 人工审核 | rq_v2 active 250；LS 项目 19 assisted / 20 blind；`gold_region_v1=0`；Gate=`AWAITING_HUMAN_ACCEPTANCE` |
-| 训练 | 无活动真实训练；`training_authorized=false`；当前仅有历史 dry-run 和不可训练 E2 snapshot |
-| Foundation 实现 | Platform/Graph+Loop/统一 Web/FMCG cascade/审核链已经有实际代码，不再是“只有文档”；训练控制仍需四通道重构 |
-| 当前工作主题 | `nextgen-four-model-training-loop-v2`：三批照片重建、严格过滤、点提示 SAM、四 snapshots、四模型实验训练、持久化 Graph、统一 Web/API/Profile |
+| 工作树 | `.datasets_nextgen/`、`.micro_gold*`、`.quality/`、`.sam_*`、`cropped_images/`、`reports/nextgen_v2/` 等历史未跟踪资产不碰、不暂存、不删除 |
+| 当前生产 bundle | `prod_20260805_v5_r1`；V3 获准在本机完成 V4 best 受控切换，必须可回滚 |
+| 数据库 | `.platform/platform.sqlite` integrity ok；107 表；migration 040 |
+| 训练 | 本轮不授权长训练，只允许 preflight/dry-run/smoke 和现有制品真实加载 |
+| Foundation 实现 | 控制面和 Domain 纵向样板已有代码，但统一 current projection、真实 Agent、可视化 Workflow 和用户自定义工作台尚未闭合 |
+| 当前工作主题 | `agentic-business-os-operational-workbench-v3`：从演示模块重建为可运营工作面，并为真实客户/地址/问卷 UAT 做准备 |
 
 这些值会变化。任何新会话必须先实时验证，不得把快照当作永远有效的事实。
 
@@ -113,12 +132,13 @@
 
 ## 2. 权威文件层级
 
-### 2.0 当前最高优先接续入口（2026-08-08）
+### 2.0 当前最高优先接续入口（2026-08-12）
 
 | 文件 | 作用 |
 |---|---|
+| `docs/implementation/agentic-business-os-operational-workbench-v3/` | 当前唯一实施入口：首页/任务/日历/日志/进度、Agent/Workflow、各 Domain 用户工作台、V4 best 和真实 UAT |
 | `docs/implementation/project-logic-chain-v3/` | 当前 22 层运行逻辑、事实源、rq_v2/LS/gold 状态和验收链 |
-| `docs/implementation/nextgen-four-model-training-loop-v2/` | 当前唯一实施入口：三批数据、SAM、四训练模型、持久化控制链、Apple 调度和 Recognition Profile |
+| `docs/implementation/nextgen-four-model-training-loop-v2/` | 历史训练专项入口：三批数据、SAM、四训练模型、Apple 调度和 Recognition Profile；不再是全平台当前入口 |
 | `docs/implementation/graph-loop-training-control-v1/` | V1 契约与历史交付证据；已复核为执行链未闭合，不再是开工入口 |
 | `docs/superpowers/specs/2026-08-06-qwen3-vl-4b-graph-loop-cascade-design.md` | 已批准的 S0–S5 级联、客户档位、Qwen 和 Apple 资源契约 |
 | `.platform/platform.sqlite` | 当前本机运行唯一事实源；文档不得覆盖其事实 |
@@ -575,7 +595,11 @@ Agent 不是万能管理员。Graph 节点必须声明 capability、数据域、
 
 ## 12. 下一次工作的明确切换点
 
-当前唯一实施入口：`docs/implementation/nextgen-four-model-training-loop-v2/AGENT-EXECUTION-PROMPT.md`。
+当前唯一实施入口：`docs/implementation/agentic-business-os-operational-workbench-v3/AGENT-EXECUTION-PROMPT.md`。
+
+以下旧 Track A/B 作为训练专项历史计划保留；不得覆盖 V3 的当前任务顺序。V3
+先修统一状态，再连续完成首页、Import Center、Agent/Workflow、问卷、位置、
+识别训练工作台、BI、Usage 和真实 UAT 预演。
 
 ### Track A：数据与真实控制链
 
@@ -667,3 +691,32 @@ Agent 不是万能管理员。Graph 节点必须声明 capability、数据域、
   用户未跟踪资产零触碰。
 - 下一步：用户验收（READY_FOR_USER_ACCEPTANCE 需用户确认）；剩余 P2 项
   （便签服务端化、event SSE、profile 信息架构）按 ISSUES.md 排期。
+
+## 2026-08-12 · 用户验收重新打开 + Operational Workbench V3
+
+- 当前唯一实施入口改为：
+  `docs/implementation/agentic-business-os-operational-workbench-v3/`。
+- 用户实际体验证明 V2 的 `READY_FOR_USER_ACCEPTANCE` 过早：系统有大量页面和
+  纵向 fixture，但首页/主管/任务/日历/进度、Agent Runtime、可视化 Workflow
+  和各 Domain 自定义工作台尚未形成可运营闭环。
+- Codex 独立复核重新打开四项事实 Bug：`workflow.succeeded` 未被 projection
+  reducer 识别；首页 WorkItems 与 WorkItemV2/Taskboard 多事实源；成功 run
+  残留旧 error；BI 版本列表重复 latest。
+- 用户新增硬要求：真正首页 Dashboard；主管工作台重排；数据资产作为容量/资源/
+  质量/血缘中心；问卷从空白搭建；地址导入/地理编码/规则/地图；V4 best 默认识别；
+  其他模型本机真实 Profile；标注/数据集/自主训练中心；BI 指标/公式/Dashboard；
+  Agent soul/prompt/Skill/知识库/记忆/工具配置；可视化 Workflow；自定义 IAM/
+  主数据；客户级 Usage；帮助文档；全局 CSV/XLSX Import Center。
+- Workflow 选型冻结：ABOS 原生 canonical graph/runtime + MIT React Flow 画布；
+  Apache-2.0 Node-RED 只作未来可选 Adapter；因商业嵌入/多租户许可证限制，不把
+  n8n 或 Dify 嵌入为产品核心。
+- 人工与 Agent 是双通道：Agent 可以建议、规划和执行获批命令，但每项关键业务
+  必须保留人工入口、失败接管和审计。
+- 当前 Gate=`OPERATIONAL_WORKBENCH_V3_NOT_STARTED`；目标仅为
+  `READY_FOR_REAL_DATA_UAT`。没有用户真实客户/地址/问卷贯穿验收，不得写
+  ACCEPTED/PRODUCTION_READY。
+- 编写任务书时现场 HEAD 为 `47c01c43`，较用户提供的 `1c5cfe24` 已前进；
+  实施 Agent 必须以开工 fresh audit 为准，不能复用旧表数/迁移数。
+- 本轮任务书授权本机 `best/sku_v4_best.pt` 经 shadow/回归/回滚后成为默认
+  standard profile；不授权新增长时间训练、远程部署、merge/push 或把弱实验模型
+  伪装成商业 production。

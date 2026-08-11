@@ -1,12 +1,14 @@
 # Agentic Business OS（识别为首个 Domain Pack）
 
-> **2026-08-11 最新实施入口：** Workbench V1 已完成一轮实现，但现场浏览器与 API/DB 对账发现旧任务复活、快速目标丢失、Recognition/Graph/Agent/Usage 断链和 1024/768 UI 遮挡。当前 Gate 为 `FOUNDATION_CONTINUITY_REPAIR_REQUIRED`。下一轮必须先完整阅读 [`连续任务底座与 Domain Packs V2`](./implementation/agentic-business-os-domain-packs-v2/README.md) 及其 [`Agent 执行提示词`](./implementation/agentic-business-os-domain-packs-v2/AGENT-EXECUTION-PROMPT.md)。该入口负责统一 Work/Event/Usage、原生 Workflow Studio、IAM/主数据、问卷、BI、位置外勤和财务；不授权训练或生产切换。
+> **2026-08-12 当前唯一实施入口：** 用户验收重新打开了“有模块、无工作面”的系统性问题，旧 `READY_FOR_USER_ACCEPTANCE` 已撤销。下一轮必须完整执行 [`可运营工作台 V3`](./implementation/agentic-business-os-operational-workbench-v3/README.md) 及其 [`Agent 连续执行提示词`](./implementation/agentic-business-os-operational-workbench-v3/AGENT-EXECUTION-PROMPT.md)。V3 先统一首页/任务/日历/日志/进度和真实 Agent Runtime，再完成可视化 Workflow、用户自定义问卷/BI/IAM/主数据、地址地图、V4 best 识别与自主训练控制面，最终以真实客户/地址/问卷 UAT 为唯一完成标准。
+
+> **2026-08-11 历史实施入口：** Workbench V1 与 Domain Packs V2 的连续性修复和纵向样板已完成一轮，但随后用户验收重新打开了可运营性问题。相关 [`Domain Packs V2`](./implementation/agentic-business-os-domain-packs-v2/README.md) 和 [`Agent 执行提示词`](./implementation/agentic-business-os-domain-packs-v2/AGENT-EXECUTION-PROMPT.md) 只作为 V3 的事实与契约前置阅读，不再直接开工。
 
 > 货架陈列巡检 · **知识库驱动的自动标注 + YOLO** · 人机协同 · **本机原生优先（不依赖 Docker）**
 
 > **平台最终架构入口（2026-08-04）：** 整个产品的唯一总纲是 [`Graph+Loop 智能业务操作系统最终统一架构设计`](./superpowers/specs/2026-08-04-fmcg-vision-saas-platform-design.md)。它定义一套统一底座和可插拔 Domain Pack；位置外勤规格只是从属模块文档，不是第二套系统。
 >
-> **实施 Agent 当前唯一开工入口（2026-08-08 V2）：** 先读 [`Project Logic Chain V3`](./implementation/project-logic-chain-v3/STATUS.md) 的事实，再完整执行 [`NextGen 四模型数据与训练闭环 V2`](./implementation/nextgen-four-model-training-loop-v2/README.md) 及其中的 [`Agent 一次性执行提示词`](./implementation/nextgen-four-model-training-loop-v2/AGENT-EXECUTION-PROMPT.md)。V1 训练控制目录保留为契约历史，但 fresh 审计确认它尚未形成真实四 Lane 写执行链。V2 将重新处理三批照片、严格过滤、点提示 SAM、四个 snapshots、四模型实验训练、统一 Web/API/Profile；训练授权仅限 candidate，绝不自动切换生产。
+> **训练专项历史入口（2026-08-08 V2）：** [`NextGen 四模型数据与训练闭环 V2`](./implementation/nextgen-four-model-training-loop-v2/README.md) 及其中的 [`Agent 一次性执行提示词`](./implementation/nextgen-four-model-training-loop-v2/AGENT-EXECUTION-PROMPT.md) 继续保存数据、SAM、四 snapshots 和 Apple 调度契约，但当前由 Operational Workbench V3 统一调度，不再是全平台开工入口。
 >
 > **Qwen3-VL 智能级联专项（2026-08-06 已批准方案 B）：** 先读 [`Qwen3-VL 4B + Graph+Loop 多模型智能级联设计`](./superpowers/specs/2026-08-06-qwen3-vl-4b-graph-loop-cascade-design.md)，实施时严格执行 [`Qwen3-VL 4B + Graph+Loop 实施计划与 Agent 提示词`](./superpowers/plans/2026-08-06-qwen3-vl-4b-graph-loop-cascade-implementation-plan.md)。专项复用统一底座，不建设第二套 Orchestrator；当前 `sku_v7_sam` 先按 experimental 对账，Qwen 使用隔离 MLX-VLM 环境且不得与现有 MPS 重训练并行。
 >
@@ -42,10 +44,12 @@ python -m src.recognize.api --port 8091    # 识别接口
 
 | 文档 | 内容 |
 |---|---|
-| [`implementation/agentic-business-os-domain-packs-v2/README.md`](./implementation/agentic-business-os-domain-packs-v2/README.md) | **当前平台实施入口**：现有 UI/任务断链审计、统一 Work/Event/Usage、智能 Workflow Studio、IAM/主数据、问卷、BI、位置外勤与财务 Domain Packs |
+| [`implementation/agentic-business-os-operational-workbench-v3/README.md`](./implementation/agentic-business-os-operational-workbench-v3/README.md) | **当前唯一实施入口**：从“模块样板”升级为可运营工作台，统一首页/任务/日历/日志/进度、Agent/人工双通道和真实 UAT |
+| [`implementation/agentic-business-os-operational-workbench-v3/AGENT-EXECUTION-PROMPT.md`](./implementation/agentic-business-os-operational-workbench-v3/AGENT-EXECUTION-PROMPT.md) | **连续执行任务书**：T0–T12、G0–G8、V4 best 受控切换、React Flow 工作流、全 Domain Workbench 和 60 项最终报告 |
+| [`implementation/agentic-business-os-domain-packs-v2/README.md`](./implementation/agentic-business-os-domain-packs-v2/README.md) | **V3 前置历史契约**：现有 UI/任务断链审计、统一 Work/Event/Usage、Workflow、IAM/主数据、问卷、BI、位置外勤与财务纵向样板 |
 | [`implementation/agentic-business-os-domain-packs-v2/AGENT-EXECUTION-PROMPT.md`](./implementation/agentic-business-os-domain-packs-v2/AGENT-EXECUTION-PROMPT.md) | **可直接交给实施 Agent 的完整任务书**：先修连续性与 UI，再按 Gate 实现工作流和业务纵向切片 |
 | [`implementation/project-logic-chain-v3/STATUS.md`](./implementation/project-logic-chain-v3/STATUS.md) | **当前运行事实入口**：rq_v2、LS 19/20、gold、服务、数据库、正式/Legacy 模块与人工验收 Gate |
-| [`implementation/nextgen-four-model-training-loop-v2/README.md`](./implementation/nextgen-four-model-training-loop-v2/README.md) | **当前唯一实施入口**：三批照片重建、严格过滤、点提示 SAM、四数据集、四模型、Graph+Loop、Apple 调度和 Recognition Profile |
+| [`implementation/nextgen-four-model-training-loop-v2/README.md`](./implementation/nextgen-four-model-training-loop-v2/README.md) | **训练专项历史入口**：三批照片重建、严格过滤、点提示 SAM、四数据集、四模型、Apple 调度和 Recognition Profile |
 | [`implementation/nextgen-four-model-training-loop-v2/AGENT-EXECUTION-PROMPT.md`](./implementation/nextgen-four-model-training-loop-v2/AGENT-EXECUTION-PROMPT.md) | **可直接交给 Agent 的一次性任务书**：统一授权、Task 0–15、Loop、停止线、完成状态和 34 项最终报告 |
 | [`implementation/graph-loop-training-control-v1/00-READ-ME-FIRST.md`](./implementation/graph-loop-training-control-v1/00-READ-ME-FIRST.md) | **V1 历史契约基线**：旧模型隔离、四通道契约、Worker 原语和只读控制台；执行链缺口由 V2 接管 |
 | [`implementation/graph-loop-training-control-v1/AGENT-EXECUTION-PROMPT.md`](./implementation/graph-loop-training-control-v1/AGENT-EXECUTION-PROMPT.md) | **V1 历史任务书**：保留用于提交与证据追溯，不再直接交给新 Agent 开工 |
