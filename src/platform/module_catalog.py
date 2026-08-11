@@ -71,10 +71,10 @@ def _vision() -> ModuleManifestV2:
                            kind="labeling",
                            description="Label Studio 代理（HTTP 8300）"),
         ),
-        commands=("vision.recognition.create", "vision.recognition.cancel"),
+        commands=("vision.recognition.create",),
         queries=("vision.recognition.list", "vision.profiles.list"),
         events=("vision.recognition.completed",),
-        api_prefix="/api/v1/vision",
+        api_prefix="/api/v1/recognition",
         openapi_tag="vision",
         data_products=("vision.recognition_daily_v1",),
         permission_scopes=("vision.read", "vision.recognize",
@@ -151,6 +151,7 @@ def build_default_module_registry() -> ModuleRegistry:
         data_products=("survey.responses_v1",),
         permission_scopes=("survey.read", "survey.manage"),
         billing_units=("response",),
+        agents=("survey_agent",),
     ))
     reg.register(ModuleManifestV2(
         module_id="geo", name="位置与外勤", version="1.0.0",
@@ -170,6 +171,7 @@ def build_default_module_registry() -> ModuleRegistry:
         api_prefix="/api/v1/geo", openapi_tag="geo",
         data_products=("geo.store_index_v1",),
         permission_scopes=("geo.read",), billing_units=("task",),
+        agents=("fieldops_agent",),
     ))
     reg.register(_vision())
     reg.register(ModuleManifestV2(
@@ -190,6 +192,7 @@ def build_default_module_registry() -> ModuleRegistry:
         api_prefix="/api/v1/analytics", openapi_tag="analytics",
         data_products=("analytics.kpi_daily_v1",),
         permission_scopes=("analytics.read",), billing_units=("query",),
+        agents=("analytics_agent",),
     ))
     reg.register(ModuleManifestV2(
         module_id="workflow", name="工作流与 Agent", version="1.1.0",
@@ -223,6 +226,7 @@ def build_default_module_registry() -> ModuleRegistry:
         api_prefix="/api/v1/runs", openapi_tag="workflow",
         permission_scopes=("workflow.read",), billing_units=("run",),
         health_checks=(),
+        agents=("workflow_agent",),
     ))
     reg.register(ModuleManifestV2(
         module_id="iam", name="账号与权限", version="1.0.0",
@@ -241,6 +245,7 @@ def build_default_module_registry() -> ModuleRegistry:
         api_prefix="/api/v1/iam", openapi_tag="iam",
         permission_scopes=("iam.read", "iam.manage"),
         billing_units=(),
+        agents=("iam_agent",),
     ))
     reg.register(ModuleManifestV2(
         module_id="master", name="客户与主数据", version="1.0.0",
@@ -279,6 +284,7 @@ def build_default_module_registry() -> ModuleRegistry:
         api_prefix="/api/v1/finance", openapi_tag="finance",
         data_products=("usage.cost_ledger_v1",),
         permission_scopes=("finance.read",), billing_units=("token",),
+        agents=("finance_agent",),
     ))
     reg.register(ModuleManifestV2(
         module_id="system", name="系统与开发者", version="1.0.0",
@@ -296,7 +302,7 @@ def build_default_module_registry() -> ModuleRegistry:
                            description="训练监控只读（HTTP 8092）"),
         ),
         queries=("system.health", "modules.list"),
-        api_prefix="/api/v1/system", openapi_tag="system",
+        api_prefix="/api/v1/platform", openapi_tag="system",
         permission_scopes=("system.read",), billing_units=("call",),
         health_checks=("monitor",),
     ))

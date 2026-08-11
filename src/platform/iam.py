@@ -45,12 +45,15 @@ def can(role: str, action: str) -> bool:
 
 # permission bundle（版本化 scope）
 SCOPES = (
-    "vision.read", "vision.manage",
+    "vision.read", "vision.manage", "vision.recognize",
+    "vision.annotation.review",
     "workflow.read", "workflow.publish",
     "master.read", "master.manage",
     "iam.read", "iam.manage",
-    "analytics.read", "survey.read", "geo.read", "finance.read",
-    "agent.query",
+    "analytics.read", "survey.read", "survey.manage",
+    "geo.read", "finance.read",
+    "agent.query", "home.read", "data.read",
+    "system.read", "reference.read",
 )
 
 # 内置角色模板（03 §1.2）

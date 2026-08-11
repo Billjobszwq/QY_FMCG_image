@@ -72,3 +72,45 @@ cat .models/bundles/CURRENT.json        # 当前 production（不修改）
 - 禁止：宽泛 `pkill python`、删除 `.platform/`、切换 CURRENT.json、启动训练。
 - 训练进程若真实存在（`status` 会警告），本脚本不启停它，需人工按训练门禁处理。
 - 本轮红线：不重新训练、不切 production、不删除历史资产、不 merge/push/deploy。
+
+## 7. ABOSV2 控制平面运维（2026-08-12 增补）
+
+### 7.1 迁移版本
+
+当前迁移至 `039_finance_v1`（031 supersession / 032 goals / 033 控制平面 /
+034 workflow / 035 IAM+主数据 / 036 问卷 / 037 BI / 038 外勤 / 039 财务）。
+迁移幂等：8400 重启自动补齐；篡改历史迁移会以 sha256 校验拒绝启动。
+
+### 7.2 日常对账（建议每日）
+
+```bash
+# 事件↔投影↔outbox 一致性（consistent=true 才健康）
+curl -b <登录 cookie> http://127.0.0.1:8400/api/v1/control/reconcile
+# 集成契约交叉验证（ok=true 才健康：Manifest/Agent/命令/UI 路由/OpenAPI）
+curl -b <登录 cookie> http://127.0.0.1:8400/api/v1/platform/integration
+# current 工作投影（可从事件重建）
+curl -b <登录 cookie> http://127.0.0.1:8400/api/v1/control/projection
+```
+
+### 7.3 常用 API（全部需登录 session + CSRF 写保护）
+
+| 域 | 端点 |
+|---|---|
+| 命令网关 | `POST /api/v1/commands`（统一入口，幂等键） |
+| 目标 | `POST /api/v1/goals`、`POST /api/v1/goals/{id}/confirm` |
+| 工作流 | `POST /api/v1/workflows`（draft/lint/simulate/approve/publish） |
+| IAM | `POST /api/v1/iam/principals`、`POST /api/v1/iam/grants` |
+| 主数据 | `/api/v1/master/customers|projects|skus` |
+| 问卷 | `/api/v1/survey/definitions|assignments|responses|report` |
+| BI | `/api/v1/analytics/metrics|reports|anomalies` |
+| 外勤 | `/api/v1/geo/addresses|tasks|plans|fences` |
+| 财务 | `/api/v1/finance/contracts|invoices`（账单仅来自 immutable Usage） |
+
+### 7.4 故障补充
+
+| 故障 | 排查 |
+|---|---|
+| reconcile consistent=false | 检查 outbox pending；重跑投影 `/api/v1/control/projection`（自动重建） |
+| integration ok=false | 按报告 errors 定位缺失的 agent/命令/UI 路由/OpenAPI 前缀 |
+| 账单疑问 | 账单行下钻 usage_id/run_id/证据；禁止手工改 usage（append-only） |
+| 工作流卡 waiting_human | `/workflow/approvals` 批准后自动续跑 |

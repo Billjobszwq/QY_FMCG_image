@@ -165,6 +165,23 @@ def create_app(
         app.include_router(create_finance_router(
             bundle.store, FinanceService(bundle.store),
             IAMService(bundle.store), auth=AuthService(bundle.store)))
+
+        # ABOSV2 Z-1：集成契约交叉验证（fail-closed）。
+        @app.get("/api/v1/platform/integration")
+        def platform_integration():
+            from src.platform.integration import integration_report
+            from src.platform.agents.kernel import AgentRegistry, _BUILTIN
+            agent_reg = AgentRegistry(bundle.store)
+            agent_ids = {a["agent_id"] for a in agent_reg.list_agents()}
+            schemas = set()
+            for m in _BUILTIN:
+                schemas.update(m.command_schemas)
+            openapi_paths = list(app.openapi().get("paths", {}).keys())
+            return integration_report(
+                module_registry, agent_ids=agent_ids,
+                openapi_paths=openapi_paths,
+                gateway_commands=set(gateway.SUPPORTED_COMMANDS),
+                agent_command_schemas=schemas)
         # U2-2：数据中心 Asset API（真实台账 source_asset_inventory_v1）
         from src.platform.api.assets import create_assets_router
         app.include_router(create_assets_router(bundle.store))

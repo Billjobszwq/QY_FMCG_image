@@ -103,3 +103,38 @@ retention/consumers/billing），不 join 他域私有表。BI 只读
 | Agent 运行时 | `src/platform/agents/supervisor.py`、`src/platform/api/agent_runtime_api.py` |
 | 前端壳层 | `web/src/App.tsx`、`web/src/platform/` |
 | 栈控制 | `bin/abos` |
+
+## 8. ABOSV2 接入契约（Phase B–F 之后，2026-08-12 增补）
+
+新 Domain Pack 除第 1–7 节外，还必须接入统一控制平面，否则集成报告
+`GET /api/v1/platform/integration` 会 fail-closed 报错：
+
+1. **统一命令入口**：写动作经 `CommandGateway`（`POST /api/v1/commands`）
+   注册到 `SUPPORTED_COMMANDS` 或 `integration.PLATFORM_COMMANDS`，自动获得
+   BusinessRun/WorkItem/事件/证据/Usage 链；不得直连领域表绕过。
+2. **IAM 作用域**：`permission_scopes` 必须在 `src/platform/iam.py SCOPES`
+   注册；API 守卫用 `iam.authorize(actor, scope, customer_id=...)`。
+3. **UI 路由**：前端路由只写入 `web/src/platform/ui_registry.tsx` 的
+   `MODULE_ROUTES`（App.tsx 不再手写模块路由）；键必须与 module_catalog
+   导航路由一致（契约测试 `test_abos_v2_integration.py` 三方校验）。
+4. **Agent**：声明的 agents 必须在 `src/platform/agents/kernel.py _BUILTIN`
+   注册（capability_scopes 须在 GRANTABLE_SCOPES 白名单内）；高风险动作
+   必须带 human approval 规则。
+5. **计费**：产生用量的模块必须经 `usage_event_v2`（customer/project 作用域
+   字段必填）；账单只能由 Finance 服务从 immutable Usage 生成。
+6. **Manifest 投影**：`registry.project()` 现含 commands/queries/events；
+   模块声明的执行契约必须真实存在，缺失即集成错误。
+
+### Domain Agent 清单（Z-2）
+
+supervisor / modelops / data_steward / workbench / recognition_agent /
+system_agent + 六个 Domain Agent：workflow_agent、iam_agent、survey_agent、
+analytics_agent、fieldops_agent、finance_agent。各自独立身份、allowlist、
+数据 scope、approval 规则；Supervisor 只规划/委派/追踪，不借用管理员身份。
+
+### 日常自检
+
+```bash
+curl -b <cookie> :8400/api/v1/platform/integration   # ok=true 才允许合入
+pytest tests/contract/test_abos_v2_integration.py    # 三方路由一致性
+```

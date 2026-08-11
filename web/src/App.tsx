@@ -1,105 +1,24 @@
 // ABOS T2/T5：Agentic Business OS 工作台壳层。
-// 一级导航来自 Module Registry 投影（不硬编码）；二级为真实 route；
+// 一级导航来自 Module Registry 投影（不硬编码）；二级路由由
+// ModuleUIRegistry（platform/ui_registry.tsx）统一驱动（Z-1/P1-003）；
 // 旧路由保留 redirect；身份/production 全部来自实时 API。
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { NavLink, Navigate, Route, Routes, useLocation } from
   "react-router-dom";
 import "./platform/design/tokens.css";
 import "./platform/design/shell.css";
 import "./styles.css";
 import {
-  AuthMe, HealthBody, fetchAgents, fetchHealth, fetchMe, login, logout,
+  AuthMe, HealthBody, fetchHealth, fetchMe, login, logout,
 } from "./api";
 import {
   ModuleView, PlatformIdentity, ProductionInfo, STATUS_CN,
   accentVar, fetchIdentity, fetchModules, fetchProduction,
 } from "./platform/registry";
 import SupervisorWorkspace from "./platform/SupervisorWorkspace";
-import Home from "./pages/Home";
-import GraphRuns from "./pages/GraphRuns";
-import {
-  WorkflowAgentsAndModels, WorkflowApprovals, WorkflowConnectors,
-  WorkflowEvidenceUsage, WorkflowRunCenter, WorkflowStudio,
-  WorkflowTemplates,
-} from "./pages/Workflow";
-import SystemStatus from "./pages/SystemStatus";
-import {
-  IamAccounts, IamAudit, MasterCustomers, MasterProjects, MasterSkus,
-} from "./pages/IamMaster";
-import { SurveyDesign, SurveyField, SurveyReport } from "./pages/Survey";
-import {
-  AnalyticsAnomalies, AnalyticsReports, AnalyticsSemantics,
-} from "./pages/Analytics";
-import { GeoAddresses, GeoField, GeoVisit } from "./pages/Geo";
-import { FinanceContracts, FinanceInvoices } from "./pages/Finance";
-import {
-  RecognizeNow, VisionAnnotation, VisionDatasets, VisionEvidence,
-  VisionModels, VisionTasks,
-} from "./pages/Vision";
+import { MODULE_REDIRECTS, MODULE_ROUTES } from "./platform/ui_registry";
 import NewPackaging from "./pages/NewPackaging";
 import CascadeTasks from "./pages/CascadeTasks";
-
-// ---- 工作流 / Agent 矩阵（二级：/workflow/agents） ----
-function AgentsMatrix({ modules }: { modules: ModuleView[] }) {
-  const [agents, setAgents] = useState<any[] | null>(null);
-  useEffect(() => {
-    fetchAgents().then((d) => setAgents(d.agents as any[])).catch(
-      () => setAgents([]));
-  }, []);
-  const byId = useMemo(() => {
-    const m: Record<string, string> = {};
-    for (const mod of modules) {
-      for (const a of mod.agents) m[a] = mod.name;
-    }
-    return m;
-  }, [modules]);
-  return (
-    <div className="page">
-      <div className="page-header"><h1>Agent 矩阵</h1>
-        <span className="desc">AgentManifest 注册、权限范围与所属模块</span>
-      </div>
-      <div className="card">
-        {agents === null ? <p className="muted">加载中…</p> : (
-          <table className="table">
-            <thead><tr><th>Agent</th><th>域</th><th>风险</th>
-              <th>所属模块</th></tr></thead>
-            <tbody>
-              {agents.map((a) => (
-                <tr key={a.agent_id}>
-                  <td className="k">{a.agent_id}</td>
-                  <td>{a.domain}</td>
-                  <td>{a.risk_level}</td>
-                  <td>{byId[a.agent_id] ?? "平台"}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </div>
-    </div>
-  );
-}
-
-// ---- reference.echo：非识别模块证明内核通用 ----
-function ReferenceEcho() {
-  const [out, setOut] = useState<string | null>(null);
-  useEffect(() => {
-    fetch("/api/v1/reference/echo?text=hello-from-workbench")
-      .then((r) => r.json()).then((d) => setOut(JSON.stringify(d, null, 2)))
-      .catch((e) => setOut(String(e)));
-  }, []);
-  return (
-    <div className="page">
-      <div className="page-header"><h1>参考模块 Echo</h1>
-        <span className="desc">最小非业务 Domain Pack：注册即可发现/调用</span>
-      </div>
-      <div className="card">
-        <h3>GET /api/v1/reference/echo</h3>
-        <pre>{out ?? "调用中…"}</pre>
-      </div>
-    </div>
-  );
-}
 
 function ModulePage(_props: { modules: ModuleView[]; moduleId: string }) {
   // ABOSV2 Phase A–F：所有 planned 插槽已被真实路由取代；
@@ -228,121 +147,16 @@ export default function App() {
             </nav>
           )}
           <Routes>
-            <Route path="/" element={<Home health={health}
-              modules={modules} identity={identity} />} />
-            <Route path="/home" element={<Home health={health}
-              modules={modules} identity={identity} />} />
-            {/* 智能识别域：六条真实二级路由 */}
-            <Route path="/vision" element={<Navigate to="/vision/recognize"
-              replace />} />
-            <Route path="/vision/recognize"
-              element={<div className="page wide">
-                <RecognizeNow health={health} /></div>} />
-            <Route path="/vision/tasks"
-              element={<div className="page wide"><VisionTasks /></div>} />
-            <Route path="/vision/annotation"
-              element={<div className="page wide">
-                <VisionAnnotation health={health} /></div>} />
-            <Route path="/vision/datasets"
-              element={<div className="page wide"><VisionDatasets /></div>} />
-            <Route path="/vision/models"
-              element={<div className="page wide"><VisionModels /></div>} />
-            <Route path="/vision/evidence"
-              element={<div className="page wide"><VisionEvidence /></div>} />
-            {/* 数据与资产 */}
-            <Route path="/data/assets"
-              element={<div className="page wide">
-                <VisionDatasets /></div>} />
-            <Route path="/data/quality"
-              element={<div className="page wide"><VisionEvidence /></div>} />
-            {/* 工作流与 Agent（ABOSV2 Phase C：Studio 七页签） */}
-            <Route path="/workflow" element={<Navigate to="/workflow/studio"
-              replace />} />
-            <Route path="/workflow/studio"
-              element={<div className="page wide"><WorkflowStudio /></div>} />
-            <Route path="/workflow/templates"
-              element={<div className="page wide">
-                <WorkflowTemplates /></div>} />
-            <Route path="/workflow/runs"
-              element={<div className="page wide">
-                <WorkflowRunCenter /><GraphRuns /></div>} />
-            <Route path="/workflow/approvals"
-              element={<div className="page wide">
-                <WorkflowApprovals /></div>} />
-            <Route path="/workflow/connectors"
-              element={<div className="page wide">
-                <WorkflowConnectors /></div>} />
-            <Route path="/workflow/agents"
-              element={<div className="page wide">
-                <WorkflowAgentsAndModels />
-                <AgentsMatrix modules={modules} /></div>} />
-            <Route path="/workflow/evidence"
-              element={<div className="page wide">
-                <WorkflowEvidenceUsage /></div>} />
-            {/* 账号与权限 / 客户与主数据（ABOSV2 Phase D） */}
-            <Route path="/iam" element={<Navigate to="/iam/accounts"
-              replace />} />
-            <Route path="/iam/accounts"
-              element={<div className="page wide"><IamAccounts /></div>} />
-            <Route path="/iam/audit"
-              element={<div className="page wide"><IamAudit /></div>} />
-            <Route path="/master" element={<Navigate
-              to="/master/customers" replace />} />
-            <Route path="/master/customers"
-              element={<div className="page wide">
-                <MasterCustomers /></div>} />
-            <Route path="/master/projects"
-              element={<div className="page wide">
-                <MasterProjects /></div>} />
-            <Route path="/master/skus"
-              element={<div className="page wide"><MasterSkus /></div>} />
-            {/* 调研与问卷（ABOSV2 Phase E，真实后端） */}
-            <Route path="/survey" element={<Navigate to="/survey/design"
-              replace />} />
-            <Route path="/survey/design"
-              element={<div className="page wide">
-                <SurveyDesign /></div>} />
-            <Route path="/survey/field"
-              element={<div className="page wide"><SurveyField /></div>} />
-            <Route path="/survey/report"
-              element={<div className="page wide">
-                <SurveyReport /></div>} />
-            {/* 分析与 BI（ABOSV2 Phase F，真实后端） */}
-            <Route path="/analytics" element={<Navigate
-              to="/analytics/reports" replace />} />
-            <Route path="/analytics/reports"
-              element={<div className="page wide">
-                <AnalyticsReports /></div>} />
-            <Route path="/analytics/anomalies"
-              element={<div className="page wide">
-                <AnalyticsAnomalies /></div>} />
-            <Route path="/analytics/semantics"
-              element={<div className="page wide">
-                <AnalyticsSemantics /></div>} />
-            {/* 位置与外勤（ABOSV2 Phase F，真实后端） */}
-            <Route path="/geo" element={<Navigate to="/geo/addresses"
-              replace />} />
-            <Route path="/geo/addresses"
-              element={<div className="page wide">
-                <GeoAddresses /></div>} />
-            <Route path="/geo/field"
-              element={<div className="page wide"><GeoField /></div>} />
-            <Route path="/geo/visit"
-              element={<div className="page wide"><GeoVisit /></div>} />
-            {/* 财务与结算（ABOSV2 Phase F，真实后端） */}
-            <Route path="/finance" element={<Navigate
-              to="/finance/contracts" replace />} />
-            <Route path="/finance/contracts"
-              element={<div className="page wide">
-                <FinanceContracts /></div>} />
-            <Route path="/finance/invoices"
-              element={<div className="page wide">
-                <FinanceInvoices /></div>} />
-            {/* 系统与开发者 */}
-            <Route path="/status"
-              element={<SystemStatus health={health} />} />
-            {/* planned 模块插槽已全部被真实路由取代（ABOSV2 Phase A–F） */}
-            <Route path="/reference/echo" element={<ReferenceEcho />} />
+            <Route path="/" element={<Navigate to="/home" replace />} />
+            {/* ABOSV2 Z-1：模块路由由 ModuleUIRegistry 统一驱动 */}
+            {Object.entries(MODULE_ROUTES).map(([path, factory]) => (
+              <Route key={path} path={path}
+                element={factory({ health, modules, identity })} />
+            ))}
+            {Object.entries(MODULE_REDIRECTS).map(([from, to]) => (
+              <Route key={from} path={from}
+                element={<Navigate to={to} replace />} />
+            ))}
             {/* 兼容旧路由（redirect，deprecated） */}
             <Route path="/recognition" element={<Navigate
               to="/vision/recognize" replace />} />

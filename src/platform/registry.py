@@ -160,6 +160,10 @@ class ModuleRegistry:
                                for n in m.navigation],
                 "agents": list(m.agents),
                 "capabilities": [c.capability_id for c in m.capabilities],
+                # ABOSV2 Z-1：执行契约必须投影（P1-002 关闭）
+                "commands": list(m.commands),
+                "queries": list(m.queries),
+                "events": list(m.events),
                 "api_prefix": m.api_prefix,
                 "data_products": list(m.data_products),
                 "permission_scopes": list(m.permission_scopes),

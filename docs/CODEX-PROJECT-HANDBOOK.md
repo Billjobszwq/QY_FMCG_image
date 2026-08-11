@@ -648,3 +648,22 @@ Agent 不是万能管理员。Graph 节点必须声明 capability、数据域、
 - Gate=MICRO_GOLD_V2_READY_AWAITING_HUMAN_REVIEW（LS22 唯一有效人工入口）。
 - M4 v2 0.828=EXPERIMENTAL_GROUP_LEAKED；v3 独立评估新 adapter 无收益。
 - 用户下一步唯一操作：LS22 完成 200 条真实人工审核。
+
+## 2026-08-12 · ABOSV2 Phase A–F + T9 收口接续
+
+- 入口：`docs/implementation/agentic-business-os-domain-packs-v2/`（STATUS.md
+  为唯一 Gate）。Gate=`PHASE_A–F_CLOSED_G1–G8_PASSED`，T9 Z-1/Z-2/Z-3 已收口。
+- 关键事实：迁移至 039；统一控制平面（BusinessRun/WorkItem/Event/Usage/
+  Evidence + Outbox + 可重建投影）；Workflow Studio（15 节点类型、生命周期、
+  checkpoint/死信、n8n/Dify 诚实 blocked）；IAM+主数据（双 test fixture
+  客户隔离实证）；问卷/BI/外勤/财务纵向切片全部实跑贯通。
+- 集成契约：`GET /api/v1/platform/integration` 现场 ok=true（12 agents、
+  34 UI 路由、190 OpenAPI 路径、33 命令）；前端 MODULE_ROUTES 与后端目录
+  三方一致性由契约测试强制。
+- 测试基线：hermetic 1260 passed（+1 skipped）；host_mps 6 passed 单独统计。
+- 现场性能快检：workitems p50≈4.6ms/p95≈4.8ms；reconcile p95≈1.3ms。
+- 安全快检：无 session 401；无 CSRF 403；identity 无敏感字段泄漏。
+- 红线保持：未 merge/push/deploy；未启动训练；production 未切换；
+  用户未跟踪资产零触碰。
+- 下一步：用户验收（READY_FOR_USER_ACCEPTANCE 需用户确认）；剩余 P2 项
+  （便签服务端化、event SSE、profile 信息架构）按 ISSUES.md 排期。

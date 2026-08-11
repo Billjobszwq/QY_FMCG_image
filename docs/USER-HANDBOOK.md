@@ -1,133 +1,143 @@
 # Agentic Business OS · 用户使用手册
 
-> 版本：v2（2026-08-11，随 `agentic-business-os-workbench-v1` 重构发布）
-> 本手册所有命令均已在本机实测。会变化的事实（production、Gate、任务数、项目 ID）
-> 一律不在手册里写死，请在“系统与开发者 → 系统状态”页或 API 实时查看。
+> 版本：v3（2026-08-12，随 ABOSV2 Phase A–F 发布）。
+> 本手册按角色给出“从登录到完成任务”的操作流；所有命令均在本机实测。
+> 会变化的事实（production、任务数、项目 ID）请在“系统与开发者 → 系统状态”
+> 或 API 实时查看，不在手册写死。
 
 ## 0. 这是什么 / 不是什么
 
 - **是**：以 Graph+Loop 为智能执行内核、以模块化 Domain Pack 为业务能力、
-  由主管 Agent 与领域 Agent 协作完成工作的**智能业务操作系统**。
-- **不是**：单一 SKU 识别工具，也不是传统 SaaS。图像识别/标注/训练只是
-  **第一个已实现的 Domain Pack（智能识别）**；数据仓库、问卷、地理外勤、
-  BI、财务等模块按同一契约接入，当前标记为 planned（只有规格与插槽，无假数据）。
+  由主管 Agent 与六个 Domain Agent 协作完成工作的**智能业务操作系统**。
+  已上线的 Domain Pack：智能识别、工作流、账号与权限、客户与主数据、
+  调研与问卷、分析与 BI、位置与外勤、财务与结算。
+- **不是**：单一 SKU 识别工具，也不是传统 SaaS。所有业务动作走统一的
+  Work/Run/Event/Usage 控制平面：任何任务都能回答“谁为哪个客户/项目发起、
+  运行到哪、下一步是谁、用了什么证据、花了多少钱”。
 
-## 1. Quick Start（冷启动到识别一张照片）
-
-前置条件：macOS（Apple Silicon）、miniconda Python、Node 已安装；仓库已克隆。
+## 1. 冷启动（任何角色通用）
 
 ```bash
 cd /Users/zhangweiqi/Documents/QY/项目/LLM-Image
 ./bin/abos doctor      # 环境体检：Python/DB/dist/端口/无训练进程
-./bin/abos start       # 启动 8091/8092/8300/8400（幂等，已运行则跳过）
+./bin/abos start       # 幂等启动 8091/8092/8300/8400
 ./bin/abos status      # 四服务应全部 UP
 ```
 
-预期结果：`status` 输出四行 UP，production 显示当前 bundle（实时读取）。
-失败处理：见第 9 节故障排查矩阵。
+打开 http://127.0.0.1:8400 → 用你的账号登录（平台管理员口令在 `.env`
+的 `PLATFORM_ADMIN_PASSWORD`；其他账号由管理员在“账号与权限”开设）。
 
-打开 http://127.0.0.1:8400 → 用 admin 登录（口令见 `.env` 的
-`PLATFORM_ADMIN_PASSWORD`；首次部署请先设置该项再 `./bin/abos restart`）。
+## 2. 角色一：平台管理员（owner / platform_admin）
 
-## 2. 登录与工作台布局
+**目标：管理账号与价格、监督全局、批准高风险动作。**
 
-- 登录页品牌为 Agentic Business OS；身份由服务端 session 校验，
-  不信任任何客户端 header。
-- 布局：顶栏（品牌/环境/用户/实时 production）+ 左侧一级模块导航
-  （来自 Module Registry 实时投影，带 live/planned 状态徽章）+
-  中间页面（二级导航为真实 URL，可深链接/刷新/前进后退）+
-  右侧主管工作台（任务板 + 主管 Agent，窄屏可收起，✦ 按钮展开）。
+1. **账号开设**：账号与权限 → 账号与角色：输入 username/口令/身份类型
+   （user / service_account / agent）→ 创建；随后在“授权”区为其绑定
+   角色（customer_admin、analyst…）与客户/项目作用域。
+   Agent 身份独立、不得口令登录。
+2. **审计与批准矩阵**：账号与权限 → 审计与批准矩阵：所有授权/开户动作
+   append-only 留痕；高风险动作（production.switch、finance.finalize 等）
+   只有矩阵指定角色可批准，可用“检查我是否可批准”自检。
+3. **价格变更**：财务与结算 → 合同与价目卡 → “新版本价目”（仅平台角色）。
+   新版本只影响其后生成的账单，**已开票金额永不重算**。
+4. **全局监督**：首页五张便签卡只显示当前工作项（被取代的历史队列归档，
+   不再充数）；“运行概览”显示周期任务板与归档历史数量。
+5. **集成体检**：`GET /api/v1/platform/integration` 返回
+   Manifest/Agent/命令/UI 路由/OpenAPI 的交叉验证报告（ok=true 才健康）。
+6. **批准高风险命令**：主管 Agent 生成的命令预览（黄色卡片）必须点击
+   “批准并执行”才真实落库；拒绝同样记录审计。
 
-## 3. 三级导航
+## 3. 角色二：客户管理员（customer_admin）
 
-| 层级 | 含义 | 示例 |
-|---|---|---|
-| 一级 | 业务域（Module Manifest） | 智能识别、数据与资产、工作流与 Agent |
-| 二级 | 独立路由功能页 | `/vision/recognize`、`/vision/tasks` |
-| 三级 | 页内工具栏/操作 | 上传照片、URL 输入、批准命令、导出 |
+**目标：管理本客户的问卷、任务与数据；看不到其他客户。**
 
-旧链接（如 `/#/recognition`）自动重定向到新路由，历史收藏不会失效。
+1. 登录后所有列表（客户/项目/问卷/报表/账单）自动按你的客户作用域过滤；
+   访问其他客户的数据会得到 403（作用域隔离，非故障）。
+2. **发起识别**：智能识别 → 即时识别：选 Profile（只有 enabled 可选；
+   服务档位目前仅 standard 可用，其余明确标注“未启用”）→ 上传/批量/URL。
+   结果进入统一任务历史；点击任务行打开详情：契约（profile/tier/trace）、
+   输入输出、时间线、证据、用量、下一动作。
+3. **问卷管理**：调研与问卷 → 问卷设计：从样板模板实例化 → lint（跳题
+   DAG 校验：循环/不可达/冲突）→ 发布（发布后不可原地改，只能新版本）。
+4. **分配与跟进**：问卷 → 分配与填写：创建分配 → 查看填写状态；
+   报表输入页查看评分聚合（含修正后的重算版本）。
+5. **主数据**：客户与主数据：SKU 库支持别名/客户显示名/有效期/新旧包装
+   （supersede 不删除历史）；项目必须挂在客户下。
 
-## 4. 首页（主管指挥中心）
+## 4. 角色三：外勤/巡店员（field）
 
-今日待办 / 需要批准 / 正在运行 / 异常与告警 / 最近完成五张便签卡片、
-运行概览与模块健康表，全部来自实时 API；没有数据时显示诚实空态。
-“快速目标”输入框点击“交给主管”会打开右侧主管 Agent 对话。
+**目标：按路线到店、拍照取证、完成问卷。**
 
-## 5. 主管 Agent 与审批
+1. 位置与外勤 → 任务与路线：查看被派发的任务与路线（站点顺序、leg 里程、
+   总成本）；低置信度地址在人工确认前**不会**派单给你。
+2. **到店**：围栏与到店：到店打卡需在围栏半径内且 GPS 精度达标，
+   否则诚实拒绝（不是故障）。
+3. **取证**：门头必拍任务缺门头照无法完成；自拍默认关闭（人脸比对
+   默认不自动触发，启用需显式授权）。
+4. **完成**：完成时自动生成差旅费（里程 × 单价，证据随任务留痕）。
+5. **问卷填写**：调研与问卷 → 分配与填写：拍照题上传后系统给出识别
+   **建议**；必须由你接受/拒绝/修改后才成为最终答案（模型不替你作答）。
 
-- 右侧“主管 Agent”可问：识别任务、候选模型、训练进度、阻塞等，
-  回答全部来自实时事实源；LLM 不可用时明确降级为规则回答，不伪装。
-- Agent 可能返回：**证据引用**（evidence）、**UIIntent**（自动打开/定位
-  页面，白名单受控）、**命令预览**（黄色卡片：参数/影响/成本/幂等键/回滚）。
-- 高风险命令（识别批量、训练相关）必须点击“批准并执行”才会真实落库执行；
-  “拒绝”同样记录审计。production 切换、删除、发布永远要求人工独立批准，
-  Agent 无权自行执行。
+## 5. 角色四：分析师（analyst）
 
-## 6. 智能识别（首个 Domain Pack）
+**目标：出报表、追异常、回答追问。**
 
-二级入口：即时识别 / 识别任务 / 标注与审核 / 数据集 / 模型与训练 / 质量与证据。
+1. 分析与 BI → 指标语义层：只能引用注册指标（禁止任意 SQL）。
+2. 报表与仪表盘：新建报表或让 Analytics Agent 用自然语言生成**草稿**
+   （Agent 只能映射注册指标；发布必须人工批准）→ 评估（实时数值 +
+   按项目拆分）→ 批准 → 发布。
+3. **异常闭环**：异常与追问：设置规则（如 平均分 < 20）→ 命中即生成
+   追问任务 → 回答后异常关闭、相关报表自动刷新为新版本（旧版保留）。
 
-1. 在“即时识别”选择 **Recognition Profile**（只有 enabled 的可提交；
-   禁用项显示原因，服务端二次校验 fail-closed）与服务档位。
-2. 单图 / 批量（≤32 张）/ URL 三种输入全部写入**同一任务历史**，
-   响应回显冻结的 profile、tier、source、trace_id。
-3. “识别任务”页查看历史（含来源 web/api/agent、profile 列）。
-4. 0 检出是诚实结果（近景/非货架/registry 外商品 fail-closed），不是故障。
-5. 识别服务（8091）停止时：系统状态显示 degraded，识别请求诚实报错
-   `unreachable`；`./bin/abos start` 恢复后可重试。
+## 6. 角色五：财务操作员（finance_operator）
 
-API 同源（Web/API/Agent 三入口同一服务层）：
+**目标：出账单、结算、调整。**
 
-```bash
-# 登录拿 cookie 与 CSRF（admin 口令见 .env）
-curl -c jar -X POST http://127.0.0.1:8400/api/v1/auth/login \
-  -H "Content-Type: application/json" \
-  -d '{"username":"admin","password":"<口令>"}'
-CSRF=<响应中的 csrf_token>
+1. 财务与结算 → 合同与价目卡：为客户创建合同（绑定价目卡）。
+2. 账单与结算：选择客户与期间 → “生成账单”——账单**只从不可变的
+   Usage 账本**生成，每行可下钻到 usage/run/node/证据；重复生成不会
+   重复计费（幂等）。
+3. 开票 → 调整（折扣/冲正必须填原因，append-only）→ 结算；
+   结算后禁止再调整。
 
-# 创建识别任务（Idempotency-Key 幂等；profile 必须是已注册 ID）
-curl -b jar -X POST http://127.0.0.1:8400/api/v1/recognition/tasks/upload \
-  -H "X-CSRF-Token: $CSRF" -H "Idempotency-Key: demo-1" \
-  -F "files=@照片.jpg" -F "recognition_profile_id=production_legacy" \
-  -F "service_tier=standard" -F "source=api"
+## 7. 主管 Agent 与 Workflow Studio（所有角色）
 
-# 查询任务 / Profile 列表 / 平台身份 / 实时 production
-curl http://127.0.0.1:8400/api/v1/recognition/tasks
-curl http://127.0.0.1:8400/api/v1/recognition/profiles
-curl http://127.0.0.1:8400/api/v1/platform/identity
-curl http://127.0.0.1:8400/api/v1/platform/production
-# OpenAPI：http://127.0.0.1:8400/api/v1/docs
-```
+- **主管 Agent**（右侧 ✦）：问答全部来自实时事实源；首页“快速目标”
+  先落服务端（刷新可恢复），交给主管后确认形成计划/命令。
+- **工作流**：工作流搭建（生命周期 draft→lint→模拟→**人工批准**→发布，
+  发布后不可原地改）、模板库（照片识别链等）、运行中心（checkpoint/
+  重试/取消/人工批准节点）、待办与批准、连接器（n8n/Dify 许可未确认，
+  诚实 blocked）、证据与用量（事件↔投影↔outbox 对账）。
 
-## 7. planned / degraded / disabled 是什么意思
+## 8. planned / degraded / disabled 语义
 
-- **planned**：只有规格和插槽，尚无真实后端；页面会说明目标、依赖、
-  可接入 Data Product 与下一实施包；**不展示模拟数据**。
-- **degraded**：模块已启用但依赖服务异常（如识别服务离线）。
+- **planned**：只有规格和插槽（当前所有模块均已 live，不再有空插槽）；
+- **degraded**：模块已启用但依赖服务异常（如识别服务离线）；
 - **disabled**：被策略或管理员关闭；历史数据仍只读可查。
 
-## 8. 权限与高风险审批
+## 9. 权限与高风险审批
 
-- 身份=服务端 session；写操作需 CSRF token；角色由服务端决定。
-- Agent 与用户都不能：直接切 production、删除数据、发布模型、
-  终结财务账目——这些一律要求人工独立批准或拒绝。
+- 身份=服务端 session；写操作需 CSRF token；角色与作用域由服务端决定，
+  禁止客户端 header 自证。
+- Agent 与用户都不能：直接切 production、删除数据、发布模型、终结财务
+  账目——一律要求人工独立批准或拒绝；Agent 永不借用管理员身份。
 
-## 9. 故障排查矩阵（Troubleshooting Matrix）
+## 10. 故障排查矩阵
 
 | 症状 | 可能原因 | 处理 |
 |---|---|---|
 | 页面打不开 | 8400 未启动 | `./bin/abos start`；看 `.platform/logs/app.log` |
-| 登录 401 | 口令错误/未设置 | 在 `.env` 设置 `PLATFORM_ADMIN_PASSWORD` 后 `./bin/abos restart` |
-| 识别失败 `unreachable` | 8091 掉线 | `./bin/abos status` → `./bin/abos start`；重试任务 |
-| 识别 400 `profile_rejected` | 选了禁用/未注册 Profile | 按返回的 blockers 处理；改用 production_legacy |
-| 页面显示旧内容 | 浏览器缓存 | HTML 已 no-store；强制刷新即可 |
-| Agent 回答“LLM 暂不可用” | DEEPSEEK_API_KEY 未配置/网络受限 | 规则回答仍可用；配置 `.env` 后重启 app |
-| 端口被占用 | 其他进程占端口 | `./bin/abos doctor` 查看；手动处理占用进程 |
-| DB 报错 | 迁移未完成 | `./bin/abos doctor` 检查 integrity；迁移幂等可重跑 |
+| 登录 401 | 口令错误/账号停用 | 联系管理员；admin 口令在 `.env` |
+| 操作 403 | CSRF 缺失或作用域越界 | 重新登录；越界属隔离设计，非故障 |
+| 识别失败 `unreachable` | 8091 掉线 | `./bin/abos status` → `start`；在任务详情点“重试” |
+| 识别 400 `profile_rejected` | 禁用/未注册 Profile | 按返回 blockers 处理；改用 production_legacy |
+| 任务停在 waiting_human | 人工批准节点 | 工作流 → 待办与批准 中处理 |
+| 账单数字疑问 | — | 账单行下钻到 usage/run/证据逐项核对 |
+| Agent 回答“LLM 暂不可用” | DEEPSEEK_API_KEY 未配置 | 规则降级仍可用；配置后重启 app |
+| DB 报错 | 迁移未完成 | `./bin/abos doctor`；迁移幂等可重跑 |
 
-## 10. 更多文档
+## 11. 更多文档
 
-- 本机运维 Runbook：`docs/OPERATOR-RUNBOOK.md`
+- 运维 Runbook：`docs/OPERATOR-RUNBOOK.md`
 - 模块与 Agent 开发指南：`docs/MODULE-AGENT-DEV-GUIDE.md`
-- 本轮实施记录：`docs/implementation/agentic-business-os-workbench-v1/execution/`
+- 本轮实施记录：`docs/implementation/agentic-business-os-domain-packs-v2/`
