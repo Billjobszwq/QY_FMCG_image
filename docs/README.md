@@ -1,6 +1,6 @@
-# 通用 SKU 图像识别系统
+# Agentic Business OS（识别为首个 Domain Pack）
 
-> **2026-08-11 平台定位与工作台最新实施入口：** 当前代码虽已加入“Agent 驱动操作系统”文案，但仍存在模块多事实源、假三级菜单、Recognition Profile 未进入请求、Agent UIIntent 断链、CSS 变量/组件断裂和本地服务未运行等问题。下一轮实施必须先完整阅读并执行 [`Agentic Business OS Workbench V1`](./implementation/agentic-business-os-workbench-v1/README.md) 及其 [`Agent 完整执行提示词`](./implementation/agentic-business-os-workbench-v1/AGENT-EXECUTION-PROMPT.md)。该入口负责统一平台壳层、模块/Agent/API 契约并打通识别首域；不授权训练或生产切换。
+> **2026-08-11 最新实施入口：** Workbench V1 已完成一轮实现，但现场浏览器与 API/DB 对账发现旧任务复活、快速目标丢失、Recognition/Graph/Agent/Usage 断链和 1024/768 UI 遮挡。当前 Gate 为 `FOUNDATION_CONTINUITY_REPAIR_REQUIRED`。下一轮必须先完整阅读 [`连续任务底座与 Domain Packs V2`](./implementation/agentic-business-os-domain-packs-v2/README.md) 及其 [`Agent 执行提示词`](./implementation/agentic-business-os-domain-packs-v2/AGENT-EXECUTION-PROMPT.md)。该入口负责统一 Work/Event/Usage、原生 Workflow Studio、IAM/主数据、问卷、BI、位置外勤和财务；不授权训练或生产切换。
 
 > 货架陈列巡检 · **知识库驱动的自动标注 + YOLO** · 人机协同 · **本机原生优先（不依赖 Docker）**
 
@@ -42,6 +42,8 @@ python -m src.recognize.api --port 8091    # 识别接口
 
 | 文档 | 内容 |
 |---|---|
+| [`implementation/agentic-business-os-domain-packs-v2/README.md`](./implementation/agentic-business-os-domain-packs-v2/README.md) | **当前平台实施入口**：现有 UI/任务断链审计、统一 Work/Event/Usage、智能 Workflow Studio、IAM/主数据、问卷、BI、位置外勤与财务 Domain Packs |
+| [`implementation/agentic-business-os-domain-packs-v2/AGENT-EXECUTION-PROMPT.md`](./implementation/agentic-business-os-domain-packs-v2/AGENT-EXECUTION-PROMPT.md) | **可直接交给实施 Agent 的完整任务书**：先修连续性与 UI，再按 Gate 实现工作流和业务纵向切片 |
 | [`implementation/project-logic-chain-v3/STATUS.md`](./implementation/project-logic-chain-v3/STATUS.md) | **当前运行事实入口**：rq_v2、LS 19/20、gold、服务、数据库、正式/Legacy 模块与人工验收 Gate |
 | [`implementation/nextgen-four-model-training-loop-v2/README.md`](./implementation/nextgen-four-model-training-loop-v2/README.md) | **当前唯一实施入口**：三批照片重建、严格过滤、点提示 SAM、四数据集、四模型、Graph+Loop、Apple 调度和 Recognition Profile |
 | [`implementation/nextgen-four-model-training-loop-v2/AGENT-EXECUTION-PROMPT.md`](./implementation/nextgen-four-model-training-loop-v2/AGENT-EXECUTION-PROMPT.md) | **可直接交给 Agent 的一次性任务书**：统一授权、Task 0–15、Loop、停止线、完成状态和 34 项最终报告 |

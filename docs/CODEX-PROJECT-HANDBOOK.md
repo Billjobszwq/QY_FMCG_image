@@ -4,7 +4,19 @@
 >
 > 权威边界：本文件不是产品 L0 架构、实施计划、训练启动授权或线上状态接口。它只负责把权威文件、已经发生的工作和下一步入口串起来。若本文件与权威文件或当前代码冲突，以权威文件和重新验证的当前事实为准，并立即修订本文件。
 >
-> 当前快照时间：2026-08-08，Asia/Shanghai。
+> 当前快照时间：2026-08-11，Asia/Shanghai。
+
+## 2026-08-11 · 连续任务底座与 Domain Packs V2 接续
+
+- 现场 HEAD：`e5c4236d`，分支 `feat/nextgen-training-cycle-v2`；tracked 工作树干净，用户未跟踪训练/数据资产继续受保护。
+- 最新完整测试仍为 hermetic `1173 passed, 1 skipped, 6 deselected`，但浏览器和数据库/API 对账发现测试未覆盖的业务断链。
+- 当前 Gate 已从交付报告中的 `READY_FOR_NEXT_DOMAIN_PACK` 纠正为 `FOUNDATION_CONTINUITY_REPAIR_REQUIRED`。
+- 核心 P0：主页/主管读取旧 WorkItems 使 250 项历史审核复活；快速目标丢失输入；识别、Graph、Agent Command、Evidence、Usage 没有统一 work/run；服务档位只记录元数据。
+- 核心 UI：1024/768 主管抽屉遮挡主内容；识别任务页面声称可查 trace，但无详情/证据/用量入口。
+- 架构决定：ABOS 原生 Graph+Loop/Workflow Studio 是控制平面；n8n 只作可选 connector executor，Dify 只作可选 AI subflow provider，均不得成为第二事实源。
+- 最新实施入口：`docs/implementation/agentic-business-os-domain-packs-v2/README.md`；完整 Agent 任务书：同目录 `AGENT-EXECUTION-PROMPT.md`。
+- 实施顺序：P0 连续性/UI → Work/Event/Usage → Workflow Studio → IAM/主数据 → 问卷 → BI → Geo/Field → Finance。
+- 本次 Codex 仅修改文档，未修改业务代码、DB、模型或运行配置；未启动训练、切 production、merge/push/deploy。
 
 ## 2026-08-11 · 平台定位与工作台纠偏接续
 
