@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import ModuleTabs from "./ModuleTabs";
 import { Link } from "react-router-dom";
 import {
   RecognitionResult,
@@ -207,6 +208,8 @@ export default function Recognition() {
       {busy && <p className="muted">识别中…</p>}
       {error && <div className="banner banner-unavailable">识别失败：{error}</div>}
 
+      <span className="kicker">02 · 图像识别 · recognition-agent</span>
+      <ModuleTabs active="/recognition" items={[{ to: "/recognition", label: "即时识别" }, { to: "/recognition", label: "批量/URL" }, { to: "/recognition", label: "历史" }, { to: "/recognition", label: "模型选择" }]} />
       <h3>① 单文件识别（即时结果，不计任务历史）</h3>
       <label className="upload"
         onDragOver={(e) => e.preventDefault()}

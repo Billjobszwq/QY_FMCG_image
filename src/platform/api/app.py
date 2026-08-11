@@ -70,6 +70,18 @@ def create_app(
             allow_credentials=True,
         )
     install_request_context_middleware(app)
+
+    # no-cache-middleware：HTML 永不缓存（破坏旧版缓存），hash 资产长缓存
+    @app.middleware("http")
+    async def _html_nocache(request, call_next):
+        resp = await call_next(request)
+        ct = resp.headers.get("content-type", "")
+        if "text/html" in ct:
+            resp.headers["Cache-Control"] = "no-store, must-revalidate"
+            resp.headers["Pragma"] = "no-cache"
+        elif "/assets/" in request.url.path:
+            resp.headers["Cache-Control"] = "public, max-age=31536000, immutable"
+        return resp
     rec_adapter = recognition_adapter or RecognitionV2Adapter()
     mon_adapter = monitor_adapter or MonitorAdapter()
     cap_registry = registry or bootstrap_default_registry(rec_adapter, mon_adapter)

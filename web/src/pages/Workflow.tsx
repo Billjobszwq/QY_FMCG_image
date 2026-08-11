@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import ModuleTabs from "./ModuleTabs";
 
 // 工作流：n8n 风格节点画布。节点=子系统步骤，边=数据/控制流，
 // 状态色来自 Cycle 投影 + 服务健康。点击节点显示证据。
@@ -47,6 +48,8 @@ export default function Workflow() {
   const pos = (id: string) => NODES.find((n) => n.id === id)!;
   return (
     <div>
+      <span className="kicker">06 · 工作流 · workflow-agent</span>
+      <ModuleTabs active="/workflow" items={[{ to: "/workflow", label: "流水线画布" }, { to: "/runs", label: "Graph Runs" }, { to: "/taskboard", label: "任务板" }]} />
       <h1>工作流</h1>
       <p className="muted">
         Agent 编排的端到端流水线 · 数据 → 训练 → 评估 → 人工金标准 → 服务

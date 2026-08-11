@@ -1,4 +1,5 @@
 import { ReactNode, useCallback, useEffect, useState } from "react";
+import ModuleTabs from "./ModuleTabs";
 import { Link } from "react-router-dom";
 import {
   TrainingGates,
@@ -200,6 +201,9 @@ export default function Training() {
   );
 
   return (
+    <div>
+      <span className="kicker">05 · 模型训练 · modelops-agent</span>
+      <ModuleTabs active="/training" items={[{ to: "/training", label: "训练计划" }, { to: "/training", label: "候选模型" }, { to: "/training", label: "独立评估" }, { to: "/models-runtime", label: "模型驻留" }]} />
     <>
       <ReconciliationPanel />
       <TrainingControlPanel />
@@ -372,5 +376,6 @@ export default function Training() {
     </section>
       </details>
     </>
+    </div>
   );
 }
