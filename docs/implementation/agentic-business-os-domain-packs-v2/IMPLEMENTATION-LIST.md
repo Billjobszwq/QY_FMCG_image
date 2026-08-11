@@ -16,13 +16,13 @@
 
 | # | 任务 | 状态 | 依赖 | 验收 | 证据 |
 |---|---|---|---|---|---|
-| A-1 | ABOSV2-P0-001 统一 current task projection，旧 250 不再进当前待办 | NOT_STARTED | T0 | 主页/主管/任务板/API 同一投影；supersession 测试；浏览器对账 | — |
-| A-2 | ABOSV2-P0-002 快速目标服务端落 goal draft 并传入主管，刷新可恢复 | NOT_STARTED | A-1 | goal_draft 表/API；浏览器输入→主管可见→确认生成计划 | — |
-| A-3 | ABOSV2-P1-005 识别任务统一详情（work/run/trace/tier/错误/证据/usage/父子/下一动作） | NOT_STARTED | A-1 | 详情抽屉数据全部来自真实 API | — |
-| A-4 | ABOSV2-P1-006 1024/768 主管不遮挡 + 导航标签/tooltip + 表格转 card | NOT_STARTED | — | 四视口浏览器截图与 DOM 断言 | — |
-| A-5 | ABOSV2-P0-004 Service Tier 未真实路由前 UI 禁用/标记未启用 | NOT_STARTED | — | 档位选择诚实化；无伪装可售卖 | — |
-| A-6 | ABOSV2-P1-007 跨层 continuity 测试（非源码字符串断言） | NOT_STARTED | A-1..A-5 | UI→command→run→record→event→usage→projection 测试 | — |
-| A-7 | ABOSV2-P0-003 识别/Graph/Agent/Usage 断链（归入 Phase B 全链贯通） | NOT_STARTED | — | 见 B-7 | — |
+| A-1 | ABOSV2-P0-001 统一 current task projection，旧 250 不再进当前待办 | VERIFIED_LOCAL | T0 | 主页/主管/任务板/API 同一投影；supersession 测试；浏览器对账 | commit `4af64f2d`；现场 current=2/superseded=254 |
+| A-2 | ABOSV2-P0-002 快速目标服务端落 goal draft 并传入主管，刷新可恢复 | VERIFIED_LOCAL | A-1 | goal_draft 表/API；浏览器输入→主管可见→确认生成计划 | commit `79b3a534`；实跱 E2E + 浏览器截图 |
+| A-3 | ABOSV2-P1-005 识别任务统一详情（work/run/trace/tier/错误/证据/usage/父子/下一动作） | VERIFIED_LOCAL | A-1 | 详情抽屉数据全部来自真实 API | commit `15a39325`；work/run 环诚实标注待 Phase B |
+| A-4 | ABOSV2-P1-006 1024/768 主管不遮挡 + 导航标签/tooltip + 表格转 card | VERIFIED_LOCAL | — | 四视口浏览器截图与 DOM 断言 | commit `15a39325`；8 张截图 |
+| A-5 | ABOSV2-P0-004 Service Tier 未真实路由前 UI 禁用/标记未启用 | VERIFIED_LOCAL | — | 档位选择诚实化；无伪装可售卖 | commit `15a39325`；截图 + 契约守卫测试 |
+| A-6 | ABOSV2-P1-007 跨层 continuity 测试（非源码字符串断言） | VERIFIED_LOCAL | A-1..A-5 | UI→command→run→record→event→usage→projection 测试 | commit `15a39325`；test_abos_v2_continuity.py |
+| A-7 | ABOSV2-P0-003 识别/Graph/Agent/Usage 断链（归入 Phase B 全链贯通） | IMPLEMENTED_UNVERIFIED | — | 见 B-6/B-7 | Phase A 已接 goal→command→task 链；全链待 Phase B |
 
 ## Phase B · Work/Event/Usage Foundation（Gate G2）
 

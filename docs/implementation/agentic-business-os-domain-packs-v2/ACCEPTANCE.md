@@ -8,16 +8,17 @@
 - [x] 必读文档完成（EXECUTION-LOG）
 - [x] 安全基线记录（HEAD `d00953ad` / branch / worktree / 服务 4 UP / DB ok / 无训练 / production 未切）
 - [x] 治理文档六份建立
-- [ ] 每个 P0/P1 有红测试复现
+- [x] 每个 P0/P1 有红测试复现（先红后绿，见 EXECUTION-LOG）
 
-## Gate G1 · Phase A（未开始）
+## Gate G1 · Phase A（已通过，2026-08-11）
 
-- [ ] 四视口（1440×900 / 1280×800 / 1024×768 / 768×1024）浏览器截图+DOM 断言
-- [ ] current projection API/DB 对账（旧 250 不在 current 计数）
-- [ ] 快速目标刷新恢复
-- [ ] 识别详情数据真实
-- [ ] Service Tier 诚实化
-- [ ] supersession 单测/集成测试
+- [x] 四视口（1440×900 / 1280×800 / 1024×768 / 768×1024）浏览器截图+DOM 断言（8 张截图；iframe 精确断点法，方法已在报告披露）
+- [x] current projection API/DB 对账（旧 250 不在 current 计数：current=2，superseded=254）
+- [x] 快速目标刷新恢复（浏览器复验 abosv2_goal_refresh_1440.png）
+- [x] 识别详情数据真实（abosv2_task_detail_1440.png）
+- [x] Service Tier 诚实化（abosv2_tier_honest_1440.png）
+- [x] supersession 单测/集成测试（7+ 项红转绿；全量 1191 passed）
+- [x] 附加回归修复：ABOSV2-P1-008 topbar 隐藏
 
 ## Gate G2 · Phase B（未开始）
 

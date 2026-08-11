@@ -5,9 +5,14 @@
 
 ## 当前 Gate（唯一）
 
-`FOUNDATION_CONTINUITY_REPAIR_REQUIRED` → 实施中：T0 完成，Phase A 进行中。
+`PHASE_A_CLOSED_G1_PASSED → Phase B 进行中`（统一 Work/Event/Usage Foundation）。
 
-不是 `READY_FOR_NEXT_DOMAIN_PACK`。代码测试通过，但真实浏览器和数据对账发现任务事实源、快速目标、Graph/识别/计费、响应式 UI 与任务详情尚未闭合。
+Phase A 关闭证据：commit 链 `4af64f2d` → `79b3a534` → `15a39325`；
+浏览器四视口 8/8 + topbar 回归复验；hermetic 1191 passed。
+
+不是 `READY_FOR_NEXT_DOMAIN_PACK`。Phase A（P0-001/002/004、P1-005/006/007、
+新增 P1-008）已关闭；P0-003 待 Phase B 全链贯通；Workflow/IAM/问卷/BI/
+外勤/财务仍为 planned，禁止以导航入口计为完成。
 
 ## 已冻结决定
 
@@ -23,16 +28,9 @@
 
 ## 当前未关闭问题
 
-- P0：旧 250 审核重新进入当前主页；
-- P0：快速目标内容丢失；
-- P0：Recognition/Graph/Agent/Usage 无统一 run；
-- P0：服务档位未改变执行；
-- P1：Workflow 仅运行查看器；
-- P1：Manifest 与 Capability/Route 不是真正一体化；
-- P1：主管 Agent 不是工具规划执行器；
-- P1：识别任务无详情/证据/费用入口；
-- P1：1024/768 页面被主管抽屉遮挡；
-- P1：连续性 E2E 和四视口测试缺失；
+- P0：P0-003 Recognition/Graph/Agent/Usage 无统一 run（Phase B 关闭）；
+- P1：Workflow 仅运行查看器；Manifest 与 Capability/Route 不是真正一体化；
+  主管 Agent 不是工具规划执行器（Phase B/C 关闭）；
 - P2：便签 localStorage、event polling、profile 信息过载；
 - 业务：问卷、BI、Geo/Field、Finance、IAM 仍为 planned，禁止以导航入口计为完成。
 
