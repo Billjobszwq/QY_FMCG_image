@@ -230,6 +230,21 @@ def create_app(
         agent_runtime = AgentRuntime(
             bundle.store, workflow=wf_service,
             analytics=analytics_service, gateway=gateway)
+        # T5：agent 节点调用指定 Agent；wait timer 后台轮询恢复
+        wf_service.agent_runtime = agent_runtime
+
+        def _timer_poller():
+            import time as _time
+            while True:
+                try:
+                    wf_service.resume_due_timers()
+                except Exception:
+                    pass
+                _time.sleep(10)
+
+        import threading
+        threading.Thread(target=_timer_poller, daemon=True,
+                         name="workflow-timer-poller").start()
         app.include_router(create_agent_runtime_router(
             bundle.store, auth=AuthService(bundle.store),
             on_approved=agent_on_approved, runtime=agent_runtime))

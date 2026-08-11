@@ -69,6 +69,14 @@ def create_workflow_router(store: Any, service: WorkflowService,
         return {"count": len(lib["templates"]),
                 "templates": lib["templates"]}
 
+    @router.get("/api/v1/workflows/timers")
+    def timers(status: str = "") -> dict:
+        """ABOSV3 T5：持久化 wait timer（访问时顺带触发到期恢复）。"""
+        fired = service.resume_due_timers()
+        rows = service.list_timers(status=status)
+        return {"count": len(rows), "timers": rows,
+                "fired_now": fired}
+
     # ---- 定义生命周期 ----
 
     @router.post("/api/v1/workflows")

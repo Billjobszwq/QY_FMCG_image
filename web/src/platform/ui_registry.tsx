@@ -10,9 +10,10 @@ import Home from "../pages/Home";
 import GraphRuns from "../pages/GraphRuns";
 import {
   WorkflowAgentsAndModels, WorkflowApprovals, WorkflowConnectors,
-  WorkflowEvidenceUsage, WorkflowRunCenter, WorkflowStudio,
+  WorkflowEvidenceUsage, WorkflowRunCenter,
   WorkflowTemplates,
 } from "../pages/Workflow";
+import WorkflowCanvas from "../pages/WorkflowCanvas";
 import SystemStatus from "../pages/SystemStatus";
 import {
   IamAccounts, IamAudit, MasterCustomers, MasterProjects, MasterSkus,
@@ -120,7 +121,7 @@ export const MODULE_ROUTES: Record<
   "/data/assets": () => wide(<VisionDatasets />),
   "/data/quality": () => wide(<VisionEvidence />),
   // 工作流与 Agent
-  "/workflow/studio": () => wide(<WorkflowStudio />),
+  "/workflow/studio": () => wide(<WorkflowCanvas />),
   "/workflow/templates": () => wide(<WorkflowTemplates />),
   "/workflow/runs": () => wide(
     <><WorkflowRunCenter /><GraphRuns /></>),

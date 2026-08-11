@@ -1922,6 +1922,22 @@ CREATE TABLE IF NOT EXISTS agent_run_v1 (
 );
 """
 
+# ABOSV3 T5：Workflow wait 节点持久化 timer（重启可恢复）。
+_M044 = """
+CREATE TABLE IF NOT EXISTS workflow_timer_v1 (
+    timer_id TEXT PRIMARY KEY,
+    run_id TEXT NOT NULL,
+    node_id TEXT NOT NULL,
+    fire_at TEXT NOT NULL,
+    seconds REAL NOT NULL DEFAULT 0,
+    status TEXT NOT NULL DEFAULT 'pending',
+    created_at TEXT NOT NULL,
+    fired_at TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_workflow_timer_pending
+    ON workflow_timer_v1(status, fire_at);
+"""
+
 MIGRATIONS: tuple[tuple[str, str], ...] = (
     ("001_platform_init", _M001),
     ("002_labeling_inbox", _M002),
@@ -1966,6 +1982,7 @@ MIGRATIONS: tuple[tuple[str, str], ...] = (
     ("041_home_calendar_notes_v1", _M041),
     ("042_import_center_v1", _M042),
     ("043_agent_runtime_v3", _M043),
+    ("044_workflow_timer_v1", _M044),
 )
 
 
@@ -1975,6 +1992,20 @@ def _utcnow() -> str:
 
 def _sha(text: str) -> str:
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+def _workflow_hash(spec: dict[str, Any]) -> str:
+    """ABOSV3 T5：业务定义/版本/策略参与 hash；UI 坐标不参与。"""
+
+    def strip_ui(obj):
+        if isinstance(obj, dict):
+            return {k: strip_ui(v) for k, v in obj.items() if k != "ui"}
+        if isinstance(obj, list):
+            return [strip_ui(x) for x in obj]
+        return obj
+
+    return _sha(json.dumps(strip_ui(spec), sort_keys=True,
+                           ensure_ascii=False))
 
 
 def _row_to_dict(row: sqlite3.Row | None) -> dict[str, Any] | None:
@@ -3488,10 +3519,11 @@ class PlatformStore:
     RUN_TRANSITIONS = {
         "queued": {"running", "cancelled"},
         "running": {"running", "succeeded", "failed", "cancelled",
-                    "paused", "waiting_human"},
+                    "paused", "waiting_human", "waiting_timer"},
         "failed": {"running"},          # 只能经 retry 重新进入 running
         "paused": {"running", "cancelled"},
         "waiting_human": {"running", "cancelled"},
+        "waiting_timer": {"running", "cancelled"},
         "succeeded": set(),
         "cancelled": set(),
     }
@@ -3788,8 +3820,11 @@ class PlatformStore:
                 st["subject_id"] = e.get("subject_id") or st["subject_id"]
             elif t in ("run.cancelled", "workflow.cancelled"):
                 st["status"] = "cancelled"
-            elif t in ("run.waiting_human", "workflow.waiting_human"):
+            elif t in ("run.waiting_human", "workflow.waiting_human",
+                       "workflow.waiting_timer"):
                 st["status"] = "waiting"
+            elif t in ("workflow.timer_fired",):
+                st["status"] = "running"
         items = sorted(state.values(), key=lambda x: x["work_id"])
         # 同步到 work_item_v2（重建不丢失原始行，只更新状态/主体）；
         # 完成/取消时 blockers 随状态机清除（set_work_item_v2_status）。
@@ -3840,7 +3875,7 @@ class PlatformStore:
             " created_at, updated_at)"
             " VALUES (?,?,?,?,?,?,?,?,?,?)",
             (definition_id, version, name, "draft", owner, spec_json,
-             hashlib.sha256(spec_json.encode()).hexdigest(),
+             _workflow_hash(spec),
              created_by, now, now))
         self._conn.commit()
         return self.get_workflow_definition(definition_id, version)
@@ -3887,8 +3922,7 @@ class PlatformStore:
         if spec is not None:
             spec_json = json.dumps(spec, sort_keys=True, ensure_ascii=False)
             sets += ["spec_json=?", "spec_hash=?"]
-            vals += [spec_json,
-                     hashlib.sha256(spec_json.encode()).hexdigest()]
+            vals += [spec_json, _workflow_hash(spec)]
         if name is not None:
             sets.append("name=?"); vals.append(name)
         if status is not None:

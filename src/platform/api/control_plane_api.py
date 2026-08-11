@@ -91,6 +91,7 @@ def create_control_plane_router(store: Any, gateway: CommandGateway,
     # 经 supersession 账本排除被取代族）；不得再有平行真相。
     _RUN_TO_WORK = {"succeeded": "done", "failed": "blocked",
                     "cancelled": "cancelled", "waiting_human": "waiting",
+                    "waiting_timer": "waiting",
                     "paused": "waiting", "running": "running",
                     "queued": "running"}
 

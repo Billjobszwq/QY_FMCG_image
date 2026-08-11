@@ -14,6 +14,7 @@ from __future__ import annotations
 import hashlib
 import json
 import uuid
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from .agents.supervisor import SupervisorAgent
@@ -41,9 +42,23 @@ def _new_id(prefix: str) -> str:
     return f"{prefix}-" + uuid.uuid4().hex[:12]
 
 
+def _now_iso() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
 def _spec_hash(spec: dict) -> str:
+    """业务定义/版本/策略参与 hash；UI 坐标不参与（02 文档 §2）。"""
+
+    def strip_ui(obj):
+        if isinstance(obj, dict):
+            return {k: strip_ui(v) for k, v in obj.items() if k != "ui"}
+        if isinstance(obj, list):
+            return [strip_ui(x) for x in obj]
+        return obj
+
     return hashlib.sha256(json.dumps(
-        spec, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
+        strip_ui(spec), sort_keys=True, ensure_ascii=False).encode(
+        )).hexdigest()
 
 
 def _resolve_path(path: str, ctx: dict) -> Any:
@@ -229,10 +244,12 @@ TEMPLATES = [TEMPLATE_RECOGNITION_CHAIN]
 
 class WorkflowService:
     def __init__(self, store: Any, capability_registry: Any,
-                 gateway: Any) -> None:
+                 gateway: Any, agent_runtime: Any = None) -> None:
         self.store = store
         self.caps = capability_registry
         self.gateway = gateway
+        # ABOSV3 T5：agent 节点调用指定 Agent（不再固定 Supervisor）
+        self.agent_runtime = agent_runtime
 
     # ---------- 节点库（来自已注册 Capability，fail-closed） ----------
 
@@ -396,6 +413,23 @@ class WorkflowService:
                         "level": "error", "code": "loop_config",
                         "message": f"loop {n.get('id')} 需要 items_path"
                                    " 与 body（循环终止必须有界）"})
+            if t == "wait":
+                cfg = n.get("config") or {}
+                try:
+                    float(cfg.get("seconds", 0) or 0)
+                except (TypeError, ValueError):
+                    issues.append({
+                        "level": "error", "code": "wait_seconds",
+                        "message": f"wait {n.get('id')} 的 seconds"
+                                   " 必须为数字"})
+            if t == "join":
+                cfg = n.get("config") or {}
+                if cfg.get("mode", "all") not in ("all", "any",
+                                                    "quorum"):
+                    issues.append({
+                        "level": "error", "code": "join_mode",
+                        "message": f"join {n.get('id')} 的 mode 必须为"
+                                   " all/any/quorum"})
             if t == "subflow":
                 cfg = n.get("config") or {}
                 sub = (self.store.get_workflow_definition(
@@ -591,6 +625,73 @@ class WorkflowService:
                         corr=run["correlation_id"])
         return self.store.get_business_run(run_id)
 
+    # ---------- 持久化 timer（ABOSV3 T5：重启可恢复） ----------
+
+    def resume_due_timers(self) -> list[dict]:
+        """扫描到期 pending timer 并恢复执行（启动/轮询均调用）。"""
+        fired: list[dict] = []
+        rows = self.store._conn.execute(
+            "SELECT * FROM workflow_timer_v1 WHERE status='pending'"
+            " AND fire_at <= ?", (_now_iso(),)).fetchall()
+        for t in rows:
+            try:
+                self._fire_timer(dict(t))
+                fired.append({"timer_id": t["timer_id"],
+                              "run_id": t["run_id"]})
+            except Exception:
+                pass  # 单个 timer 失败不阻断其他
+        return fired
+
+    def _fire_timer(self, t: dict) -> None:
+        run = self.store.get_business_run(t["run_id"])
+        if run is None or run["status"] not in ("waiting_timer",
+                                                "running"):
+            # run 已取消/完成：timer 标 cancelled，不恢复
+            self.store._conn.execute(
+                "UPDATE workflow_timer_v1 SET status='cancelled',"
+                " fired_at=? WHERE timer_id=?",
+                (_now_iso(), t["timer_id"]))
+            self.store._conn.commit()
+            return
+        self.store._conn.execute(
+            "UPDATE workflow_timer_v1 SET status='fired', fired_at=?"
+            " WHERE timer_id=?", (_now_iso(), t["timer_id"]))
+        self.store._conn.commit()
+        d = self._must(run["workflow_definition_id"],
+                       int(run["workflow_version"]))
+        node = next((n for n in d["spec"]["nodes"]
+                     if n["id"] == t["node_id"]), None)
+        self.store.upsert_node_execution(
+            t["run_id"], t["node_id"], node_type="wait",
+            status="succeeded",
+            output_data={"waited_seconds": t["seconds"],
+                         "timer_id": t["timer_id"]})
+        self.store.emit_event(
+            event_id=_new_id("evt"), event_type="workflow.timer_fired",
+            run_id=t["run_id"], work_id=run["work_id"],
+            correlation_id=run["correlation_id"],
+            actor_type="system", actor_id="workflow_runtime",
+            payload={"node": t["node_id"], "timer_id": t["timer_id"]})
+        self.store.set_business_run_status(t["run_id"], "running")
+        ctx = self._restore_ctx(t["run_id"], d)
+        ctx["nodes"][t["node_id"]] = {
+            "status": "succeeded",
+            "waited_seconds": t["seconds"]}
+        succ = [e["to"] for e in (d["spec"].get("edges") or [])
+                if e["from"] == t["node_id"]]
+        if node and node["type"] == "wait":
+            self._run_nodes(d, succ, ctx, run_id=t["run_id"],
+                            work_id=run["work_id"],
+                            corr=run["correlation_id"])
+
+    def list_timers(self, *, status: str = "") -> list[dict]:
+        where = "WHERE status=?" if status else ""
+        rows = self.store._conn.execute(
+            f"SELECT * FROM workflow_timer_v1 {where}"
+            " ORDER BY created_at DESC LIMIT 200",
+            (status,) if status else ()).fetchall()
+        return [dict(r) for r in rows]
+
     # ---------- 执行引擎 ----------
 
     def _adjacency(self, spec: dict) -> dict[str, list[str]]:
@@ -625,6 +726,7 @@ class WorkflowService:
         nodes = {n["id"]: n for n in spec["nodes"]}
         adj = self._adjacency(spec)
         spec_all_edges = spec.get("edges") or []
+        join_requeue: dict[str, int] = {}
         while frontier:
             nid = frontier.pop(0)
             node = nodes.get(nid)
@@ -637,6 +739,19 @@ class WorkflowService:
             except _WaitingHuman as w:
                 return {"status": "waiting_human", "node": nid,
                         "work_item": w.work_id}
+            except _WaitingTimer as wt:
+                return {"status": "waiting_timer", "node": nid,
+                        "timer_id": wt.timer_id}
+            except _JoinNotReady as jn:
+                # 汇合未满足：重排到 frontier 末尾（有界）
+                join_requeue[nid] = join_requeue.get(nid, 0) + 1
+                if join_requeue[nid] > 64:
+                    return self._fail_node(
+                        d, node, ctx,
+                        f"join {nid} 无法满足（{jn.arrived}/{jn.need}）",
+                        run_id=run_id, work_id=work_id, corr=corr)
+                frontier.append(nid)
+                continue
             except WorkflowError as e:
                 return self._fail_node(d, node, ctx, str(e),
                                        run_id=run_id, work_id=work_id,
@@ -744,19 +859,54 @@ class WorkflowService:
                     return {"matched": r.get("to")}, r.get("to")
             return {"matched": cfg.get("default")}, cfg.get("default")
         if t == "wait":
-            # 同步执行下诚实处理：记录配置时长并立即通过（checkpoint 留痕）
-            return {"waited_seconds": cfg.get("seconds", 0),
-                    "note": "同步执行：timer 即时通过，真实定时由"
-                            " Phase C runtime 队列接管"}, None
+            # ABOSV3 T5：持久化 timer（进程重启后仍能恢复）；
+            # simulate 或 seconds<=0 时即时通过（checkpoint 留痕）。
+            seconds = float(cfg.get("seconds", 0) or 0)
+            if simulate or seconds <= 0 or not run_id:
+                return {"waited_seconds": seconds,
+                        "note": ("即时通过" if seconds <= 0
+                                 else "模拟：timer 未真实等待")}, None
+            fire_at = (datetime.now(timezone.utc)
+                       + timedelta(seconds=seconds)).isoformat()
+            timer_id = _new_id("tmr")
+            self.store._conn.execute(
+                "INSERT INTO workflow_timer_v1 (timer_id, run_id,"
+                " node_id, fire_at, seconds, status, created_at)"
+                " VALUES (?,?,?,?,?,?,?)",
+                (timer_id, run_id, node["id"], fire_at, seconds,
+                 "pending", _now_iso()))
+            self.store._conn.commit()
+            self.store.set_business_run_status(
+                run_id, "waiting_timer", current_node=node["id"])
+            self.store.emit_event(
+                event_id=_new_id("evt"),
+                event_type="workflow.waiting_timer",
+                run_id=run_id, work_id=work_id, correlation_id=corr,
+                actor_type="system", actor_id="workflow_runtime",
+                payload={"node": node["id"], "timer_id": timer_id,
+                         "fire_at": fire_at})
+            raise _WaitingTimer(timer_id)
         if t == "agent":
             if simulate:
                 return {"message": "[simulate] agent 节点未真实调用"}, None
-            sup = SupervisorAgent(self.store)
+            agent_id = str(cfg.get("agent_id") or "supervisor")
             prompt = str(cfg.get("prompt", "当前工作流状态？"))
             prompt = _resolve_value(prompt, ctx)
+            # ABOSV3：调用节点指定的 Agent（真实工具循环）；
+            # runtime 未装配时回退 Supervisor 规则回答（诚实降级）。
+            if self.agent_runtime is not None:
+                resp = self.agent_runtime.invoke(
+                    agent_id, str(prompt), actor="workflow_runtime",
+                    session_id=f"workflow:{run_id or 'sim'}")
+                return {"agent_id": agent_id,
+                        "message": resp.get("message"),
+                        "tool_trace": resp.get("tool_trace"),
+                        "provider": resp.get("provider")}, None
+            sup = SupervisorAgent(self.store)
             resp = sup.chat(session_id=f"workflow:{run_id or 'sim'}",
                             text=str(prompt), actor="workflow_runtime")
-            return {"message": resp.get("message"),
+            return {"agent_id": "supervisor",
+                    "message": resp.get("message"),
                     "trace_id": resp.get("trace_id"),
                     "provider": resp.get("provider")}, None
         if t == "human_approval":
@@ -800,9 +950,28 @@ class WorkflowService:
                 results.append(out)
             return {"count": len(results), "results": results}, None
         if t == "parallel":
-            return {"note": "扇出由边驱动"}, None
+            # 扣资源租约：max_concurrency 记录在 config（本机单 worker
+            # 串行执行分支，不伪造并发吞吐；分支经边扇出）
+            return {"note": "扇出由边驱动",
+                    "max_concurrency": int(
+                        cfg.get("max_concurrency", 1))}, None
         if t == "join":
-            return {"joined": sorted(ctx.get("nodes", {}).keys())}, None
+            # ABOSV3：all/any/quorum 汇合语义：统计已完成前驱分支
+            mode = str(cfg.get("mode", "all"))
+            quorum = int(cfg.get("quorum", 1))
+            preds = [e["from"] for e in (d["spec"].get("edges") or [])
+                     if e["to"] == node["id"]]
+            done_nodes = ctx.get("nodes", {})
+            arrived = [p for p in preds
+                       if done_nodes.get(p, {}).get("status")
+                       == "succeeded"]
+            need = len(preds) if mode == "all" else (
+                quorum if mode == "quorum" else 1)
+            if len(arrived) < max(need, 1):
+                # 未满足 → 重新排到 frontier 末尾（_run_nodes 处理）
+                raise _JoinNotReady(len(arrived), max(need, 1))
+            return {"joined": sorted(arrived), "mode": mode,
+                    "missing": sorted(set(preds) - set(arrived))}, None
         if t == "subflow":
             if simulate:
                 return {"[simulate]": "subflow 未真实嵌套执行"}, None
@@ -892,6 +1061,19 @@ class _WaitingHuman(Exception):
     def __init__(self, work_id: str) -> None:
         super().__init__("waiting_human")
         self.work_id = work_id
+
+
+class _WaitingTimer(Exception):
+    def __init__(self, timer_id: str) -> None:
+        super().__init__("waiting_timer")
+        self.timer_id = timer_id
+
+
+class _JoinNotReady(Exception):
+    def __init__(self, arrived: int, need: int) -> None:
+        super().__init__(f"join not ready {arrived}/{need}")
+        self.arrived = arrived
+        self.need = need
 
 
 def _safe_inputs(node: dict, ctx: dict) -> dict:
