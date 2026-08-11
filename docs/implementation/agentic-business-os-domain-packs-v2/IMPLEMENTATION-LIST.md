@@ -68,9 +68,9 @@
 
 | # | 任务 | 状态 | 依赖 | 验收 | 证据 |
 |---|---|---|---|---|---|
-| F-1 | BI 语义层 + ReportSpec + Analytics Agent + 异常追问闭环 | NOT_STARTED | E | G6 门禁 | — |
-| F-2 | 位置外勤：地址/地理编码/地图/VRP/围栏/到店证据/差旅费 | NOT_STARTED | F-1 | G7 门禁 | — |
-| F-3 | 财务：contract/rate card/meter/invoice/settlement/adjustment | NOT_STARTED | F-2 | G8 门禁：账单下钻到 run/node/证据 | — |
+| F-1 | BI 语义层 + ReportSpec + Analytics Agent + 异常追问闭环 | VERIFIED_LOCAL | E | G6 门禁 | commit `c0be4098` migration 037；实跱异常→追问→报表刷新 v2；禁任意 SQL 测试 |
+| F-2 | 位置外勤：地址/地理编码/地图/VRP/围栏/到店证据/差旅费 | VERIFIED_LOCAL | F-1 | G7 门禁 | migration 038；低置信不派发/硬隔离/门头必拍/人脸默认关 现场 409 证据；全链 ft-f6b4b52ab4eb |
+| F-3 | 财务：contract/rate card/meter/invoice/settlement/adjustment | VERIFIED_LOCAL | F-2 | G8 门禁：账单下钻到 run/node/证据 | migration 039；inv-02275a438bb9 下钻真实 run；幂等/价格版本/append-only 测试 |
 
 ## T9 · 系统级收口（Gate G9）
 

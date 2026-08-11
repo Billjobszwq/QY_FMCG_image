@@ -5,17 +5,18 @@
 
 ## 当前 Gate（唯一）
 
-`PHASE_A–E_CLOSED_G1–G5_PASSED → Phase F 待开工`（BI → 位置外勤 → 财务）。
+`PHASE_A–F_CLOSED_G1–G8_PASSED → T9 系统级收口待开工`（G9）。
 
-- Phase A 证据：commit `4af64f2d` → `79b3a534` → `15a39325`；浏览器四视口 8/8。
-- Phase B 证据：commit `13106320`；实跱全链 ID 对账 + 失败同链恢复。
-- Phase C 证据：commit `aa7ba378`；模板实跱贯通（run-50adc9a8f9a6）+ Studio 6/6。
-- Phase D 证据：commit `55e71271`；双 test fixture 客户隔离实跱证明。
-- Phase E 证据：commit `fde1b4ae`；样板问卷实跱 E2E（svy-c481cfc33d，
-  评分 13→15 v2）；浏览器 5/5；hermetic 1230 passed。
+- Phase A 证据：`4af64f2d` → `79b3a534` → `15a39325`；浏览器四视口 8/8。
+- Phase B 证据：`13106320`；实跱全链 ID 对账 + 失败同链恢复。
+- Phase C 证据：`aa7ba378`；模板实跱贯通 + Studio 6/6。
+- Phase D 证据：`55e71271`；双 test fixture 客户隔离实跱证明。
+- Phase E 证据：`fde1b4ae`；样板问卷实跱 E2E（评分 13→15 v2）。
+- Phase F 证据：`c0be4098`；BI 异常闭环/外勤全链/账单下钻实跱；
+  hermetic 1246 passed；浏览器验收截图齐全。
 
-不是 `READY_FOR_NEXT_DOMAIN_PACK`。Phase A–E 已关闭；BI/外勤/财务仍为
-planned，禁止以导航入口计为完成。
+不是 `READY_FOR_USER_ACCEPTANCE`：T9 收口（Z-1 全量交叉验证、Z-2 六个
+Domain Agent、最终验证套件、四手册更新）完成前不得声称用户验收就绪。
 
 ## 已冻结决定
 
@@ -31,11 +32,10 @@ planned，禁止以导航入口计为完成。
 
 ## 当前未关闭问题
 
-- P1：P1-002 Manifest 全量交叉验证（部分关闭）；P1-003 App 手写路由；
-  P1-004 主管工具化规划（Phase Z/后续关闭）；
+- P1：P1-002 Manifest 全量交叉验证（部分关闭，Z-1 完成）；P1-003 App 手写
+  路由（未关闭，Z-1 ModuleUIRegistry）；P1-004 主管工具化规划（未关闭，Z-2）；
 - P2：便签 localStorage、event polling、profile 信息过载；
-- 业务：BI、Geo/Field、Finance 仍为 planned，禁止以导航入口计为完成；
-  问卷报表下拉多版本同名未标版本号（小改进项，不阻塞）。
+- 业务：五个 Domain Pack 均已 live；待 Z-2 六个 Domain Agent 独立身份化。
 
 ## 现场基线（2026-08-11 实时核验）
 

@@ -214,3 +214,55 @@
 ## 下一动作
 
 - Phase F：BI 语义层 + 异常追问闭环（G6）→ 位置外勤（G7）→ 财务（G8）。
+
+## 2026-08-12 · Phase F 完成（commit c0be4098），Gate G6/G7/G8 通过
+
+### G6 · BI 纵向切片
+- migration 037：bi_metric_v1 / bi_report_spec_v1（版本化）/ bi_anomaly_v1 /
+  bi_followup_answer_v1。注册制指标 6 个（recognition.photos/compute_ms/tasks、
+  survey.submitted/avg_score、workflow.runs），只求值注册定义（未注册 fail-closed，
+  禁任意 SQL）。
+- ReportSpec：draft→approved→published（现场 409 拦截未批准发布）；评估实时
+  + project 维度拆分；Analytics Agent NL→仅映射注册指标的 draft。
+- 异常闭环实跑：survey.avg_score lt 20 命中（observed=15）→ 追问 WorkItem
+  work-b9c6e060fb13 → 回答 → 异常 resolved + 工作项 done + 报表刷新 v2
+  （draft，旧 v1 published 保留不覆盖）。
+
+### G7 · 位置与外勤纵向切片
+- migration 038：geo_address_v1 / geo_employee_v1 / field_task_v1 /
+  route_plan_v1 / geofence_v1 / geofence_event_v1 / field_visit_evidence_v1 /
+  travel_cost_v1。
+- GeocoderAdapter 候选+置信度；**低置信度地址不自动派发**（现场 409：
+  “低置信度地址未人工确认，不得自动派发”）；人工确认后规划/派发。
+- VRP MVP：最近邻 + max_km 约束 + 多项目硬隔离（未分配原因留痕）；
+  成本 = km × 单价可解释。MapProviderAdapter 诚实 blocked（无瓦片回退列表）。
+- 围栏到店：半径+精度校验（现场：围栏外 5560m>200m 拒绝；精度 200m 拒绝）；
+  门头必拍（缺证据完成 409）；自拍默认关闭（人脸比对默认不自动触发，现场 409）。
+- 实跑全链：addr-6e4347a42350 → ft-f6b4b52ab4eb → plan（1 站 10.472 km）→
+  dispatched → fence-f12e776b683a enter → 门头证据 fev-f35617de4789 →
+  completed → 差旅费 20.94 元（10.472 km × 2.0）。
+
+### G8 · 财务纵向切片
+- migration 039：fin_rate_card_v1（版本化）/ fin_contract_v1 / fin_invoice_v1 /
+  fin_invoice_line_v1 / fin_adjustment_v1（append-only 触发器）。
+- 账单严格从 immutable usage_event_v2 生成（D-008）；行下钻 usage_id/run_id/
+  work_id/node/source_evidence；同期间幂等（已计费 usage 跳过、月订阅只计一次）；
+  开票绑定 rate card 版本，新价格不改已开票金额；结算后禁止调整。
+- 实跑：ct-422cc8c1f4a6（hybrid）→ inv-02275a438bb9：subscription 100 +
+  recognition_photo 2×0.5 + model_compute_ms 166.57×0.001 = 101.1666，
+  下钻到 G4 真实 run-86150aa544…/recognition_task:2287e8e…；regenerate 空行
+  （幂等）；开票 → 折扣 -10 → net 91.1666；rate card v2（涨价）后已开票
+  total 不变（v1）；settle 后调整 409。
+- 前端：BI 三页签 / 外勤三页签 / 财务两页签（全部真实 API）；planned 插槽
+  全部被真实路由取代；浏览器验收 8 张截图（围栏列表区块按审查意见补齐）。
+- 测试：G6 5 项 + G7 5 项 + G8 6 项红转绿；全量 hermetic 1246 passed。
+- 声明：未启动训练；production 未切换；用户资产未触碰。
+
+## 剩余（T9/Z）
+
+- Z-1：Manifest/Capability/UI slot/节点库/tool registry/OpenAPI 全量交叉验证
+  （当前已部分：节点库同源、manifest 契约测试）；
+- Z-2：Workflow/IAM/Survey/Analytics/FieldOps/Finance 六个 Domain Agent
+  独立身份/allowlist/预算/记忆 ACL（当前 Supervisor+Workflow Agent draft 受控）；
+- 最终验证套件：host_mps 分层、安全（越权/CSRF/SSRF/注入/rate limit）、
+  性能 p50/p95、冷启动、四手册更新（USER-HANDBOOK 需按角色重写操作流）。
