@@ -381,13 +381,23 @@ export function VisionTasks() {
                 <b>状态</b><span>{STATUS_CN[detail.outputs.status]
                   ?? detail.outputs.status}</span>
               </div>
-              {detail.outputs.results.slice(0, 3).map((r: any, i) => (
-                <p key={i} className="v" style={{ fontSize: 12 }}>
-                  {r.name}：{r.count ?? 0} 件
-                  {r.products?.slice(0, 3).map((p: any) =>
-                    ` ${p.name}×${p.count}`).join("、")}
-                </p>
-              ))}
+              {detail.outputs.results.slice(0, 3).map((r: any, i) => {
+                // 真实结构：products 为逐检出项（无 count 字段），
+                // 按名称聚合计数，不得渲染 undefined
+                const prods: any[] = r.products ?? [];
+                const byName: Record<string, number> = {};
+                prods.forEach((p: any) => {
+                  const k = p.name ?? p.sku_id ?? "未知";
+                  byName[k] = (byName[k] ?? 0) + (p.count ?? 1);
+                });
+                return (
+                  <p key={i} className="v" style={{ fontSize: 12 }}>
+                    {r.name}：{r.count ?? prods.length} 件
+                    {Object.entries(byName).slice(0, 3)
+                      .map(([n, c]) => ` ${n}×${c}`).join("、")}
+                  </p>
+                );
+              })}
             </section>
             {detail.errors.length > 0 && (
               <section>
@@ -405,14 +415,24 @@ export function VisionTasks() {
             </section>
             <section>
               <h4>证据 / 用量 / 关联</h4>
+              {detail.evidence.refs.length > 0
+                ? detail.evidence.refs.map((ref) => (
+                  <p key={ref} className="v" style={{ fontSize: 12 }}>
+                    证据：{ref}</p>))
+                : <p className="v" style={{ fontSize: 12 }}>
+                    {detail.evidence.note}</p>}
+              {detail.usage.events.length > 0
+                ? detail.usage.events.map((u: any, i) => (
+                  <p key={i} className="v" style={{ fontSize: 12 }}>
+                    用量：{u.unit} × {u.quantity}
+                    {u.profile_id ? ` · profile ${u.profile_id}` : ""}
+                    {u.tier ? ` · tier ${u.tier}` : ""}</p>))
+                : <p className="v" style={{ fontSize: 12 }}>
+                    {detail.usage.note}</p>}
               <p className="v" style={{ fontSize: 12 }}>
-                {detail.evidence.note}</p>
-              <p className="v" style={{ fontSize: 12 }}>
-                {detail.usage.events.length > 0
-                  ? `usage 事件 ${detail.usage.events.length} 条`
-                  : detail.usage.note}</p>
-              <p className="v" style={{ fontSize: 12 }}>
-                work/run：{detail.relations.note}</p>
+                work/run：{detail.relations.run_id
+                  ? `run ${detail.relations.run_id} · work ${detail.relations.work_id}`
+                  : detail.relations.note}</p>
             </section>
             <section>
               <h4>下一动作</h4>
