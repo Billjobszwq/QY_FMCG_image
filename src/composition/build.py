@@ -247,6 +247,7 @@ def build_app_with_bundle(
         probe=probe,
         web_dist=web_dist if web_dist is not None else (REPO_ROOT / "web" / "dist"),
         bundle=bundle,
+        registry=bundle.capabilities if bundle is not None else None,
         labeling_router=build_labeling_router(bundle) if bundle is not None else None,
         training_router=build_training_router(bundle, _worker) if bundle is not None else None,
         training_control_router=build_training_control_router(bundle) if bundle is not None else None,

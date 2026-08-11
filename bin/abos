@@ -1,0 +1,191 @@
+#!/usr/bin/env bash
+# ABOS T11：本机栈控制（status/start/stop/restart/doctor）。
+# 原则：幂等；只操作本脚本记录的 PID；不启动训练；日志路径清楚；
+# 启动失败不谎报健康（以真实 HTTP/TCP 探测为准）。
+set -u
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+cd "$ROOT"
+PY="/Users/zhangweiqi/miniconda3/bin/python"
+RUN_DIR="$ROOT/.platform/run"
+LOG_DIR="$ROOT/.platform/logs"
+mkdir -p "$RUN_DIR" "$LOG_DIR"
+
+P_RECOG=8091; P_MONITOR=8092; P_LS=8300; P_APP=8400
+
+log() { echo "[abos] $*"; }
+
+http_code() { # $1=url → HTTP code 或 000（失败只输出一次）
+  local code
+  code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 3 "$1" 2>/dev/null)
+  echo "${code:-000}"
+}
+
+probe() { # $1=name → ok/down
+  case "$1" in
+    recognize)  [ "$(http_code http://127.0.0.1:$P_RECOG/)" != "000" ] ;;
+    monitor)    [ "$(http_code http://127.0.0.1:$P_MONITOR/)" != "000" ] ;;
+    label_studio) [ "$(http_code http://127.0.0.1:$P_LS/health)" = "200" ] ;;
+    app)        [ "$(http_code http://127.0.0.1:$P_APP/api/v1/health)" = "200" ] ;;
+  esac
+}
+
+pid_alive() { # $1=pidfile
+  [ -f "$1" ] && kill -0 "$(cat "$1" 2>/dev/null)" 2>/dev/null
+}
+
+start_one() { # $1=name $2=pidfile $3=logfile; stdin 无关；命令数组在 $CMD
+  if probe "$1"; then log "$1 已在运行（跳过，幂等）"; return 0; fi
+  if pid_alive "$2"; then
+    log "$1 有旧 PID 但探测不通，先停止旧进程"
+    kill "$(cat "$2")" 2>/dev/null; sleep 1
+  fi
+  log "启动 $1 → $3"
+  nohup "${CMD[@]}" >> "$3" 2>&1 &
+  echo $! > "$2"
+}
+
+wait_ok() { # $1=name $2=秒
+  for _ in $(seq 1 "$2"); do probe "$1" && return 0; sleep 1; done
+  return 1
+}
+
+cmd_status() {
+  local fail=0
+  for s in recognize monitor label_studio app; do
+    if probe "$s"; then log "$s: UP"; else log "$s: DOWN"; fail=1; fi
+  done
+  pid_alive "$RUN_DIR/recognize.pid" && log "recognize pid=$(cat "$RUN_DIR/recognize.pid")（本脚本管理）"
+  if [ -f "$ROOT/.models/bundles/CURRENT.json" ]; then
+    log "production: $($PY -c "import json;print(json.load(open('.models/bundles/CURRENT.json'))['bundle_id'])" 2>/dev/null)"
+  else
+    log "production: CURRENT.json 缺失"
+  fi
+  if ps aux | grep -E "train_detector|train_classifier|train_segmenter|run_qwen3vl_lora|ultralytics" | grep -v grep >/dev/null; then
+    log "警告：发现疑似训练进程（本脚本不会启停训练）"
+  else
+    log "训练进程：无"
+  fi
+  wd_now=$(find_project_pids "scripts/monitor_watchdog.sh")
+  if [ -n "$wd_now" ]; then
+    log "看门狗：monitor_watchdog 在运行（stop 会先停它）"
+  else
+    log "看门狗：未运行"
+  fi
+  return $fail
+}
+
+cmd_start() {
+  CMD=("$PY" -m src.recognize.service --port $P_RECOG)
+  start_one recognize "$RUN_DIR/recognize.pid" "$LOG_DIR/recognize.log"
+  CMD=("$PY" -m src.training.monitor --port $P_MONITOR)
+  start_one monitor "$RUN_DIR/monitor.pid" "$LOG_DIR/monitor.log"
+  CMD=(bash "$ROOT/scripts/start_label_studio.sh")
+  start_one label_studio "$RUN_DIR/label_studio.pid" "$LOG_DIR/label_studio.log"
+  CMD=("$PY" -m src.composition.serve --port $P_APP)
+  start_one app "$RUN_DIR/app.pid" "$LOG_DIR/app.log"
+  log "等待健康（最多 90s，Label Studio 冷启动较慢）…"
+  local all_ok=1
+  for pair in "recognize 15" "monitor 15" "app 30" "label_studio 90"; do
+    set -- $pair
+    if wait_ok "$1" "$2"; then log "$1: UP"; else log "$1: 启动失败（见 $LOG_DIR/）"; all_ok=0; fi
+  done
+  [ $all_ok = 1 ] || { log "存在未健康服务；不谎报成功"; return 1; }
+  log "四服务全部健康"
+}
+
+find_project_pids() { # $@=命令行特征模式 → 本项目匹配进程 PID（排自己）
+  local args=() p
+  for p in "$@"; do args+=(-e "$p"); done
+  ps aux | grep "${args[@]}" | grep -v grep | grep -v "bin/abos" \
+    | awk '{print $2}'
+}
+
+cmd_stop() {
+  # 先停看门狗（否则 monitor 会被自动拉起）
+  wd=$(find_project_pids "scripts/monitor_watchdog.sh")
+  if [ -n "$wd" ]; then
+    log "停止 monitor 看门狗 (pid: $wd)"
+    kill $wd 2>/dev/null; sleep 1
+  fi
+  local names=(app label_studio monitor recognize)
+  for i in 0 1 2 3; do
+    name=${names[$i]}
+    pf="$RUN_DIR/$name.pid"
+    pids=""
+    if pid_alive "$pf"; then pids=$(cat "$pf"); fi
+    # 兼容：非本脚本启动但属于本项目的同名服务进程（精确匹配命令行）
+    case "$name" in
+      app) extra=$(find_project_pids "src.composition.serve --port $P_APP") ;;
+      label_studio) extra=$(find_project_pids \
+        "label-studio start --port $P_LS" \
+        "label_studio.server start --port $P_LS") ;;
+      monitor) extra=$(find_project_pids "src.training.monitor --port $P_MONITOR") ;;
+      recognize) extra=$(find_project_pids "src.recognize.service --port $P_RECOG") ;;
+    esac
+    for p in $extra; do
+      case " $pids " in *" $p "*) ;; *) pids="$pids $p";; esac
+    done
+    pids=$(echo $pids | xargs || true)
+    if [ -z "$pids" ]; then
+      log "$name 无运行进程"
+      rm -f "$pf"; continue
+    fi
+    log "停止 $name (pid: $pids)"
+    kill $pids 2>/dev/null
+    for _ in $(seq 1 10); do
+      alive=""
+      for p in $pids; do kill -0 "$p" 2>/dev/null && alive="$alive $p"; done
+      [ -z "$alive" ] && break; sleep 1
+    done
+    for p in $pids; do
+      if kill -0 "$p" 2>/dev/null; then
+        log "$name pid=$p 未在 10s 内退出，发送 SIGKILL"; kill -9 "$p"
+      fi
+    done
+    rm -f "$pf"
+  done
+  log "停止完成（仅终止本项目四服务的精确进程，不宽泛 kill）"
+}
+
+cmd_doctor() {
+  local fail=0
+  log "Python: $($PY --version 2>&1)"
+  $PY - <<'EOF' || fail=1
+import sqlite3, sys
+con = sqlite3.connect(".platform/platform.sqlite")
+r = con.execute("PRAGMA integrity_check").fetchone()[0]
+print("[abos] SQLite integrity:", r)
+sys.exit(0 if r == "ok" else 1)
+EOF
+  [ -f "$ROOT/.models/bundles/CURRENT.json" ] \
+    && log "production bundle 文件: 存在" \
+    || { log "production bundle 文件: 缺失"; fail=1; }
+  [ -d "$ROOT/web/dist" ] \
+    && log "web/dist: 已构建" \
+    || { log "web/dist: 缺失（cd web && npm run build）"; fail=1; }
+  [ -n "${DEEPSEEK_API_KEY:-}" ] || grep -q "DEEPSEEK_API_KEY=." "$ROOT/.env" 2>/dev/null \
+    && log "LLM key: 已配置" \
+    || log "LLM key: 未配置（Agent 将诚实降级为规则回答）"
+  for port in $P_RECOG $P_MONITOR $P_LS $P_APP; do
+    if lsof -iTCP:$port -sTCP:LISTEN >/dev/null 2>&1; then
+      log "端口 $port: 被占用"
+    else
+      log "端口 $port: 空闲"
+    fi
+  done
+  if ps aux | grep -E "train_detector|train_classifier|train_segmenter|run_qwen3vl_lora|ultralytics" | grep -v grep >/dev/null; then
+    log "训练进程: 发现（需人工确认）"; fail=1
+  else
+    log "训练进程: 无"
+  fi
+  return $fail
+}
+
+case "${1:-}" in
+  status)  cmd_status ;;
+  start)   cmd_start ;;
+  stop)    cmd_stop ;;
+  restart) cmd_stop; sleep 1; cmd_start ;;
+  doctor)  cmd_doctor ;;
+  *) echo "用法: bin/abos {status|start|stop|restart|doctor}"; exit 2 ;;
+esac

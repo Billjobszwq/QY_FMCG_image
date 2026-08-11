@@ -1,0 +1,10 @@
+== 8091 停止后的聚合健康:
+agg: unavailable
+ - recognize unavailable
+ - monitor healthy
+ - label_studio healthy
+ - ml_backend disabled
+ - omlx healthy
+== 识别请求（应诚实失败）:
+http=200
+{"task":{"task_id":"e57bb9a9f3b6e22361d66225b6a3dd4d","entry":"single_file","status":"failed","file_count":1,"sku_count":0,"created_by":"admin","created_at":"2026-08-11T09:00:25.800258+00:00","result_json":"[]","error":"36281298_reflection.jpg: unreachable: [Errno 61] Connection refused","idempotenc
