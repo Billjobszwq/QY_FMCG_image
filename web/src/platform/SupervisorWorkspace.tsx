@@ -5,8 +5,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import {
-  agentChat, approveAgentCommand, createAgentSession,
-  fetchWorkItems, rejectAgentCommand, WorkItemsBody,
+  agentChat, approveAgentCommand, confirmGoal, createAgentSession,
+  fetchGoal, fetchGoals, fetchWorkItems, GoalDraft,
+  rejectAgentCommand, WorkItemsBody,
 } from "../api";
 
 const ALLOWED_INTENTS = ["navigate", "open_panel", "filter", "highlight",
@@ -96,17 +97,9 @@ export default function SupervisorWorkspace() {
   const [open, setOpen] = useState<boolean>(() =>
     typeof window !== "undefined" ? window.innerWidth >= 1024 : true);
 
-  // 首页快速目标跳转 /home?focus=chat 时自动切到对话
-  useEffect(() => {
-    if (searchParams.get("focus") === "chat") {
-      setOpen(true);
-      setTab("chat");
-      searchParams.delete("focus");
-      setSearchParams(searchParams, { replace: true });
-    }
-  }, [searchParams, setSearchParams]);
   const [work, setWork] = useState<WorkItemsBody | null>(null);
   const [workErr, setWorkErr] = useState<string | null>(null);
+  const [pendingGoal, setPendingGoal] = useState<GoalDraft | null>(null);
   const [msgs, setMsgs] = useState<Msg[]>([]);
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
@@ -118,6 +111,37 @@ export default function SupervisorWorkspace() {
   const sidRef = useRef<string | null>(
     localStorage.getItem("agent_session_v2"));
   const boxRef = useRef<HTMLDivElement>(null);
+
+  // ABOSV2-P0-002：首页快速目标携带 goal_id 进入主管：
+  // 拉回服务端 goal_draft → 同一文本进输入框；确认后形成计划/命令。
+  useEffect(() => {
+    const goalId = searchParams.get("goal");
+    if (searchParams.get("focus") === "chat" || goalId) {
+      setOpen(true);
+      setTab("chat");
+      searchParams.delete("focus");
+      searchParams.delete("goal");
+      setSearchParams(searchParams, { replace: true });
+      if (goalId) {
+        fetchGoal(goalId).then((g) => {
+          if (g.status === "open") {
+            setPendingGoal(g);
+            setInput(g.text);
+          }
+        }).catch(() => { /* goal 不存在时诚实降级为普通对话 */ });
+      }
+    }
+  }, [searchParams, setSearchParams]);
+
+  // 刷新恢复：未处理的 open goal 自动回到主管输入框（不依赖前端状态）
+  useEffect(() => {
+    fetchGoals("open").then((d) => {
+      if (d.goals.length > 0) {
+        setPendingGoal((cur) => cur ?? d.goals[0]);
+        setInput((cur) => cur || d.goals[0].text);
+      }
+    }).catch(() => { /* 未登录/服务异常：不静默伪造 */ });
+  }, []);
 
   useEffect(() => {
     boxRef.current?.scrollTo({ top: boxRef.current.scrollHeight });
@@ -184,6 +208,12 @@ export default function SupervisorWorkspace() {
         return cp;
       });
       if ((d.command_previews ?? []).length) loadWork();
+      // 目标已发送：服务端确认 goal，留痕计划/命令/trace
+      if (pendingGoal) {
+        confirmGoal(pendingGoal.goal_id)
+          .catch(() => { /* 确认失败不阻断对话；goal 仍为 open 可重试 */ })
+          .finally(() => setPendingGoal(null));
+      }
     } catch (e) {
       setMsgs((m) => {
         const cp = [...m];
@@ -331,6 +361,12 @@ export default function SupervisorWorkspace() {
             ))}
           </div>
           <div className="agent-input">
+            {pendingGoal && (
+              <p className="v" style={{ margin: "0 0 4px",
+                fontSize: 12, color: "var(--text-muted)" }}>
+                待确认目标（goal:{pendingGoal.goal_id.slice(-6)}）：
+                发送后由主管形成计划/命令并留痕</p>
+            )}
             <input value={input} placeholder="问主管 Agent…"
               aria-label="主管 Agent 输入"
               onChange={(e) => setInput(e.target.value)}

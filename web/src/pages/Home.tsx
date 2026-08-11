@@ -4,8 +4,8 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import {
-  HealthBody, fetchRecognitionTasks, fetchRuns, fetchTaskboard,
-  fetchWorkItems, WorkItemsBody,
+  HealthBody, createGoal, fetchRecognitionTasks, fetchRuns,
+  fetchTaskboard, fetchWorkItems, WorkItemsBody,
 } from "../api";
 import { ModuleView, accentVar } from "../platform/registry";
 import { EmptyState, ErrorState, Loading, StatusBadge } from
@@ -21,7 +21,10 @@ export default function Home({ health, modules, identity }: {
   const [workErr, setWorkErr] = useState<string | null>(null);
   const [runs, setRuns] = useState<number | null>(null);
   const [tasks, setTasks] = useState<number | null>(null);
+  const [board, setBoard] = useState<Record<string, any[]> | null>(null);
   const [goal, setGoal] = useState("");
+  const [goalBusy, setGoalBusy] = useState(false);
+  const [goalErr, setGoalErr] = useState<string | null>(null);
 
   useEffect(() => {
     fetchWorkItems().then(setWork).catch(
@@ -29,8 +32,25 @@ export default function Home({ health, modules, identity }: {
     fetchRuns().then((d) => setRuns(d.count)).catch(() => setRuns(null));
     fetchRecognitionTasks({ limit: 1 }).then(
       (d) => setTasks(d.count)).catch(() => setTasks(null));
-    fetchTaskboard().catch(() => {});
+    // ABOSV2-P0-001：任务板是较新的 cycle 投影，不得丢弃
+    fetchTaskboard().then((d) => setBoard(d.states)).catch(
+      () => setBoard(null));
   }, []);
+
+  // ABOSV2-P0-002：目标先落服务端 goal_draft，再携带 goal_id 打开主管；
+  // 不丢 URL 文本，不只存前端状态，刷新可从 open goals 恢复。
+  const handToSupervisor = async () => {
+    const text = goal.trim();
+    if (!text || goalBusy) return;
+    setGoalBusy(true); setGoalErr(null);
+    try {
+      const g = await createGoal(text);
+      setGoal("");
+      navigate(`/home?focus=chat&goal=${encodeURIComponent(g.goal_id)}`);
+    } catch (e) {
+      setGoalErr(e instanceof Error ? e.message : String(e));
+    } finally { setGoalBusy(false); }
+  };
 
   const items = work?.items ?? [];
   const cols: Array<{ title: string; cls: string; filter: (i: any) => boolean }> = [
@@ -61,15 +81,14 @@ export default function Home({ health, modules, identity }: {
             aria-label="快速目标输入"
             placeholder="例如：用生产模型识别这批照片 / 打开识别任务…"
             onChange={(e) => setGoal(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && goal.trim()) {
-                navigate("/home?focus=chat");
-              }
-            }} />
+            onKeyDown={(e) => { if (e.key === "Enter") handToSupervisor(); }} />
           <button className="btn primary"
-            disabled={!goal.trim()}
-            onClick={() => navigate("/home?focus=chat")}>交给主管</button>
+            disabled={!goal.trim() || goalBusy}
+            onClick={handToSupervisor}>
+            {goalBusy ? "保存中…" : "交给主管"}</button>
         </div>
+        {goalErr && <p className="v" style={{ color: "var(--err)" }}>
+          目标保存失败：{goalErr}（目标必须落服务端，不静默丢失）</p>}
       </div>
 
       {workErr && <ErrorState message={`工作项加载失败：${workErr}`}
@@ -106,7 +125,22 @@ export default function Home({ health, modules, identity }: {
           <h3>运行概览（实时）</h3>
           <p className="v">Graph Runs：{runs === null ? "—" : runs} 条
             · 识别任务：{tasks === null ? "—" : tasks} 条
-            · 服务：{health?.status ?? "未知"}</p>
+            · 服务：{health?.status ?? "未知"}
+            {work?.summary?.superseded
+              ? ` · 已归档历史待办 ${work.summary.superseded} 项` : ""}</p>
+          {board && (
+            <p className="v">
+              周期任务板：等待 {board.waiting?.length ?? 0} ·
+              运行 {board.running?.length ?? 0} ·
+              待启动 {board.todo?.length ?? 0} ·
+              完成 {board.done?.length ?? 0}
+            </p>
+          )}
+          {board?.waiting?.slice(0, 3).map((s: any) => (
+            <p key={s.logical_task_key} className="v"
+              style={{ color: "var(--text-muted)" }}>
+              · {s.title}：{s.blocker || "等待推进"}</p>
+          ))}
           <p className="v">
             <Link to="/workflow/runs">查看 Graph Runs</Link> ·{" "}
             <Link to="/vision/tasks">查看识别任务</Link>

@@ -114,6 +114,10 @@ def create_app(
         # U2-1：统一任务中心（只读聚合，角色首页数据源）
         from src.platform.api.workitems import create_workitems_router
         app.include_router(create_workitems_router(bundle.store))
+        # ABOSV2-P0-002：快速目标 goal draft（服务端持久化，刷新可恢复）
+        from src.platform.api.goals import create_goals_router
+        app.include_router(create_goals_router(
+            bundle.store, auth=AuthService(bundle.store)))
         # U2-2：数据中心 Asset API（真实台账 source_asset_inventory_v1）
         from src.platform.api.assets import create_assets_router
         app.include_router(create_assets_router(bundle.store))

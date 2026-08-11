@@ -168,24 +168,68 @@ export interface WorkItem {
   title: string;
   owner: string;
   detail: Record<string, unknown>;
+  superseded?: boolean;
 }
 
 export interface WorkItemsBody {
   count: number;
   items: WorkItem[];
+  projection?: "current" | "history" | "all";
   summary: {
     pending_review: number;
     todos: number;
     active: number;
+    superseded?: number;
     blocked: string[];
     next_steps: string[];
   };
 }
 
-export async function fetchWorkItems(): Promise<WorkItemsBody> {
-  const r = await fetch("/api/v1/workitems");
+export async function fetchWorkItems(
+  projection: "current" | "history" | "all" = "current",
+): Promise<WorkItemsBody> {
+  const r = await fetch(`/api/v1/workitems?projection=${projection}`);
   if (!r.ok) throw new Error(`workitems HTTP ${r.status}`);
   return r.json();
+}
+
+// ---------- goals 快速目标（ABOSV2-P0-002，服务端持久化） ----------
+
+export interface GoalDraft {
+  goal_id: string;
+  text: string;
+  status: "open" | "confirmed" | "cancelled";
+  created_by: string;
+  created_at: string;
+  updated_at: string;
+  version: number;
+  result: Record<string, any>;
+}
+
+export async function createGoal(text: string): Promise<GoalDraft> {
+  const r = await postJson("/api/v1/goals", { text });
+  if (!r.ok) throw await parseError(r, "goal 保存失败");
+  return (await r.json()).goal;
+}
+
+export async function fetchGoals(status?: string): Promise<{
+  count: number; goals: GoalDraft[];
+}> {
+  const r = await fetch(`/api/v1/goals${status ? `?status=${status}` : ""}`);
+  if (!r.ok) throw new Error(`goals HTTP ${r.status}`);
+  return r.json();
+}
+
+export async function fetchGoal(goalId: string): Promise<GoalDraft> {
+  const r = await fetch(`/api/v1/goals/${goalId}`);
+  if (!r.ok) throw new Error(`goal HTTP ${r.status}`);
+  return (await r.json()).goal;
+}
+
+export async function confirmGoal(goalId: string): Promise<GoalDraft> {
+  const r = await postJson(`/api/v1/goals/${goalId}/confirm`, {});
+  if (!r.ok) throw await parseError(r, "goal 确认失败");
+  return (await r.json()).goal;
 }
 
 // ---------- assets 数据中心（U2-2，真实台账） ----------

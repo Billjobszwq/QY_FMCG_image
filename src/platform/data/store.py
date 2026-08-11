@@ -1117,6 +1117,21 @@ CREATE TRIGGER IF NOT EXISTS work_item_supersession_v1_no_update
     END;
 """
 
+# ABOSV2-P0-002：快速目标服务端 goal draft（刷新可恢复；确认后形成
+# 计划/命令留痕，不只存 URL/前端状态）。
+_M032 = """
+CREATE TABLE IF NOT EXISTS goal_draft_v1 (
+    goal_id TEXT PRIMARY KEY,
+    text TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'open',
+    created_by TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    version INTEGER NOT NULL DEFAULT 1,
+    result_json TEXT NOT NULL DEFAULT '{}'
+);
+"""
+
 MIGRATIONS: tuple[tuple[str, str], ...] = (
     ("001_platform_init", _M001),
     ("002_labeling_inbox", _M002),
@@ -1149,6 +1164,7 @@ MIGRATIONS: tuple[tuple[str, str], ...] = (
     ("029_profile_def_v1", _M029),
     ("030_recognition_task_profile_contract", _M030),
     ("031_work_item_supersession_v1", _M031),
+    ("032_goal_draft_v1", _M032),
 )
 
 
@@ -2591,6 +2607,77 @@ class PlatformStore:
                 d["match"] = {}
             out.append(d)
         return out
+
+    # ---------- goal_draft_v1（ABOSV2-P0-002） ----------
+
+    def create_goal_draft(self, *, goal_id: str, text: str,
+                          created_by: str) -> dict[str, Any]:
+        now = _utcnow()
+        self._conn.execute(
+            "INSERT INTO goal_draft_v1 (goal_id, text, status, created_by,"
+            " created_at, updated_at, version, result_json)"
+            " VALUES (?,?,?, ?,?,?,1,'{}')",
+            (goal_id, text, "open", created_by, now, now))
+        self._conn.commit()
+        return self.get_goal_draft(goal_id)
+
+    def get_goal_draft(self, goal_id: str) -> dict[str, Any] | None:
+        d = _row_to_dict(self._conn.execute(
+            "SELECT * FROM goal_draft_v1 WHERE goal_id=?",
+            (goal_id,)).fetchone())
+        if d is not None:
+            try:
+                d["result"] = json.loads(d.pop("result_json"))
+            except ValueError:
+                d["result"] = {}
+        return d
+
+    def list_goal_drafts(self, *, status: str | None = None
+                         ) -> list[dict[str, Any]]:
+        if status:
+            rows = self._conn.execute(
+                "SELECT * FROM goal_draft_v1 WHERE status=?"
+                " ORDER BY created_at DESC", (status,)).fetchall()
+        else:
+            rows = self._conn.execute(
+                "SELECT * FROM goal_draft_v1"
+                " ORDER BY created_at DESC").fetchall()
+        out = []
+        for r in rows:
+            d = dict(r)
+            try:
+                d["result"] = json.loads(d.pop("result_json"))
+            except ValueError:
+                d["result"] = {}
+            out.append(d)
+        return out
+
+    def resolve_goal_draft(self, goal_id: str, *, status: str,
+                           result: dict[str, Any],
+                           expected_version: int) -> dict[str, Any]:
+        """乐观锁更新 goal 状态（open→confirmed/cancelled）。
+
+        非法跃迁或版本冲突抛 StoreError；历史不删除。"""
+        row = self._conn.execute(
+            "SELECT status, version FROM goal_draft_v1 WHERE goal_id=?",
+            (goal_id,)).fetchone()
+        if row is None:
+            raise StoreError(f"goal 不存在: {goal_id}")
+        if row["status"] != "open":
+            raise StoreError(
+                f"goal 已终态 {row['status']}，不得重复操作")
+        if row["version"] != expected_version:
+            raise StoreError("goal 乐观锁版本冲突")
+        n = self._conn.execute(
+            "UPDATE goal_draft_v1 SET status=?, result_json=?,"
+            " updated_at=?, version=version+1"
+            " WHERE goal_id=? AND version=?",
+            (status, json.dumps(result, ensure_ascii=False), _utcnow(),
+             goal_id, expected_version))
+        if n.rowcount != 1:
+            raise StoreError("goal 乐观锁版本冲突")
+        self._conn.commit()
+        return self.get_goal_draft(goal_id)
 
     def list_review_tasks_active(self, *, limit: int = 5000
                                  ) -> list[dict[str, Any]]:
