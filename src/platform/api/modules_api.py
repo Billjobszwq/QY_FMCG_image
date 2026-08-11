@@ -45,7 +45,7 @@ def create_modules_router() -> APIRouter:
             f = _P(f".models/m3_ablation_{e}_v1/train_report.json")
             v = 0.0
             if f.exists():
-                v = _j.loads(f.read_text()).get("independent_test", {}) \
+                v = _j.loads(f.read_text()).get("final", {}) \
                     .get("top1", 0.0)
             bars.append({"k": e.upper(), "v": round(v, 4)})
         return {"bars": bars}
