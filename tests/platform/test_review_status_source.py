@@ -119,38 +119,53 @@ def test_workitems_use_db_not_json(tmp_path, monkeypatch):
 
 
 def test_workitems_track_claim_event(tmp_path, monkeypatch):
-    """DB 导入 3 条后：认领一条 → WorkItems 立即 2 pending + 1 claimed。"""
+    """DB 导入 3 条后：认领一条 → WorkItems 立即 2 pending + 1 claimed。
+
+    注（ABOSV2-P0-001）：rq_v2 族已被 supersession 账本取代（只进
+    history），本机制改用未被取代的 rq_v3 验证。
+    """
     client, bundle = _client(tmp_path, monkeypatch)
     store = bundle.store
-    _seed(store, n=3)
-    claim_task(store, "tok_rq_v2_p0", actor="alice")
+    _seed(store, n=3, queue_version="rq_v3")
+    claim_task(store, "tok_rq_v3_p0", actor="alice")
     d = client.get("/api/v1/workitems").json()
     reviews = [w for w in d["items"] if w["kind"] == "human_review"]
     assert len(reviews) == 3
     assert d["summary"]["pending_review"] == 2
     statuses = {w["id"]: w["status"] for w in reviews}
-    assert statuses["review:rt_rq_v2_p0"] == "claimed"
-    assert statuses["review:rt_rq_v2_p1"] == "pending"
+    assert statuses["review:rt_rq_v3_p0"] == "claimed"
+    assert statuses["review:rt_rq_v3_p1"] == "pending"
     assert d["count"] == len(d["items"])
 
 
 def test_workitems_hide_invalid_queue_tasks(tmp_path, monkeypatch):
-    """失效队列任务不进 WorkItems 默认列表，不阻断 V2。"""
+    """失效队列任务不进 WorkItems 默认列表，不阻断 V2。
+
+    注（ABOSV2-P0-001）：rq_v2 族已被文档决定取代，改用 rq_v3 验证
+    active 可见；另断言 rq_v2 项只进 history。
+    """
     client, bundle = _client(tmp_path, monkeypatch)
     store = bundle.store
     _seed(store, queue_version="rq_v1", n=3, prefix="a")
-    _seed(store, queue_version="rq_v2", n=2, prefix="b")
+    _seed(store, queue_version="rq_v3", n=2, prefix="b")
+    _seed(store, queue_version="rq_v2", n=1, prefix="c")
     store.register_queue_version(queue_version="rq_v1", n_tasks=3)
-    store.register_queue_version(queue_version="rq_v2", n_tasks=2)
+    store.register_queue_version(queue_version="rq_v3", n_tasks=2)
+    store.register_queue_version(queue_version="rq_v2", n_tasks=1)
     store.invalidate_queue_version(
         queue_version="rq_v1", reason="invalid_id_sha_mapping",
-        superseded_by="rq_v2")
+        superseded_by="rq_v3")
     d = client.get("/api/v1/workitems").json()
     reviews = [w for w in d["items"] if w["kind"] == "human_review"]
     assert len(reviews) == 2
-    assert all(w["detail"]["queue_version"] == "rq_v2" for w in reviews)
+    assert all(w["detail"]["queue_version"] == "rq_v3" for w in reviews)
     only = client.get("/api/v1/workitems?kind=human_review").json()
     assert only["count"] == 2
+    # rq_v2 被 supersession 取代：不进 current，进 history
+    h = client.get("/api/v1/workitems?projection=history").json()
+    v2 = [w for w in h["items"] if w["kind"] == "human_review"
+          and w["detail"]["queue_version"] == "rq_v2"]
+    assert len(v2) == 1
 
 
 def _seed_split(bundle):

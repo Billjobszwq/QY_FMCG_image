@@ -16,4 +16,16 @@
 
 ## 本轮新增
 
-（暂无；执行中发现现场冲突或需新决定时追加，格式：编号/背景/决定/替代方案/影响。）
+### D-010 rq_v2 审核族与 legacy dry-run 通过 supersession 账本移出当前待办
+
+- 背景：P0-001 现场复现 `/api/v1/workitems` count=256，其中 250 项 rq_v2
+  审核与 4 个 legacy dry-run 仍作为当前待办。
+- 决定：新增 append-only `work_item_supersession_v1` 账本；投影默认
+  `projection=current` 排除被取代族，`history`/`all` 可回看；历史行不删。
+  rq_v2 取代依据 docs/README 2026-08-09（SUPERSEDED_FOR_DEMO_TRAINING，
+  LS22 唯一有效人工入口）；legacy dry-run 以命令含当前 CLI 不支持的
+  `--dataset/--budget-minutes` 为判据（CODEX 手册 §5.6-6）。
+- 替代方案：直接删除旧任务/改默认分页——拒绝（违反不可变历史原则）；
+  前端隐藏——拒绝（API/Agent 仍会读到假待办）。
+- 影响：旧测试 test_review_status_source 两个用例改用未被取代的 rq_v3
+  验证同一机制（契约变更，非弱化断言）。

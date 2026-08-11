@@ -1091,6 +1091,32 @@ ALTER TABLE recognition_task
     ADD COLUMN trace_id TEXT NOT NULL DEFAULT '';
 """
 
+# ABOSV2-P0-001：统一 current task projection 的 supersession 账本。
+# 被取代的工作族（如旧审核队列）只移出当前待办，历史行永不删除。
+_M031 = """
+CREATE TABLE IF NOT EXISTS work_item_supersession_v1 (
+    supersession_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    family TEXT NOT NULL,
+    match_json TEXT NOT NULL,
+    superseded_by TEXT NOT NULL,
+    reason TEXT NOT NULL,
+    decided_by TEXT NOT NULL,
+    decided_at TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    UNIQUE(family, match_json, superseded_by)
+);
+CREATE TRIGGER IF NOT EXISTS work_item_supersession_v1_no_delete
+    BEFORE DELETE ON work_item_supersession_v1
+    BEGIN
+        SELECT RAISE(ABORT, 'work_item_supersession_v1 不可变：禁止 DELETE');
+    END;
+CREATE TRIGGER IF NOT EXISTS work_item_supersession_v1_no_update
+    BEFORE UPDATE ON work_item_supersession_v1
+    BEGIN
+        SELECT RAISE(ABORT, 'work_item_supersession_v1 不可变：禁止 UPDATE');
+    END;
+"""
+
 MIGRATIONS: tuple[tuple[str, str], ...] = (
     ("001_platform_init", _M001),
     ("002_labeling_inbox", _M002),
@@ -1122,6 +1148,7 @@ MIGRATIONS: tuple[tuple[str, str], ...] = (
     ("028_state_projections_v2", _M028),
     ("029_profile_def_v1", _M029),
     ("030_recognition_task_profile_contract", _M030),
+    ("031_work_item_supersession_v1", _M031),
 )
 
 
@@ -2527,6 +2554,43 @@ class PlatformStore:
         rows = self._conn.execute(
             "SELECT queue_version FROM review_queue_invalidation_v1").fetchall()
         return {r["queue_version"] for r in rows}
+
+    # ---------- work_item_supersession_v1（ABOSV2-P0-001） ----------
+
+    def add_work_item_supersession(self, *, family: str,
+                                   match: dict[str, Any],
+                                   superseded_by: str, reason: str,
+                                   decided_by: str) -> bool:
+        """追加式登记工作族被取代；幂等（同 family+match+取代者）。
+
+        match 为 detail 字段匹配器：{字段: [允许值...]}，所有字段须命中。
+        不改写任何历史行；current 投影消费本账本。"""
+        match_json = json.dumps(match, sort_keys=True, ensure_ascii=False)
+        try:
+            self._conn.execute(
+                "INSERT INTO work_item_supersession_v1"
+                " (family, match_json, superseded_by, reason, decided_by,"
+                " decided_at, created_at) VALUES (?,?,?,?,?,?,?)",
+                (family, match_json, superseded_by, reason, decided_by,
+                 _utcnow(), _utcnow()))
+            self._conn.commit()
+            return True
+        except sqlite3.IntegrityError:
+            return False  # 已登记，幂等
+
+    def list_work_item_supersessions(self) -> list[dict[str, Any]]:
+        rows = self._conn.execute(
+            "SELECT * FROM work_item_supersession_v1"
+            " ORDER BY supersession_id").fetchall()
+        out = []
+        for r in rows:
+            d = dict(r)
+            try:
+                d["match"] = json.loads(d.pop("match_json"))
+            except (ValueError, KeyError):
+                d["match"] = {}
+            out.append(d)
+        return out
 
     def list_review_tasks_active(self, *, limit: int = 5000
                                  ) -> list[dict[str, Any]]:
