@@ -1,5 +1,7 @@
 # 通用 SKU 图像识别系统
 
+> **2026-08-11 平台定位与工作台最新实施入口：** 当前代码虽已加入“Agent 驱动操作系统”文案，但仍存在模块多事实源、假三级菜单、Recognition Profile 未进入请求、Agent UIIntent 断链、CSS 变量/组件断裂和本地服务未运行等问题。下一轮实施必须先完整阅读并执行 [`Agentic Business OS Workbench V1`](./implementation/agentic-business-os-workbench-v1/README.md) 及其 [`Agent 完整执行提示词`](./implementation/agentic-business-os-workbench-v1/AGENT-EXECUTION-PROMPT.md)。该入口负责统一平台壳层、模块/Agent/API 契约并打通识别首域；不授权训练或生产切换。
+
 > 货架陈列巡检 · **知识库驱动的自动标注 + YOLO** · 人机协同 · **本机原生优先（不依赖 Docker）**
 
 > **平台最终架构入口（2026-08-04）：** 整个产品的唯一总纲是 [`Graph+Loop 智能业务操作系统最终统一架构设计`](./superpowers/specs/2026-08-04-fmcg-vision-saas-platform-design.md)。它定义一套统一底座和可插拔 Domain Pack；位置外勤规格只是从属模块文档，不是第二套系统。

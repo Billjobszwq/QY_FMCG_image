@@ -6,6 +6,14 @@
 >
 > 当前快照时间：2026-08-08，Asia/Shanghai。
 
+## 2026-08-11 · 平台定位与工作台纠偏接续
+
+- 现场 HEAD 已前进到 `1a6f0aeebaaf48618bce4f34530bcec8fd496215`（后续仍须实时复核），分支 `feat/nextgen-training-cycle-v2`。
+- 最新只读审计发现：平台文案仍绑定 SKU、Module/App/Agent 多事实源、多个假三级菜单、Recognition Profile 未进入请求、Agent UIIntent/command/evidence 未被 Web 消费、CSS 变量与关键组件类缺失。
+- 2026-08-11 探测时 8091/8092/8300/8400 均未运行；这只是当时现场状态，不代表永久故障。
+- 最新实施入口：`docs/implementation/agentic-business-os-workbench-v1/README.md`；完整 Agent 任务书：同目录 `AGENT-EXECUTION-PROMPT.md`。
+- 本入口只授权工作台、模块/Agent/API 契约、识别首域、测试和文档实现；不授权训练、生产切换、删除、merge/push/deploy。
+
 ---
 
 ## 0. 上下文恢复时先读这里

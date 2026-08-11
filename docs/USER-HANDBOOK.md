@@ -1,5 +1,7 @@
 # 统一工作台 · 系统使用手册
 
+> **临时手册说明（2026-08-11）：** 本文件记录当前过渡版界面，不能证明系统已经完成。现场审计发现部分页面、导航、Agent 控制和识别 Profile 尚未真正贯通，且会变化的项目 ID/任务数被硬编码。正式可操作手册将按 [`agentic-business-os-workbench-v1/07-SYSTEM-MANUAL-REQUIREMENTS.md`](./implementation/agentic-business-os-workbench-v1/07-SYSTEM-MANUAL-REQUIREMENTS.md) 重建；实施入口见 [`AGENT-EXECUTION-PROMPT.md`](./implementation/agentic-business-os-workbench-v1/AGENT-EXECUTION-PROMPT.md)。
+
 > 定位：Agent 驱动的智能经营操作系统（非 SaaS）。
 > 模块：数据仓库 / 问卷 / 地理分析 / 线库规划 / BI 报表 / 数据告警 /
 > 数据深度对话 / 图像识别 / 工作流编排 / 财务对账 / 策略分析。
