@@ -1,5 +1,4 @@
 import { useEffect, useState } from "react";
-import ModuleTabs from "./ModuleTabs";
 
 // 07 经营智能：BI 报表（真实数据图表）+ 数据告警（真实规则）+ 模块配置。
 function Bars({ data }: { data: { k: string; v: number }[] }) {
@@ -29,22 +28,9 @@ export default function BizIntel() {
   const [mods, setMods] = useState<any[]>([]);
 
   useEffect(() => {
+    fetch("/api/v1/biz/m3bars").then((r) => r.json())
+      .then((d) => setM3(d.bars ?? []));
     fetch("/api/v1/training/artifacts").then((r) => r.json()).then((d) => {
-      const pick = ["m3_ablation_e1_v1", "m3_ablation_e2_v1",
-        "m3_ablation_e3_v1", "m3_ablation_e4_v1", "m3_ablation_e5_v1"];
-      // 从评估报告读 top1 更准；这里用 artifacts 存在性 + 报告
-      fetch("/api/v1/training/evaluations").then((r) => r.json())
-        .then((ev) => {
-          const bars = pick.map((id) => {
-            const e = (ev.evaluations ?? []).find((x: any) =>
-              x.report_path?.includes(id));
-            let v = 0;
-            try { v = e ? (JSON.parse(e.summary_json)
-              .independent_test?.top1 ?? 0) : 0; } catch { v = 0; }
-            return { k: id.slice(-2), v };
-          });
-          setM3(bars);
-        });
       const cand = (d.artifacts ?? []).filter((a: any) =>
         /CANDIDATE|REJECTED/.test(a.candidate_status ?? ""));
       const al: any[] = [];
@@ -66,12 +52,6 @@ export default function BizIntel() {
   return (
     <div>
       <span className="kicker">07 · 经营智能 · biz-agent</span>
-      <ModuleTabs active={tab === "bi" ? "/biz" : tab === "alert"
-        ? "/biz/alert" : "/biz/cfg"} items={[
-        { to: "/biz", label: "BI 报表" },
-        { to: "/biz/alert", label: "数据告警" },
-        { to: "/biz/cfg", label: "模块配置" },
-      ]} />
       <div style={{ display: "flex", gap: 8, marginBottom: 20 }}>
         {(["bi", "alert", "cfg"] as const).map((t) => (
           <button key={t} className="btn"

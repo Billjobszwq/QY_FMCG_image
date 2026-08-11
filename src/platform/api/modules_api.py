@@ -36,6 +36,20 @@ MODULES = [
 def create_modules_router() -> APIRouter:
     router = APIRouter(tags=["modules"])
 
+    @router.get("/api/v1/biz/m3bars")
+    def m3bars() -> dict:
+        import json as _j
+        from pathlib import Path as _P
+        bars = []
+        for e in ("e1", "e2", "e3", "e4", "e5"):
+            f = _P(f".models/m3_ablation_{e}_v1/train_report.json")
+            v = 0.0
+            if f.exists():
+                v = _j.loads(f.read_text()).get("independent_test", {}) \
+                    .get("top1", 0.0)
+            bars.append({"k": e.upper(), "v": round(v, 4)})
+        return {"bars": bars}
+
     @router.get("/api/v1/modules")
     def modules() -> dict:
         return {"count": len(MODULES), "modules": MODULES,
