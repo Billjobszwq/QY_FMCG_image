@@ -1,10 +1,11 @@
 # STATUS / DECISIONS / ISSUES
 
-更新时间：2026-08-11。
+更新时间：2026-08-11（实施 Agent 接管后）。
+详细决定见 `DECISIONS.md`，问题清单见 `ISSUES.md`，任务状态见 `IMPLEMENTATION-LIST.md`。
 
-## 当前状态
+## 当前 Gate（唯一）
 
-`FOUNDATION_CONTINUITY_REPAIR_REQUIRED`
+`FOUNDATION_CONTINUITY_REPAIR_REQUIRED` → 实施中：T0 完成，Phase A 进行中。
 
 不是 `READY_FOR_NEXT_DOMAIN_PACK`。代码测试通过，但真实浏览器和数据对账发现任务事实源、快速目标、Graph/识别/计费、响应式 UI 与任务详情尚未闭合。
 
@@ -35,6 +36,11 @@
 - P2：便签 localStorage、event polling、profile 信息过载；
 - 业务：问卷、BI、Geo/Field、Finance、IAM 仍为 planned，禁止以导航入口计为完成。
 
+## 现场基线（2026-08-11 实时核验）
+
+- HEAD `d00953ad`，分支 `feat/nextgen-training-cycle-v2`，tracked 干净；用户未跟踪资产零触碰。
+- 服务 8091/8092/8300/8400 全部 UP；DB integrity ok（63 表，迁移至 030）；production `prod_20260805_v5_r1` 未切换；无训练进程。
+
 ## 本轮未做
 
-未修改业务代码、数据库或 UI；未启动训练；未切换 production；未 merge/push/deploy；未删除或暂存用户资产。
+未 merge/push/deploy；未启动训练；未切换 production；未删除或暂存用户资产。
