@@ -28,6 +28,7 @@ import {
   VisionModels, VisionTasks,
 } from "../pages/Vision";
 import ImportCenter from "../pages/ImportCenter";
+import AgentCenter from "../pages/AgentCenter";
 
 export interface ModuleRouteContext {
   health: HealthBody | null;
@@ -125,9 +126,9 @@ export const MODULE_ROUTES: Record<
     <><WorkflowRunCenter /><GraphRuns /></>),
   "/workflow/approvals": () => wide(<WorkflowApprovals />),
   "/workflow/connectors": () => wide(<WorkflowConnectors />),
-  "/workflow/agents": (ctx) => wide(
+  "/workflow/agents": () => wide(
     <><WorkflowAgentsAndModels />
-      <AgentsMatrix modules={ctx.modules} /></>),
+      <AgentCenter /></>),
   "/workflow/evidence": () => wide(<WorkflowEvidenceUsage />),
   // 账号与权限 / 主数据
   "/iam/accounts": () => wide(<IamAccounts />),

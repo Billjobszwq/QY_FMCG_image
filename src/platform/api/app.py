@@ -170,8 +170,9 @@ def create_app(
         # ABOSV2 Phase F：BI 语义层/报表/异常追问（注册制指标，禁任意 SQL）。
         from src.platform.analytics import AnalyticsService
         from src.platform.api.analytics_api import create_analytics_router
+        analytics_service = AnalyticsService(bundle.store)
         app.include_router(create_analytics_router(
-            bundle.store, AnalyticsService(bundle.store),
+            bundle.store, analytics_service,
             IAMService(bundle.store), auth=AuthService(bundle.store)))
         # ABOSV2 Phase F：位置与外勤（地址/路线/围栏/到店/差旅费）。
         from src.platform.field_ops import FieldOpsService
@@ -223,9 +224,15 @@ def create_app(
             bundle.store, auth=AuthService(bundle.store)))
         from src.platform.api.agent_runtime_api import (
             create_agent_runtime_router)
+        # ABOSV3 T4：真实 Agent Runtime（版本化定义/有界工具循环/
+        # health 探针/资产与记忆）——由组合根装配服务依赖。
+        from src.platform.agents.runtime import AgentRuntime
+        agent_runtime = AgentRuntime(
+            bundle.store, workflow=wf_service,
+            analytics=analytics_service, gateway=gateway)
         app.include_router(create_agent_runtime_router(
             bundle.store, auth=AuthService(bundle.store),
-            on_approved=agent_on_approved))
+            on_approved=agent_on_approved, runtime=agent_runtime))
         from src.platform.api.recon_api import create_recon_router
         from src.platform.api.modules_api import create_modules_router
         app.include_router(create_recon_router(bundle.store))

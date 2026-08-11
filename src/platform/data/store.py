@@ -1862,6 +1862,66 @@ CREATE TABLE IF NOT EXISTS knowledge_document_v1 (
 );
 """
 
+# ABOSV3 T4：真实 Agent Runtime（版本化定义/资产/记忆/运行轨迹）。
+_M043 = """
+CREATE TABLE IF NOT EXISTS agent_definition_v1 (
+    agent_id TEXT NOT NULL,
+    version INTEGER NOT NULL,
+    status TEXT NOT NULL DEFAULT 'draft',
+    soul_json TEXT NOT NULL DEFAULT '{}',
+    system_prompt TEXT NOT NULL DEFAULT '',
+    provider TEXT NOT NULL DEFAULT 'rules_tool_loop',
+    model TEXT NOT NULL DEFAULT '',
+    budget_json TEXT NOT NULL DEFAULT '{}',
+    approval_json TEXT NOT NULL DEFAULT '{}',
+    tool_allowlist_json TEXT NOT NULL DEFAULT '[]',
+    memory_acl_json TEXT NOT NULL DEFAULT '{}',
+    created_by TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    PRIMARY KEY (agent_id, version)
+);
+CREATE TABLE IF NOT EXISTS agent_asset_v1 (
+    asset_id TEXT NOT NULL,
+    version INTEGER NOT NULL,
+    kind TEXT NOT NULL,
+    name TEXT NOT NULL,
+    content TEXT NOT NULL DEFAULT '',
+    meta_json TEXT NOT NULL DEFAULT '{}',
+    status TEXT NOT NULL DEFAULT 'draft',
+    customer_id TEXT NOT NULL DEFAULT '',
+    created_by TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    PRIMARY KEY (asset_id, version)
+);
+CREATE TABLE IF NOT EXISTS agent_memory_v1 (
+    memory_id TEXT PRIMARY KEY,
+    agent_id TEXT NOT NULL,
+    level TEXT NOT NULL DEFAULT 'L1',
+    content TEXT NOT NULL,
+    acl_json TEXT NOT NULL DEFAULT '{}',
+    supersedes TEXT,
+    status TEXT NOT NULL DEFAULT 'active',
+    created_by TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS agent_run_v1 (
+    run_id TEXT PRIMARY KEY,
+    agent_id TEXT NOT NULL,
+    session_id TEXT NOT NULL DEFAULT '',
+    intent TEXT NOT NULL DEFAULT '',
+    status TEXT NOT NULL DEFAULT 'running',
+    tool_trace_json TEXT NOT NULL DEFAULT '[]',
+    provider TEXT NOT NULL DEFAULT '',
+    actor TEXT NOT NULL DEFAULT '',
+    customer_id TEXT NOT NULL DEFAULT '',
+    project_id TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL,
+    ended_at TEXT
+);
+"""
+
 MIGRATIONS: tuple[tuple[str, str], ...] = (
     ("001_platform_init", _M001),
     ("002_labeling_inbox", _M002),
@@ -1905,6 +1965,7 @@ MIGRATIONS: tuple[tuple[str, str], ...] = (
     ("040_auth_credential_lock", _M040),
     ("041_home_calendar_notes_v1", _M041),
     ("042_import_center_v1", _M042),
+    ("043_agent_runtime_v3", _M043),
 )
 
 
