@@ -78,6 +78,16 @@ class ApprovalCheckBody(BaseModel):
     username: str | None = None
 
 
+class RoleBody(BaseModel):
+    name: str
+    description: str = ""
+    scopes: list[str] = []
+
+
+class MasterStatusBody(BaseModel):
+    status: str  # active | inactive
+
+
 def _platform_actor(iam: IAMService, actor: str, session_role: str) -> bool:
     """平台角色：legacy admin session 或 IAM owner/platform_admin。"""
     if session_role == "admin":
@@ -299,5 +309,68 @@ def create_iam_router(store: Any, auth: AuthService | None) -> APIRouter:
         return {"sku_id": sku_id, "customer_id": customer_id,
                 "display_name": master.display_name_for(
                     sku_id, customer_id)}
+
+    # ---- ABOSV3 T3：自定义角色 / 权限模拟器 / 停用 / 合并建议 ----
+
+    @router.get("/api/v1/iam/roles")
+    def list_roles(request: Request) -> dict:
+        p = require_principal(auth, request, csrf=False)
+        _guard(iam, p["actor"], p["role"], "iam.read")
+        rows = store._conn.execute(
+            "SELECT role_id, name, builtin, description FROM iam_role_v1"
+            " ORDER BY builtin DESC, name").fetchall()
+        out = []
+        for r in rows:
+            scopes = [b["scope"] for b in store._conn.execute(
+                "SELECT b.scope FROM iam_role_permission_v1 rp"
+                " JOIN iam_permission_bundle_v1 b"
+                " ON b.bundle_id=rp.bundle_id WHERE rp.role_id=?",
+                (r["role_id"],)).fetchall()]
+            out.append({**dict(r), "builtin": bool(r["builtin"]),
+                        "scopes": scopes})
+        return {"count": len(out), "roles": out}
+
+    @router.get("/api/v1/iam/scopes")
+    def list_scopes(request: Request) -> dict:
+        require_principal(auth, request, csrf=False)
+        from ..iam import SCOPES
+        return {"count": len(SCOPES), "scopes": sorted(SCOPES)}
+
+    @router.post("/api/v1/iam/roles")
+    def create_role(body: RoleBody, request: Request) -> dict:
+        p = require_principal(auth, request, csrf=True)
+        _guard(iam, p["actor"], p["role"], "iam.manage")
+        try:
+            return {"role": iam.create_custom_role(
+                name=body.name, description=body.description,
+                scopes=body.scopes, created_by=p["actor"])}
+        except IAMError as e:
+            raise HTTPException(409, str(e))
+
+    @router.get("/api/v1/iam/simulate")
+    def simulate(request: Request, username: str, scope: str,
+                 customer_id: str = "", project_id: str = "") -> dict:
+        p = require_principal(auth, request, csrf=False)
+        _guard(iam, p["actor"], p["role"], "iam.read")
+        return iam.simulate(username=username, scope=scope,
+                            customer_id=customer_id,
+                            project_id=project_id)
+
+    @router.post("/api/v1/master/{kind}/{object_id}/status")
+    def master_status(kind: str, object_id: str, body: MasterStatusBody,
+                      request: Request) -> dict:
+        p = require_principal(auth, request, csrf=True)
+        _guard(iam, p["actor"], p["role"], "master.manage")
+        try:
+            return master.set_status(kind=kind, object_id=object_id,
+                                     status=body.status, actor=p["actor"])
+        except MasterDataError as e:
+            raise HTTPException(409, str(e))
+
+    @router.get("/api/v1/master/duplicates")
+    def master_duplicates(request: Request) -> dict:
+        p = require_principal(auth, request, csrf=False)
+        _guard(iam, p["actor"], p["role"], "master.read")
+        return master.duplicates()
 
     return router

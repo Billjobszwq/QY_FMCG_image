@@ -122,6 +122,22 @@ def create_app(
         from src.platform.api.home_api import create_home_router
         app.include_router(create_home_router(
             bundle.store, auth=AuthService(bundle.store)))
+        # ABOSV3 T3：Import Center（14 套 CSV/XLSX 模板、dry-run、
+        # 逐行错误、幂等提交、证据与审计）——全模块共用。
+        from src.platform.iam import IAMService as _IAM
+        from src.platform.import_center import ImportCenter
+        from src.platform.survey import SurveyService as _Survey
+        from src.platform.field_ops import FieldOpsService as _Field
+        from src.platform.finance import FinanceService as _Fin
+        _iam = _IAM(bundle.store)
+        from src.platform.iam import MasterDataService as _MD
+        _import_center = ImportCenter(
+            bundle.store, iam=_iam, master=_MD(bundle.store, _iam),
+            survey=_Survey(bundle.store), field_ops=_Field(bundle.store),
+            finance=_Fin(bundle.store))
+        from src.platform.api.import_api import create_import_router
+        app.include_router(create_import_router(
+            _import_center, auth=AuthService(bundle.store)))
         # ABOSV2 Phase B：统一 Work/Event/Usage 控制平面（Command Gateway
         # + 对账）；Web/API/Agent 共用同一命令入口。
         from src.platform.control_plane import CommandGateway

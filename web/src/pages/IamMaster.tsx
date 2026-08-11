@@ -23,14 +23,23 @@ function useLoad<T>(path: string | null): {
 export function IamAccounts() {
   const me = useLoad<any>("/iam/whoami");
   const principals = useLoad<any>("/iam/principals");
+  const rolesApi = useLoad<any>("/iam/roles");
+  const scopesApi = useLoad<any>("/iam/scopes");
   const [form, setForm] = useState({ kind: "user", username: "",
     display_name: "", password: "" });
   const [grant, setGrant] = useState({ username: "", role: "read_only",
     customer_id: "", project_id: "" });
+  const [newRole, setNewRole] = useState({ name: "", description: "",
+    scopes: [] as string[] });
+  const [sim, setSim] = useState({ username: "", scope: "survey.read",
+    customer_id: "" });
+  const [simResult, setSimResult] = useState<any | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
-  const roles = ["owner", "platform_admin", "customer_admin",
+  const builtinRoles = ["owner", "platform_admin", "customer_admin",
     "project_manager", "survey_designer", "field_manager", "reviewer",
     "analyst", "finance_operator", "read_only", "agent_service"];
+  const roleNames = rolesApi.data
+    ? rolesApi.data.roles.map((r: any) => r.name) : builtinRoles;
 
   const doAction = async (name: string, fn: () => Promise<any>) => {
     setMsg(null);
@@ -48,8 +57,8 @@ export function IamAccounts() {
           <p className="v">{me.data.actor} · session 角色
             {me.data.session_role} · IAM 角色
             {me.data.roles.join("、") || "—"} · 客户作用域
-            {me.data.visible_customer === null ? "全部（平台角色）"
-              : (me.data.visible_customer || "无")}</p>
+            {me.data.visible_customers === null ? "全部（平台角色）"
+              : ((me.data.visible_customers ?? []).join("、") || "无")}</p>
         </div>
       )}
       <div className="card">
@@ -84,7 +93,7 @@ export function IamAccounts() {
               username: e.target.value })} />
           <select value={grant.role} aria-label="角色"
             onChange={(e) => setGrant({ ...grant, role: e.target.value })}>
-            {roles.map((r) => <option key={r} value={r}>{r}</option>)}
+            {roleNames.map((r: string) => <option key={r} value={r}>{r}</option>)}
           </select>
           <input placeholder="customer_id（空=租户级）"
             aria-label="客户作用域" value={grant.customer_id}
@@ -99,6 +108,96 @@ export function IamAccounts() {
               iamPost("iam/grants", grant))}>授权</button>
         </div>
         {msg && <p className="v" style={{ marginTop: 8 }}>{msg}</p>}
+      </div>
+
+      {/* ABOSV3-P1-008：自定义角色 + 权限模拟器 */}
+      <div className="grid" style={{ gridTemplateColumns:
+        "repeat(auto-fit, minmax(340px, 1fr))" }}>
+        <div className="card" style={{ marginBottom: 0 }}>
+          <h3>自定义角色（权限只从已注册 bundle 组合）</h3>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <input placeholder="角色名" aria-label="角色名"
+              value={newRole.name}
+              onChange={(e) => setNewRole({ ...newRole,
+                name: e.target.value })} />
+            <input placeholder="描述" aria-label="角色描述"
+              value={newRole.description}
+              onChange={(e) => setNewRole({ ...newRole,
+                description: e.target.value })} />
+          </div>
+          <div style={{ marginTop: 8, display: "flex",
+            flexWrap: "wrap", gap: 6 }}>
+            {(scopesApi.data?.scopes ?? []).map((s: string) => (
+              <label key={s} className="v"
+                style={{ fontSize: 12, display: "inline-flex",
+                  gap: 4, alignItems: "center" }}>
+                <input type="checkbox" checked={newRole.scopes.includes(s)}
+                  onChange={(e) => setNewRole({ ...newRole,
+                    scopes: e.target.checked
+                      ? [...newRole.scopes, s]
+                      : newRole.scopes.filter(x => x !== s) })} />
+                {s}</label>))}
+          </div>
+          <button className="btn small primary" style={{ marginTop: 8 }}
+            disabled={!newRole.name || newRole.scopes.length === 0}
+            onClick={() => doAction("创建角色", async () => {
+              await iamPost("iam/roles", newRole);
+              rolesApi.reload();
+            })}>创建角色</button>
+          <h3 style={{ marginTop: 12 }}>角色列表</h3>
+          {rolesApi.data && (
+            <table className="table">
+              <thead><tr><th>角色</th><th>类型</th><th>权限</th></tr></thead>
+              <tbody>
+                {rolesApi.data.roles.map((r: any) => (
+                  <tr key={r.role_id}>
+                    <td data-label="角色">{r.name}</td>
+                    <td data-label="类型">{r.builtin ? "内置"
+                      : "自定义"}</td>
+                    <td data-label="权限" className="v">
+                      {r.scopes.join("、") || "—"}</td>
+                  </tr>))}
+              </tbody>
+            </table>)}
+        </div>
+        <div className="card" style={{ marginBottom: 0 }}>
+          <h3>权限模拟器（能否/为什么）</h3>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <input placeholder="username" aria-label="模拟对象"
+              value={sim.username}
+              onChange={(e) => setSim({ ...sim,
+                username: e.target.value })} />
+            <select value={sim.scope} aria-label="模拟 scope"
+              onChange={(e) => setSim({ ...sim, scope: e.target.value })}>
+              {(scopesApi.data?.scopes ?? ["survey.read"]).map(
+                (s: string) => <option key={s} value={s}>{s}</option>)}
+            </select>
+            <input placeholder="customer_id（可空）" aria-label="模拟客户"
+              value={sim.customer_id}
+              onChange={(e) => setSim({ ...sim,
+                customer_id: e.target.value })} />
+            <button className="btn small primary"
+              disabled={!sim.username}
+              onClick={async () => {
+                try {
+                  const q = new URLSearchParams({ username: sim.username,
+                    scope: sim.scope, customer_id: sim.customer_id });
+                  setSimResult(await iamGet(`/iam/simulate?${q}`));
+                } catch (e) {
+                  setSimResult({ allowed: false,
+                    reasons: [String(e)] });
+                }
+              }}>模拟</button>
+          </div>
+          {simResult && (
+            <div style={{ marginTop: 10 }}>
+              <p className="v" style={{ fontWeight: 600,
+                color: simResult.allowed ? "var(--ok)" : "var(--err)" }}>
+                {simResult.allowed ? "✓ 允许" : "✗ 拒绝"}</p>
+              {simResult.reasons?.map((r: string, i: number) => (
+                <p key={i} className="v">· {r}</p>))}
+            </div>)}
+        </div>
       </div>
       <div className="card">
         <h3>身份列表</h3>
@@ -189,10 +288,20 @@ export function IamAudit() {
 // ---- 客户库 ----
 export function MasterCustomers() {
   const custs = useLoad<any>("/master/customers");
+  const dups = useLoad<any>("/master/duplicates");
   const [form, setForm] = useState({ customer_id: "", name: "",
     is_test_fixture: true, retention_policy: "" });
   const [ov, setOv] = useState<any | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
+  const setStatus = async (id: string, status: string) => {
+    try {
+      await iamPost(`master/customer/${id}/status`, { status });
+      setMsg(`${id} 已${status === "inactive" ? "停用" : "启用"}`);
+      custs.reload();
+    } catch (e) {
+      setMsg(`操作失败：${e instanceof Error ? e.message : e}`);
+    }
+  };
   return (
     <>
       <PageHeader title="客户库"
@@ -247,7 +356,11 @@ export function MasterCustomers() {
               } catch (e) {
                 setOv({ error: e instanceof Error ? e.message : e });
               }
-            }}>隔离概览（runs/任务/Usage）</button>
+            }}>隔离概览（runs/任务/Usage）</button>{" "}
+            <button className="btn small"
+              onClick={() => setStatus(cu.customer_id,
+                cu.status === "active" ? "inactive" : "active")}>
+              {cu.status === "active" ? "停用" : "启用"}</button>
             {ov && ov.customer_id === cu.customer_id && (
               ov.error
                 ? <p className="v" style={{ color: "var(--err)" }}>
@@ -265,6 +378,17 @@ export function MasterCustomers() {
             )}
           </div>
         )))}
+      {dups.data && (dups.data.customers?.length > 0
+        || dups.data.skus?.length > 0) && (
+        <div className="card">
+          <h3>合并建议（规范化重名，不自动合并）</h3>
+          {dups.data.customers.map((g: any) => (
+            <p key={g.name_key} className="v">客户疑似重复：
+              {g.ids.join("、")}</p>))}
+          {dups.data.skus.map((g: any) => (
+            <p key={g.name_key} className="v">SKU 疑似重复：
+              {g.ids.join("、")}</p>))}
+        </div>)}
     </>
   );
 }

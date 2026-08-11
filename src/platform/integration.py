@@ -51,7 +51,7 @@ UI_ROUTES_MIRROR: tuple[str, ...] = (
     "/home",
     "/vision/recognize", "/vision/tasks", "/vision/annotation",
     "/vision/datasets", "/vision/models", "/vision/evidence",
-    "/data/assets", "/data/quality",
+    "/data/import", "/data/assets", "/data/quality",
     "/workflow/studio", "/workflow/templates", "/workflow/runs",
     "/workflow/approvals", "/workflow/connectors", "/workflow/agents",
     "/workflow/evidence",

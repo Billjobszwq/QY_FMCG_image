@@ -27,6 +27,7 @@ import {
   RecognizeNow, VisionAnnotation, VisionDatasets, VisionEvidence,
   VisionModels, VisionTasks,
 } from "../pages/Vision";
+import ImportCenter from "../pages/ImportCenter";
 
 export interface ModuleRouteContext {
   health: HealthBody | null;
@@ -114,6 +115,7 @@ export const MODULE_ROUTES: Record<
   "/vision/models": () => wide(<VisionModels />),
   "/vision/evidence": () => wide(<VisionEvidence />),
   // 数据与资产
+  "/data/import": () => wide(<ImportCenter />),
   "/data/assets": () => wide(<VisionDatasets />),
   "/data/quality": () => wide(<VisionEvidence />),
   // 工作流与 Agent

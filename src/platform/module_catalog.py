@@ -115,6 +115,10 @@ def build_default_module_registry() -> ModuleRegistry:
         domain="data", status="live", theme_token="amber",
         primary_route="/data",
         navigation=(
+            NavRoute(route="/data/import", label="Import Center",
+                     description="全模块共用导入：模板下载/上传/映射/"
+                                 "dry-run/逐行错误/提交/证据",
+                     actions=("下载模板", "上传", "dry-run", "提交")),
             NavRoute(route="/data/assets", label="资产台账",
                      description="source_asset_inventory 真实台账",
                      actions=("筛选", "查看血缘", "导出")),

@@ -284,6 +284,90 @@ class IAMService:
             return []  # 无任何客户作用域 → 不可见任何客户数据
         return sorted(r["customer_id"] for r in rows)
 
+    # ---------- 自定义角色（ABOSV3-P1-008） ----------
+
+    def create_custom_role(self, *, name: str, description: str = "",
+                           scopes: list[str], created_by: str) -> dict:
+        """用户可新建自定义角色；权限只能从已注册 permission bundle
+        （SCOPES 白名单）组合，不得自造 scope。"""
+        if not name or not name.strip():
+            raise IAMError("角色名必填")
+        if self.store._conn.execute(
+                "SELECT 1 FROM iam_role_v1 WHERE name=?",
+                (name,)).fetchone():
+            raise IAMError(f"角色已存在: {name}")
+        bad = [s for s in scopes if s not in SCOPES]
+        if bad:
+            raise IAMError(
+                f"权限不在已注册 permission bundle 白名单: {bad}")
+        rid = f"role-custom-{uuid.uuid4().hex[:8]}"
+        self.store._conn.execute(
+            "INSERT INTO iam_role_v1 (role_id, name, builtin, description,"
+            " created_at) VALUES (?,?,0,?,?)",
+            (rid, name, description, _now()))
+        for scope in scopes:
+            self.store._conn.execute(
+                "INSERT OR IGNORE INTO iam_role_permission_v1"
+                " (role_id, bundle_id) VALUES (?,?)",
+                (rid, f"pb-{scope}"))
+        self.store._conn.commit()
+        self.audit(created_by, "iam.role.created", f"role:{name}",
+                   {"scopes": list(scopes)})
+        return {"role_id": rid, "name": name, "scopes": list(scopes)}
+
+    # ---------- 权限模拟器（ABOSV3-P1-008） ----------
+
+    def simulate(self, *, username: str, scope: str,
+                 customer_id: str = "", project_id: str = "") -> dict:
+        """回答“某用户能否对某客户执行某动作”及原因（fail-closed）。"""
+        reasons: list[str] = []
+        p = self.get_principal_by_username(username)
+        if p is None:
+            return {"allowed": False, "reasons": ["身份不存在"],
+                    "username": username, "scope": scope}
+        if p["status"] != "active":
+            return {"allowed": False, "reasons": ["身份已停用"],
+                    "username": username, "scope": scope}
+        if scope not in SCOPES:
+            return {"allowed": False,
+                    "reasons": [f"scope 未注册: {scope}（fail-closed）"],
+                    "username": username, "scope": scope}
+        roles = self.roles_of(username)
+        if "owner" in roles or "platform_admin" in roles:
+            return {"allowed": True, "roles": roles,
+                    "reasons": ["平台角色（owner/platform_admin）全权限"],
+                    "username": username, "scope": scope}
+        rows = self.store._conn.execute(
+            "SELECT m.customer_id, m.project_id, r.name role"
+            " FROM iam_membership_v1 m"
+            " JOIN iam_principal_v1 p ON p.principal_id=m.principal_id"
+            " JOIN iam_role_v1 r ON r.role_id=m.role_id"
+            " JOIN iam_role_permission_v1 rp ON rp.role_id=m.role_id"
+            " JOIN iam_permission_bundle_v1 b ON b.bundle_id=rp.bundle_id"
+            " WHERE p.username=? AND b.scope=?", (username, scope)
+            ).fetchall()
+        if not rows:
+            reasons.append(f"没有任何角色授予 {scope}")
+            return {"allowed": False, "reasons": reasons,
+                    "username": username, "scope": scope}
+        for r in rows:
+            cust_ok = (not customer_id) or (not r["customer_id"]) or (
+                r["customer_id"] == customer_id)
+            proj_ok = (not project_id) or (not r["project_id"]) or (
+                r["project_id"] == project_id)
+            if cust_ok and proj_ok:
+                return {"allowed": True,
+                        "reasons": [f"角色 {r['role']} 授予 {scope}"
+                                    + (f"（客户 {r['customer_id']}）"
+                                       if r["customer_id"] else "（无客户限定）")],
+                        "username": username, "scope": scope}
+            reasons.append(
+                f"角色 {r['role']} 有 {scope}，但作用域不匹配"
+                f"（授权客户={r['customer_id'] or '无'}，"
+                f"请求客户={customer_id or '无'}）")
+        return {"allowed": False, "reasons": reasons,
+                "username": username, "scope": scope}
+
     def check_approval(self, username: str, action: str) -> bool:
         """批准矩阵：矩阵未收录的动作 fail-closed 仅平台管理员。"""
         rows = self.store._conn.execute(
@@ -368,6 +452,55 @@ class MasterDataService:
             if limit_to is not None and d["customer_id"] not in limit_to:
                 continue
             out.append(d)
+        return out
+
+    # ---- 停用 / 合并建议（ABOSV3-P1-009；不删除历史） ----
+
+    _MD_TABLES = {"customer": ("md_customer_v1", "customer_id"),
+                  "project": ("md_project_v1", "project_id"),
+                  "sku": ("md_sku_v1", "sku_id")}
+
+    def set_status(self, *, kind: str, object_id: str, status: str,
+                   actor: str) -> dict:
+        if kind not in self._MD_TABLES:
+            raise MasterDataError(f"主数据类型不支持: {kind}")
+        if status not in ("active", "inactive"):
+            raise MasterDataError("状态只支持 active/inactive")
+        table, idcol = self._MD_TABLES[kind]
+        n = self.store._conn.execute(
+            f"UPDATE {table} SET status=?, updated_at=? WHERE {idcol}=?",
+            (status, _now(), object_id))
+        if n.rowcount != 1:
+            raise MasterDataError(f"{kind} 不存在: {object_id}")
+        self.store._conn.commit()
+        self.iam.audit(actor, f"master.{kind}.status_changed",
+                       f"{kind}:{object_id}", {"status": status},
+                       customer_id=object_id if kind == "customer"
+                       else "")
+        return {"kind": kind, "id": object_id, "status": status}
+
+    def duplicates(self) -> dict[str, list]:
+        """合并建议：规范化名称完全相同的记录（不自动合并）。"""
+        import re
+
+        def norm(s: str) -> str:
+            return re.sub(r"\s+", "", (s or "")).casefold()
+
+        out: dict[str, list] = {"customers": [], "skus": []}
+        groups: dict[str, list] = {}
+        for r in self.store._conn.execute(
+                "SELECT customer_id, name FROM md_customer_v1").fetchall():
+            groups.setdefault(norm(r["name"]), []).append(r["customer_id"])
+        out["customers"] = [{"name_key": k, "ids": v}
+                            for k, v in groups.items() if len(v) > 1]
+        groups = {}
+        for r in self.store._conn.execute(
+                "SELECT sku_id, canonical_name FROM md_sku_v1"
+                ).fetchall():
+            groups.setdefault(norm(r["canonical_name"]), []).append(
+                r["sku_id"])
+        out["skus"] = [{"name_key": k, "ids": v}
+                       for k, v in groups.items() if len(v) > 1]
         return out
 
     # ---- 项目 ----

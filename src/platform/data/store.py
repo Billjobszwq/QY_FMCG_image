@@ -1821,6 +1821,47 @@ CREATE TABLE IF NOT EXISTS user_note_v1 (
 );
 """
 
+# ABOSV3 T3：Import Center 批次台账 + 路线约束预设 + 知识文档登记。
+_M042 = """
+CREATE TABLE IF NOT EXISTS import_batch_v1 (
+    batch_id TEXT PRIMARY KEY,
+    template_id TEXT NOT NULL,
+    filename TEXT NOT NULL DEFAULT '',
+    file_format TEXT NOT NULL DEFAULT 'csv',
+    file_hash TEXT NOT NULL DEFAULT '',
+    status TEXT NOT NULL DEFAULT 'uploaded',
+    actor TEXT NOT NULL DEFAULT '',
+    row_count INTEGER NOT NULL DEFAULT 0,
+    mapping_json TEXT NOT NULL DEFAULT '{}',
+    dry_run_json TEXT NOT NULL DEFAULT '{}',
+    error_report_json TEXT NOT NULL DEFAULT '[]',
+    commit_json TEXT NOT NULL DEFAULT '{}',
+    idempotency_key TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS route_constraint_preset_v1 (
+    preset_id TEXT PRIMARY KEY,
+    customer_id TEXT NOT NULL DEFAULT '',
+    name TEXT NOT NULL,
+    constraints_json TEXT NOT NULL DEFAULT '{}',
+    created_by TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS knowledge_document_v1 (
+    doc_id TEXT PRIMARY KEY,
+    kb_name TEXT NOT NULL DEFAULT '',
+    customer_id TEXT NOT NULL DEFAULT '',
+    title TEXT NOT NULL,
+    source TEXT NOT NULL DEFAULT '',
+    version TEXT NOT NULL DEFAULT 'v1',
+    expires_at TEXT,
+    status TEXT NOT NULL DEFAULT 'draft',
+    created_by TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL
+);
+"""
+
 MIGRATIONS: tuple[tuple[str, str], ...] = (
     ("001_platform_init", _M001),
     ("002_labeling_inbox", _M002),
@@ -1863,6 +1904,7 @@ MIGRATIONS: tuple[tuple[str, str], ...] = (
     ("039_finance_v1", _M039),
     ("040_auth_credential_lock", _M040),
     ("041_home_calendar_notes_v1", _M041),
+    ("042_import_center_v1", _M042),
 )
 
 
