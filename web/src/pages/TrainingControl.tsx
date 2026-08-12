@@ -131,6 +131,12 @@ export default function TrainingControlPanel() {
             <p style={{ margin: "4px 0" }}>
               <strong>{lanes.production.bundle_id}</strong>
             </p>
+            {lanes.production.bundle_id === "prod_v4_best_r1" && (
+              <p style={{ margin: "4px 0", fontSize: "0.85em",
+                color: "var(--warn, #b45309)" }}>
+                当前本机 UAT 模型（USER_SELECTED_UAT_MODEL），尚未完成
+                独立准确率晋级；回滚路径保留。
+              </p>)}
             <p className="muted" style={{ margin: "4px 0" }}>
               状态：{lanes.production.status} ·{" "}
               {lanes.production.serving ? "serving" : "未服务"}

@@ -50,10 +50,18 @@ class StandardProfileService:
 
     def current(self) -> dict:
         try:
-            return json.loads(self.current_path.read_text(
+            cur = json.loads(self.current_path.read_text(
                 encoding="utf-8"))
         except Exception:
             return {"bundle_id": None, "found": False}
+        # UATCC T5：诚实口径——V4 为用户选定 UAT 模型，未完成独立
+        # 人工真值准确率晋级，不得标 PRODUCTION_APPROVED。
+        if cur.get("bundle_id") == "prod_v4_best_r1":
+            cur["model_status"] = "USER_SELECTED_UAT_MODEL"
+            cur["model_status_note"] = (
+                "当前本机 UAT 模型，尚未完成独立准确率晋级；"
+                "回滚路径保留（CURRENT.previous.json）")
+        return cur
 
     def list_bundles(self) -> list[dict]:
         out = []
@@ -93,12 +101,19 @@ class StandardProfileService:
                 "problems": problems}
 
     def shadow_report(self) -> dict | None:
-        p = (Path(__file__).resolve().parents[2] / ".eval"
-             / "shadow_v4_best_report.json")
-        try:
-            return json.loads(p.read_text(encoding="utf-8"))
-        except Exception:
-            return None
+        base = Path(__file__).resolve().parents[2] / ".eval"
+        # UATCC T5：优先读纠偏后的 v2 报告（sku_name/hash/口径）；
+        # 旧报告保留为历史证据。
+        for name in ("shadow_v4_best_report_v2.json",
+                     "shadow_v4_best_report.json"):
+            p = base / name
+            try:
+                rep = json.loads(p.read_text(encoding="utf-8"))
+                rep.setdefault("report_file", name)
+                return rep
+            except Exception:
+                continue
+        return None
 
     # ---------- 切换 / 回滚 ----------
 
