@@ -28,10 +28,12 @@ REQUIRED_SECTIONS = (
     "relations",        # run/work/branch/agent/recognition/usage/evidence 关系
 )
 
-# UFC T6：主工作流必备节点类型（含 model/capability 真实调用）
+# UFC T6：主工作流必备节点类型；model/command 任一即可作为
+# capability 节点（指令："model或command/capability"）。
 REQUIRED_NODE_TYPES = ("trigger", "transform", "condition", "wait",
                        "parallel", "join", "loop", "human_approval",
-                       "agent", "model")
+                       "agent")
+CAPABILITY_NODE_TYPES = ("model", "command")
 
 
 def check_created(result: dict) -> tuple[bool, str]:
@@ -92,12 +94,14 @@ def validate_report(report: dict) -> list[str]:
             problems.append("branch 残留")
         if ts.get("pending_timers"):
             problems.append("pending timer 残留")
-    # 工作流必备节点（含 model/capability）
+    # 工作流必备节点（含 model/capability：model 或 command 任一）
     if "workflow_node_types" in report:
         wnt = set(report.get("workflow_node_types") or [])
         for t in REQUIRED_NODE_TYPES:
             if t not in wnt:
                 problems.append(f"工作流缺必备节点类型: {t}")
+        if not any(t in wnt for t in CAPABILITY_NODE_TYPES):
+            problems.append("工作流缺 model/command capability 节点")
     # 异常追问链
     an = report.get("anomaly_chain")
     if an is not None:

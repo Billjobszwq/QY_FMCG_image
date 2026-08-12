@@ -270,6 +270,23 @@ class TestTerminalConsistency:
         assert all(w["status"] in ("done", "cancelled")
                    for w in works), str(works)
 
+    def test_concurrent_finalize_only_one_wins(self, env):
+        """并发 finalize 只有一方成功（原子 CAS）；终态互不可覆。"""
+        import concurrent.futures
+        svc, store = env["service"], env["store"]
+        did = _publish(env, "ufc-cas", APPROVAL_SPEC)
+        run = _start(env, did)
+        rid = run["run_id"]
+        with concurrent.futures.ThreadPoolExecutor(4) as ex:
+            results = list(ex.map(
+                lambda s: svc.finalize_run(rid, s),
+                ["cancelled", "cancelled", "succeeded", "succeeded"]))
+        assert sum(1 for r in results if r) == 1, str(results)
+        final = store.get_business_run(rid)["status"]
+        assert final in ("cancelled", "succeeded")
+        # 再次 finalize 必须 no-op（终态不可互覆）
+        assert svc.finalize_run(rid, "failed") is False
+
     def test_restart_keeps_terminal_states(self, env):
         """重启（新 service 实例 + recovery）后终态仍一致。"""
         svc, store = env["service"], env["store"]

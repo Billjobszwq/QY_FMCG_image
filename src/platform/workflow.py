@@ -667,12 +667,27 @@ class WorkflowService:
             return False
         if run["status"] in self.TERMINAL_STATUSES:
             return False  # 终态不可互覆（CAS 失败）
-        try:
-            self.store.set_business_run_status(
-                run_id, status, error=error, current_node=current_node)
-        except Exception:
-            return False
+        # UFC T2：原子 CAS——条件 UPDATE，并发 finalize 只有一方
+        # 成功；终态之间/终态→活动态永不可互覆。
         conn = self.store._conn
+        now = _now_iso()
+        sets = ["status=?", "version=version+1", "updated_at=?",
+                "ended_at=?"]
+        vals: list = [status, now, now]
+        if error:
+            sets.append("error=?"); vals.append(error[:300])
+        else:
+            sets.append("error=?"); vals.append("")
+        if current_node is not None:
+            sets.append("current_node=?"); vals.append(current_node)
+        n = conn.execute(
+            f"UPDATE business_run_v1 SET {', '.join(sets)}"
+            " WHERE run_id=? AND status NOT IN"
+            " ('succeeded','failed','cancelled')",
+            (*vals, run_id))
+        conn.commit()
+        if n.rowcount == 0:
+            return False  # 并发下被其他终态抢先（CAS 失败）
         work_id = run["work_id"]
         if work_id:
             blockers = [error[:200]] if (error and status == "failed") \
@@ -1596,7 +1611,10 @@ class WorkflowService:
                 tenant_id="local", parent_run_id=run_id or None,
                 customer_id=(wfrun or {}).get("customer_id", "") or "",
                 project_id=(wfrun or {}).get("project_id", "") or "")
-            if out.get("status") == "failed":
+            # 失败以输出状态诚实传递，由下游 condition 路由到
+            # human_approval/失败分支（人工接管是节点，不是旁路）；
+            # fail_on_error=true 时才在节点级 raise。
+            if out.get("status") == "failed" and cfg.get("fail_on_error"):
                 raise WorkflowError(
                     f"capability {cap} 执行失败："
                     f"{out.get('error') or '未知错误'}")

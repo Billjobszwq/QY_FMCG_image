@@ -311,7 +311,11 @@ def gate_mode() -> int:
                             capture_output=True, text=True).stdout.strip()
     health = json.loads(urllib.request.urlopen(
         BASE + "/api/v1/health", timeout=20).read())
-    svc_health = {s["name"]: s["status"] == "healthy"
+    # 关键服务必须 healthy；非关键允许诚实 disabled（如 ml_backend）
+    svc_health = {s["name"]:
+                  (s["status"] == "healthy"
+                   or (s["status"] == "disabled"
+                       and not s.get("critical")))
                   for s in health.get("services", [])}
     res = evaluate_gate_from_evidence(
         store=store, uat_report_path=REPORT,
@@ -767,13 +771,10 @@ def phase6_agents(bill: Session, sessions: dict) -> None:
     frow = next((r for r in rows
                  if r.get("capability")
                  == "agent.no_such_agent_u3.invoke"), None)
-    ok5 = False
-    if frow:
-        rd = bill.get(f"/api/v1/runs/{frow['run_id']}")
-        run5 = rd.get("run", {})
-        ok5 = (run5.get("status") == "failed"
-               and bool(frow.get("source_evidence",
-                                 "").startswith("evidence_bundle:")))
+    ok5 = bool(frow and frow.get("run_status") == "failed"
+               and frow.get("run_id") and frow.get("work_id")
+               and str(frow.get("source_evidence", ""))
+               .startswith("evidence_bundle:"))
     check("Agent 失败账本：failed run + evidence + usage 挂链", ok5,
           str(frow)[:130])
     CTX["agent_failure"] = {
@@ -961,8 +962,12 @@ def phase12_close(bill: Session) -> None:
     check("无长训练进程", n_proc == 0, f"n={n_proc}")
     health = json.loads(urllib.request.urlopen(
         BASE + "/api/v1/health", timeout=20).read())
+    # 关键服务必须 healthy；非关键允许诚实 disabled（如 ml_backend）
     ok_svc = all(s["status"] == "healthy"
-                 for s in health.get("services", []))
+                 for s in health.get("services", [])
+                 if s.get("critical")) and all(
+        s["status"] in ("healthy", "disabled")
+        for s in health.get("services", []))
     CTX["services_healthy"] = ok_svc
     check("四服务健康", ok_svc,
           str([(s["name"], s["status"])

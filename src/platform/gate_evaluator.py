@@ -19,10 +19,12 @@ from pathlib import Path
 READY = "READY_FOR_REAL_DATA_UAT"
 EVALUATOR_VERSION = "2.0.0"
 
-# UAT 主工作流必备节点类型（含 model/capability 真实调用）
+# UAT 主工作流必备节点类型；model/command 任一即可作为 capability
+# 节点（指令："model或command/capability"）。
 REQUIRED_WORKFLOW_NODE_TYPES = ("trigger", "transform", "condition",
                                 "wait", "parallel", "join", "loop",
-                                "human_approval", "agent", "model")
+                                "human_approval", "agent")
+CAPABILITY_WORKFLOW_NODE_TYPES = ("model", "command")
 
 
 def evaluate_gate(*, p0_open: int, p1_open: int, rate_limit_ok: bool,
@@ -200,10 +202,13 @@ def evaluate_gate_from_evidence(*, store=None,
             problems = [f"validator 异常: {e}"]
         chk("uat_validator_clean", not problems, str(problems)[:200],
             "BLOCKED_BY_GATE_EVIDENCE")
-        # 主工作流必备节点（含 model/capability）
+        # 主工作流必备节点（含 model/capability：model 或 command 任一）
         node_types = set(rep.get("workflow_node_types") or [])
         missing_nodes = [t for t in REQUIRED_WORKFLOW_NODE_TYPES
                          if t not in node_types]
+        if not any(t in node_types
+                   for t in CAPABILITY_WORKFLOW_NODE_TYPES):
+            missing_nodes.append("model|command")
         chk("workflow_model_chain", not missing_nodes,
             f"missing={missing_nodes}",
             "BLOCKED_BY_WORKFLOW_MODEL_CHAIN")
