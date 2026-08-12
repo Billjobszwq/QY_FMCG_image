@@ -233,6 +233,15 @@ def create_app(
         # T5：agent 节点调用指定 Agent；wait timer 后台轮询恢复
         wf_service.agent_runtime = agent_runtime
 
+        # ABOSV3 T8：standard profile 受控切换/回滚（审计+fail-closed）
+        from src.platform.standard_profile import StandardProfileService
+        from src.platform.api.standard_profile_api import (
+            create_standard_profile_router)
+        standard_profile_service = StandardProfileService(bundle.store)
+        app.include_router(create_standard_profile_router(
+            bundle.store, standard_profile_service,
+            IAMService(bundle.store), auth=AuthService(bundle.store)))
+
         def _timer_poller():
             import time as _time
             while True:

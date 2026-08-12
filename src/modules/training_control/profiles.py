@@ -55,6 +55,39 @@ _SEED = [
                     "segmenter": None, "vlm": None},
      "status": "disabled",
      "blockers": ["shadow 需至少一个 nextgen candidate 就绪"]},
+    # ABOSV3 T8：V4 best 受控切换（用户授权；shadow/回滚验证后启用）
+    {"profile_id": "v4_best_standard",
+     "display_name": "V4 Best（standard 默认，受控切换）",
+     "components": {"detector": "prod_v4_best_r1",
+                    "classifier": "prod_v4_best_r1",
+                    "segmenter": None, "vlm": None},
+     "status": "disabled",
+     "blockers": ["待 shadow/回归/回滚验证后由平台 API 切换启用"]},
+    # ABOSV3 T8：实验 profile（诚实标注，不伪装 production-ready）
+    {"profile_id": "exp_classifier_only",
+     "display_name": "实验：仅分类器（不可单独识别原图）",
+     "components": {"detector": None,
+                    "classifier": "best/classifier_base_9295.pth",
+                    "segmenter": None, "vlm": None},
+     "status": "disabled",
+     "blockers": ["分类器无法单独处理原图：必须与 detector 组合"
+                  "（请选择 v4_best_standard 等组合 profile）"]},
+    {"profile_id": "exp_nextgen_detector_smoke",
+     "display_name": "实验：NextGen detector smoke 制品",
+     "components": {"detector": "nextgen_detector_smoke_v1",
+                    "classifier": _PRODUCTION_BUNDLE,
+                    "segmenter": None, "vlm": None},
+     "status": "disabled",
+     "blockers": ["smoke 级制品（最小验证用）：指标未达商业门，"
+                  "仅限本机实验，不得作商业默认"]},
+    {"profile_id": "exp_m3_grouped_classifier",
+     "display_name": "实验：M3 grouped 分类器（泄漏重建基线）",
+     "components": {"detector": _PRODUCTION_BUNDLE,
+                    "classifier": "m3_tvt_e5_v2",
+                    "segmenter": None, "vlm": None},
+     "status": "disabled",
+     "blockers": ["M3 为 grouped 基线（非候选）；真实泛化 30-35%，"
+                  "未达商业门，仅实验对照"]},
 ]
 
 
@@ -190,6 +223,14 @@ _PROFILE_SEED = [
      ["research83"], ["实验，不可商业输出"]),
     ("shadow_compare", ["prod_20260805_v5_r1_bundle", "m3_tvt_e1_v2"],
      [], ["shadow"]),
+    # ABOSV3 T8：V4 best 受控切换（shadow/回滚验证后由切换服务把制品
+    # 置为 CANDIDATE 才启用）；实验 profile 诚实标注，不伪装 production
+    ("v4_best_standard", ["prod_v4_best_r1_bundle"], [],
+     ["standard 默认，受控切换"]),
+    ("exp_classifier_only", ["classifier_base_9295"], [],
+     ["实验：分类器不可单独处理原图，必须与 detector 组合"]),
+    ("exp_v4_detector_smoke", ["nextgen_detector_smoke_v1"], [],
+     ["实验：smoke 级制品，仅限本机验证，不作商业默认"]),
 ]
 
 
