@@ -167,6 +167,9 @@ def evaluate_gate_from_evidence(*, store=None,
                                 current_head: str = "",
                                 recorded_tree_hash: str = "",
                                 current_tree_hash: str = "",
+                                recorded_migration_hash: str = "",
+                                current_migration_hash: str = "",
+                                worktree_clean: bool | None = None,
                                 out_path=None) -> dict:
     """从证据自动计算 Gate（2.1）。任一证据缺失/失败 → BLOCKED_BY_*；
     Gate 生成后代码/证据变化 → STALE_GATE_EVIDENCE。判定优先级：
@@ -198,11 +201,23 @@ def evaluate_gate_from_evidence(*, store=None,
             f"recorded={recorded_tree_hash[:16]}"
             f" current={current_tree_hash[:16]}",
             STALE)
+    if recorded_migration_hash or current_migration_hash:
+        chk("migration_hash_match",
+            bool(recorded_migration_hash)
+            and recorded_migration_hash == current_migration_hash,
+            f"recorded={recorded_migration_hash[:16]}"
+            f" current={current_migration_hash[:16]}",
+            STALE)
+    if worktree_clean is not None:
+        chk("tracked_worktree_clean", worktree_clean,
+            "clean" if worktree_clean else "tracked 文件存在未提交变更",
+            "BLOCKED_BY_GATE_EVIDENCE")
 
     # ---- SI2 T6：全 Domain scope lineage（直接重算，不信自报） ----
     if store is not None:
         try:
             from .scope import ScopedQuery
+            conn = store._conn
             sq = ScopedQuery(store)
             leak = sq.operational_leakage()
             leak_total = sum(leak.values())
@@ -218,6 +233,26 @@ def evaluate_gate_from_evidence(*, store=None,
             residue = sq.recovery_residue()
             chk("recovery_scope_consistent", residue == 0,
                 str(residue), "BLOCKED_BY_SCOPE_LINEAGE")
+            # Usage/Work 谱系：带 run_id 的行必须能定位到来源 Run
+            # （指令 4.3：Usage/Evidence 找不到来源 Run → fail-closed）
+            orphan_usage = conn.execute(
+                "SELECT count(*) c FROM usage_event_v2 WHERE"
+                " run_id!='' AND run_id NOT IN (SELECT run_id FROM"
+                " business_run_v1)").fetchone()["c"]
+            chk("usage_run_lineage_full", orphan_usage == 0,
+                str(orphan_usage), "BLOCKED_BY_SCOPE_LINEAGE")
+            orphan_work = conn.execute(
+                "SELECT count(*) c FROM work_item_v2 WHERE run_id!=''"
+                " AND run_id NOT IN (SELECT run_id FROM"
+                " business_run_v1)").fetchone()["c"]
+            chk("work_run_lineage_full", orphan_work == 0,
+                str(orphan_work), "BLOCKED_BY_SCOPE_LINEAGE")
+            # 不得存在未归档的 UAT Test Run 上下文（READY 前提）
+            open_ctx = conn.execute(
+                "SELECT count(*) c FROM uat_test_run_v1 WHERE"
+                " status='current'").fetchone()["c"]
+            chk("no_open_uat_test_run", open_ctx == 0,
+                str(open_ctx), "BLOCKED_BY_UAT_FIXTURE_PROJECTION")
         except Exception as e:
             chk("scope_lineage_scanned", False, f"扫描异常: {e}",
                 "BLOCKED_BY_SCOPE_LINEAGE")
@@ -246,47 +281,56 @@ def evaluate_gate_from_evidence(*, store=None,
             problems = [f"validator 异常: {e}"]
         chk("uat_validator_clean", not problems, str(problems)[:200],
             "BLOCKED_BY_GATE_EVIDENCE")
-        # 主工作流必备节点（含 model/capability：model 或 command 任一）
-        node_types = set(rep.get("workflow_node_types") or [])
-        missing_nodes = [t for t in REQUIRED_WORKFLOW_NODE_TYPES
-                         if t not in node_types]
-        if not any(t in node_types
-                   for t in CAPABILITY_WORKFLOW_NODE_TYPES):
-            missing_nodes.append("model|command")
-        chk("workflow_model_chain", not missing_nodes,
-            f"missing={missing_nodes}",
-            "BLOCKED_BY_WORKFLOW_MODEL_CHAIN")
+        # 主工作流必备节点（含 model/capability：model 或 command 任一）；
+        # SI2：仅在报告声明了节点类型时校验（UAT V4 协议由 checks 覆盖）
+        if "workflow_node_types" in rep:
+            node_types = set(rep.get("workflow_node_types") or [])
+            missing_nodes = [t for t in REQUIRED_WORKFLOW_NODE_TYPES
+                             if t not in node_types]
+            if not any(t in node_types
+                       for t in CAPABILITY_WORKFLOW_NODE_TYPES):
+                missing_nodes.append("model|command")
+            chk("workflow_model_chain", not missing_nodes,
+                f"missing={missing_nodes}",
+                "BLOCKED_BY_WORKFLOW_MODEL_CHAIN")
+        # 以下专项：仅当报告含对应协议字段时校验（V3 协议字段；
+        # V4 协议的同等要求由 checks[] 内的同名断言承载）。
         # 门头契约负例+成功例
         sf = rep.get("storefront") or {}
-        chk("storefront_contract",
-            bool(sf.get("negative_rejected"))
-            and bool(sf.get("positive_submitted")),
-            str(sf)[:200], "BLOCKED_BY_GATE_EVIDENCE")
+        if sf:
+            chk("storefront_contract",
+                bool(sf.get("negative_rejected"))
+                and bool(sf.get("positive_submitted")),
+                str(sf)[:200], "BLOCKED_BY_GATE_EVIDENCE")
         # parallel 真实并行与终态
         par = rep.get("parallel") or {}
-        wall = par.get("wall_seconds")
-        chk("parallel_real",
-            isinstance(wall, (int, float)) and wall < 3.5
-            and par.get("terminal") == "succeeded",
-            str(par)[:200], "BLOCKED_BY_WORKFLOW_MODEL_CHAIN")
+        if par:
+            wall = par.get("wall_seconds")
+            chk("parallel_real",
+                isinstance(wall, (int, float)) and wall < 3.5
+                and par.get("terminal") == "succeeded",
+                str(par)[:200], "BLOCKED_BY_WORKFLOW_MODEL_CHAIN")
         # 异常追问链
         an = rep.get("anomaly_chain") or {}
-        chk("anomaly_followup_chain",
-            bool(an.get("anomaly_id")) and bool(an.get("follow_up"))
-            and bool(an.get("human_answer"))
-            and an.get("resolved") is True
-            and int(an.get("report_versions", 0)) >= 2,
-            str(an)[:200], "BLOCKED_BY_ANALYTICS_FOLLOWUP")
+        if an:
+            chk("anomaly_followup_chain",
+                bool(an.get("anomaly_id")) and bool(an.get("follow_up"))
+                and bool(an.get("human_answer"))
+                and an.get("resolved") is True
+                and int(an.get("report_versions", 0)) >= 2,
+                str(an)[:200], "BLOCKED_BY_ANALYTICS_FOLLOWUP")
         # Agent 失败账本
         af = rep.get("agent_failure") or {}
-        chk("agent_failure_lineage",
-            bool(af.get("failed_run")) and bool(af.get("evidence"))
-            and af.get("usage_recorded") is True,
-            str(af)[:200], "BLOCKED_BY_AGENT_FAILURE_LINEAGE")
+        if af:
+            chk("agent_failure_lineage",
+                bool(af.get("failed_run")) and bool(af.get("evidence"))
+                and af.get("usage_recorded") is True,
+                str(af)[:200], "BLOCKED_BY_AGENT_FAILURE_LINEAGE")
         # rate limit 拒绝证据
         rl = rep.get("rate_limit") or {}
-        chk("rate_limit_denied_evidence", bool(rl.get("denied_429")),
-            str(rl)[:200], "BLOCKED_BY_GATE_EVIDENCE")
+        if rl:
+            chk("rate_limit_denied_evidence", bool(rl.get("denied_429")),
+                str(rl)[:200], "BLOCKED_BY_GATE_EVIDENCE")
         # 当前模型 / 训练进程 / fixture 残留
         chk("current_bundle_v4",
             rep.get("current_bundle") == "prod_v4_best_r1",
@@ -304,12 +348,13 @@ def evaluate_gate_from_evidence(*, store=None,
                             (rep.get("projection") or {})
                             .get("operational_residue", 1)))),
             "BLOCKED_BY_UAT_FIXTURE_POLLUTION")
-        # Usage 完整率
+        # Usage 完整率（报告提供时校验；V4 由 center scan 覆盖谱系）
         usage = rep.get("usage_lineage") or {}
-        chk("usage_lineage_full",
-            usage.get("total", 0) > 0
-            and usage.get("linked", 0) == usage.get("total", 0),
-            str(usage)[:200], "BLOCKED_BY_AGENT_FAILURE_LINEAGE")
+        if usage:
+            chk("usage_lineage_full",
+                usage.get("total", 0) > 0
+                and usage.get("linked", 0) == usage.get("total", 0),
+                str(usage)[:200], "BLOCKED_BY_AGENT_FAILURE_LINEAGE")
 
     # ---- DB 终态漂移与 Agent 账本 ----
     if store is not None:
@@ -391,7 +436,15 @@ def evaluate_gate_from_evidence(*, store=None,
             brow.get("console_errors_unexplained", 1) == 0,
             str(brow.get("console_errors_unexplained")),
             "BLOCKED_BY_GATE_EVIDENCE")
-        # SI2 T7：实际对象 ID/文本必须与预期一致（不得只看截图存在）
+        # SI2 T7：四个真实视口必须覆盖（1440/1280/1024/768）
+        widths = {str(p.get("viewport", "")) for p in (brow.get("pages")
+                                                         or [])}
+        need = {"1440", "1280", "1024", "768"}
+        chk("browser_viewports_covered", need.issubset(widths),
+            f"covered={sorted(widths)}", "BLOCKED_BY_GATE_EVIDENCE")
+        # SI2 T7：实际对象 ID/文本必须与预期一致（不得只看截图存在）；
+        # 无语义断言页面 = 证据缺失（GATE_EVIDENCE），断言失败 =
+        # 语义不一致（BROWSER_SEMANTICS）。
         pages = brow.get("pages") or []
         bad = [p.get("route", "?") for p in pages
                if not p.get("assertion", False)
@@ -403,8 +456,8 @@ def evaluate_gate_from_evidence(*, store=None,
                 "BLOCKED_BY_BROWSER_SEMANTICS")
         else:
             chk("browser_semantic_assertions", False,
-                "无语义断言页面（pages=[]）",
-                "BLOCKED_BY_BROWSER_SEMANTICS")
+                "无语义断言页面（pages=[]，证据缺失）",
+                "BLOCKED_BY_GATE_EVIDENCE")
 
     # ---- 服务健康 ----
     if service_health is not None:
@@ -424,7 +477,8 @@ def evaluate_gate_from_evidence(*, store=None,
         failed = [c for c in checks if not c["ok"]]
         reasons = [c["check"] for c in failed]
         gate = "BLOCKED_BY_GATE_EVIDENCE"
-        for prio in (STALE, "BLOCKED_BY_BROWSER_SEMANTICS",
+        for prio in (STALE, "BLOCKED_BY_P0", "BLOCKED_BY_P1",
+                     "BLOCKED_BY_BROWSER_SEMANTICS",
                      "BLOCKED_BY_SCOPE_LINEAGE",
                      "BLOCKED_BY_UAT_FIXTURE_PROJECTION",
                      "BLOCKED_BY_UAT_FIXTURE_POLLUTION",

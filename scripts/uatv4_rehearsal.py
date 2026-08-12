@@ -351,7 +351,8 @@ def main() -> int:
                   for e in cal2), f"calendar={len(cal2)}")
 
     failed = [c for c in checks if not c["ok"]]
-    report = {"namespace": NS, "customer_id": CUST,
+    report = {"protocol": "uatv4", "namespace": NS,
+              "customer_id": CUST,
               "checks": checks, "failed": len(failed),
               "duration_seconds": round(time.time() - t0, 1),
               "run_started_utc": datetime.now(timezone.utc).isoformat(),

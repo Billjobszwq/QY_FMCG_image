@@ -310,8 +310,11 @@ class AgentRuntime:
                 try:
                     sql = f"SELECT count(*) c FROM {table}"
                     if fixture_filter:
+                        # SI2：operational 口径同时排除带 test_run 的
+                        # 泄漏行（fail-closed）
                         sql += (" WHERE COALESCE(data_scope,'operational')"
-                               "='operational'")
+                                "='operational' AND"
+                                " COALESCE(test_run_id,'')=''")
                     return conn.execute(sql).fetchone()["c"]
                 except Exception:
                     return 0

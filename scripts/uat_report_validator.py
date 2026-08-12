@@ -46,13 +46,47 @@ def check_created(result: dict) -> tuple[bool, str]:
     return True, ""
 
 
+# SI2：UAT V4 协议必备断言（scope-first；见 04-UAT-V4-PROTOCOL）
+REQUIRED_UATV4_CHECKS = (
+    "test_run_context_first", "fixture_customer_scoped",
+    "fixture_survey_scoped", "fixture_workflow_scoped",
+    "workflow_run_started", "workflow_run_scope_inherited",
+    "storefront_negative_rejected", "storefront_positive_submitted",
+    "agent_failure_ledger_recorded",
+    "home_zero_fixture_during_uat", "archive_ok",
+    "post_archive_leakage_zero", "post_archive_test_run_full",
+    "post_archive_parent_child_ok", "center_keeps_history",
+    "home_zero_fixture_after_archive",
+)
+
+
+def _validate_uatv4(report: dict) -> list[str]:
+    problems: list[str] = []
+    if not report.get("namespace"):
+        problems.append("缺 namespace")
+    if int(report.get("failed", 0) or 0) > 0:
+        problems.append(f"failed={report.get('failed')} > 0")
+    checks = {c.get("check"): c for c in report.get("checks", []) or []}
+    for name, c in checks.items():
+        if not c.get("ok"):
+            problems.append(f"check 失败: {name}")
+    for req in REQUIRED_UATV4_CHECKS:
+        if req not in checks:
+            problems.append(f"缺必备断言: {req}")
+    return problems
+
+
 def validate_report(report: dict) -> list[str]:
     """返回缺失/违规项列表；非空即报告 FAIL（fail-closed）。
 
     UFC T6：除基础必填外，还拒绝 failed>0、check.ok=false、意外
     4xx/5xx、终态漂移/残留、工作流缺必备节点、异常链不完整、
     Agent 失败无账本、Usage 未挂链、浏览器证据缺文件、服务不
-    健康、CURRENT 非 prod_v4_best_r1、存在长训练进程。"""
+    健康、CURRENT 非 prod_v4_best_r1、存在长训练进程。
+
+    SI2：protocol=uatv4 报告走 V4 协议校验（scope-first 检查集）。"""
+    if report.get("protocol") == "uatv4":
+        return _validate_uatv4(report)
     problems: list[str] = []
     ids = report.get("ids") or {}
     for k in REQUIRED_ID_KEYS:
