@@ -321,6 +321,27 @@ export function WorkflowRunCenter() {
                 </tbody>
               </table>
             )}
+            {(run.branches ?? []).length > 0 && (
+              <table className="table" style={{ marginTop: 8 }}>
+                <thead><tr><th>分支</th><th>入口</th><th>状态</th>
+                  <th>错误</th></tr></thead>
+                <tbody>
+                  {run.branches.map((b: any) => (
+                    <tr key={b.branch_id}>
+                      <td data-label="分支" className="v">
+                        {String(b.branch_id).slice(0, 12)}…</td>
+                      <td data-label="入口">{b.entry || b.node_id}
+                        {" "}#{b.branch_index}</td>
+                      <td data-label="状态" style={{ color:
+                        b.status === "completed" ? "var(--ok)"
+                        : b.status === "running" ? "var(--accent)"
+                        : "var(--err)" }}>{b.status}</td>
+                      <td data-label="错误" className="v"
+                        style={{ fontSize: 11 }}>
+                        {b.error || "—"}</td>
+                    </tr>))}
+                </tbody>
+              </table>)}
             {(run.dead_letters ?? []).length > 0 && (
               <p className="v" style={{ color: "var(--err)" }}>
                 死信：{run.dead_letters.map((dl: any) =>

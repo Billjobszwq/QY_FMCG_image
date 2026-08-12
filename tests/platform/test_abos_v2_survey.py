@@ -177,6 +177,11 @@ class TestFillAndScore:
         # 识别 suggestion 生成（pending，非 final）
         assert m["suggestion_status"] == "pending"
         assert m["suggestion"]["task_id"]
+        # UATCC T1：门头必拍题需上传 storefront 照片
+        svc.attach_media(response_id=r2["response_id"],
+                         question_id="q_storefront_photo",
+                         image_b64=IMG, actor="field1",
+                         capture_role="storefront")
         sub = svc.submit(r2["response_id"], actor="field1")
         assert sub["status"] == "submitted"
         assert sub["score_version"] == 1
@@ -235,6 +240,10 @@ class TestFillAndScore:
         svc.attach_media(response_id=r["response_id"],
                          question_id="q_shelf_photo",
                          image_b64=IMG, actor="f")
+        svc.attach_media(response_id=r["response_id"],
+                         question_id="q_storefront_photo",
+                         image_b64=IMG, actor="f",
+                         capture_role="storefront")
         sub = svc.submit(r["response_id"], actor="f")
         assert sub["scores"]["total"] == 5 + 2 * 2
         # 无原因修正被拒
@@ -276,6 +285,11 @@ class TestFillAndScore:
             svc.attach_media(response_id=r["response_id"],
                              question_id="q_shelf_photo",
                              image_b64=IMG, actor="f")
+            # UATCC T1：模板新增门头必拍题，必须上传 storefront 照片
+            svc.attach_media(response_id=r["response_id"],
+                             question_id="q_storefront_photo",
+                             image_b64=IMG, actor="f",
+                             capture_role="storefront")
             svc.submit(r["response_id"], actor="f")
         rep_x = svc.report(survey_id=sid, customer_id="cust-x")
         rep_y = svc.report(survey_id=sid, customer_id="cust-y")

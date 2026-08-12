@@ -250,6 +250,11 @@ def create_app(
 
         def _timer_poller():
             import time as _time
+            # 启动时先恢复重启前未完成的并行分支（分支粒度重跑）
+            try:
+                wf_service.recover_interrupted_parallels()
+            except Exception:
+                pass
             while True:
                 try:
                     wf_service.resume_due_timers()

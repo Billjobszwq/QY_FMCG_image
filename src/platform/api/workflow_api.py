@@ -196,7 +196,21 @@ def create_workflow_router(store: Any, service: WorkflowService,
         run = store.get_business_run(run_id)
         if run is None:
             raise HTTPException(404, f"run 不存在: {run_id}")
+        # UATCC T3：并行分支 durable 状态（真实执行身份/结果）
+        brows = [dict(r) for r in store._conn.execute(
+            "SELECT branch_id, node_id, branch_index, status,"
+            " started_at, ended_at, error, output_json FROM"
+            " workflow_branch_v1 WHERE run_id=? ORDER BY branch_index",
+            (run_id,)).fetchall()]
+        import json as _json
+        for b in brows:
+            try:
+                b["entry"] = _json.loads(
+                    b["output_json"] or "{}").get("entry", "")
+            except Exception:
+                b["entry"] = ""
         return {"run": run,
+                "branches": brows,
                 "checkpoints": store.list_node_executions(run_id),
                 "dead_letters": store.list_dead_letters(run_id),
                 "events": store.list_events(run_id=run_id)}

@@ -11,9 +11,12 @@
 """
 from __future__ import annotations
 
+import copy
 import hashlib
 import json
+import time as _time
 import uuid
+from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
@@ -692,6 +695,387 @@ class WorkflowService:
             (status,) if status else ()).fetchall()
         return [dict(r) for r in rows]
 
+    # ---------- 真实有界并行（UATCC T3） ----------
+
+    def _find_join(self, spec: dict, nodes: dict,
+                   entries: list[str]) -> str | None:
+        """定位分支汇合的 join 节点：被 ≥2 个分支可达的 join。"""
+        adj = self._adjacency(spec)
+        reach: list[set[str]] = []
+        for e in entries:
+            seen: set[str] = set()
+            stack = [e]
+            while stack:
+                n = stack.pop()
+                if n in seen:
+                    continue
+                seen.add(n)
+                stack.extend(adj.get(n, []))
+            reach.append(seen)
+        cands = [nid for nid, n in nodes.items()
+                 if n["type"] == "join"
+                 and sum(1 for s in reach if nid in s) >= 2]
+        if not cands:
+            return None
+        # 取离入口最近的（任一入口 BFS 首次命中）
+        for e in entries:
+            q, seen2 = [e], {e}
+            while q:
+                cur = q.pop(0)
+                if cur in cands:
+                    return cur
+                for nxt in adj.get(cur, []):
+                    if nxt not in seen2:
+                        seen2.add(nxt)
+                        q.append(nxt)
+        return cands[0]
+
+    def _branch_row(self, branch_id: str, status: str, *,
+                    error: str = "", output: dict | None = None) -> None:
+        sets, vals = ["status=?", "updated_at=?"], [status, _now_iso()]
+        if status == "running":
+            sets.append("started_at=?"); vals.append(_now_iso())
+        if status in ("completed", "failed", "timeout", "cancelled"):
+            sets.append("ended_at=?"); vals.append(_now_iso())
+        if error:
+            sets.append("error=?"); vals.append(error[:300])
+        if output is not None:
+            sets.append("output_json=?")
+            vals.append(json.dumps(output, ensure_ascii=False,
+                                   default=str))
+        self.store._conn.execute(
+            f"UPDATE workflow_branch_v1 SET {', '.join(sets)}"
+            " WHERE branch_id=?", (*vals, branch_id))
+        self.store._conn.commit()
+
+    def _exec_branch(self, d: dict, entry: str, stop_nodes: set[str],
+                     ctx: dict, *, run_id: str, work_id: str, corr: str,
+                     branch_id: str) -> dict:
+        """单分支执行：独立 ctx 副本，直到 join/end；分支内不支持
+        human_approval/持久 timer（诚实报错）。"""
+        spec = d["spec"]
+        nodes = {n["id"]: n for n in spec["nodes"]}
+        edges = spec.get("edges") or []
+        frontier = [entry]
+        while frontier:
+            nid = frontier.pop(0)
+            if nid in stop_nodes:
+                return {"reached": "join"}
+            node = nodes.get(nid)
+            if node is None:
+                raise WorkflowError(f"分支内未知节点: {nid}")
+            if node["type"] == "parallel":
+                raise WorkflowError("嵌套 parallel 本轮不支持（分支内）")
+            try:
+                out, branch_to = self._exec_node(
+                    d, node, ctx, simulate=False, run_id=run_id,
+                    work_id=work_id, corr=corr, inline_wait=True,
+                    branch_id=branch_id)
+            except _WaitingHuman:
+                raise WorkflowError(
+                    f"分支 {branch_id}：human_approval 不支持在并行"
+                    "分支内（请移出分支）")
+            except _WaitingTimer:
+                raise WorkflowError(
+                    f"分支 {branch_id}：持久 timer 不支持在并行分支内")
+            ctx["nodes"][nid] = {"status": "succeeded",
+                                 **(out if isinstance(out, dict)
+                                    else {"value": out})}
+            if run_id:
+                self.store.upsert_node_execution(
+                    run_id, nid, node_type=node["type"],
+                    status="succeeded",
+                    output_data={"branch_id": branch_id,
+                                 **(out if isinstance(out, dict)
+                                    else {"value": out})})
+            if node["type"] == "end":
+                return {"reached": "end"}
+            if node["type"] == "condition" and branch_to:
+                frontier.insert(0, branch_to)
+                continue
+            for e in edges:
+                if e["from"] == nid:
+                    frontier.insert(0, e["to"])
+        return {"reached": "end"}
+
+    def _exec_parallel(self, d: dict, node: dict, entries: list[str],
+                       ctx: dict, *, simulate: bool, run_id: str,
+                       work_id: str, corr: str,
+                       resume_rows: list[dict] | None = None
+                       ) -> str:
+        """真实有界并行执行；返回 join 节点 id（已执行）。
+
+        - 分支独立身份 branch_id + durable 状态（workflow_branch_v1）；
+        - 每分支独立 ctx 深拷贝，禁止共享可变 ctx；
+        - max_concurrency 信号量（线程池有界）；
+        - join all/any/quorum；达成后剩余分支标 cancelled（结果丢弃，
+          不再写入主 ctx）；低于 quorum → WorkflowError（run 失败）；
+        - 合并规则：分支变量按完成序 last-writer-wins，冲突记录在
+          ctx['branch_conflicts']；分支输出存 ctx['branches']。
+        """
+        spec = d["spec"]
+        nodes = {n["id"]: n for n in spec["nodes"]}
+        cfg = node.get("config") or {}
+        join_id = self._find_join(spec, nodes, entries)
+        if join_id is None:
+            raise WorkflowError(
+                f"parallel {node['id']} 无法定位 join 节点（需 ≥2 分支"
+                "可达的 join）")
+        jcfg = nodes[join_id].get("config") or {}
+        mode = str(jcfg.get("mode", "all"))
+        quorum = int(jcfg.get("quorum", 1))
+        need = len(entries) if mode == "all" else (
+            quorum if mode == "quorum" else 1)
+        max_conc = max(1, min(int(cfg.get("max_concurrency",
+                                          len(entries))), 8))
+        timeout = float(cfg.get("branch_timeout_seconds", 0) or 0)
+        stop = {join_id}
+        conn = self.store._conn
+        # durable 分支行（幂等：resume 时复用既有行）
+        branches: list[dict] = []
+        if resume_rows:
+            by_entry = {}
+            for r in resume_rows:
+                ent = json.loads(r["output_json"] or "{}").get("entry")
+                by_entry[ent] = dict(r)
+            for i, entry in enumerate(entries):
+                r = by_entry.get(entry)
+                if r is None:
+                    bid = _new_id("br")
+                    conn.execute(
+                        "INSERT INTO workflow_branch_v1 (branch_id,"
+                        " run_id, node_id, branch_index, status,"
+                        " output_json, created_at, updated_at)"
+                        " VALUES (?,?,?,?,?,?,?,?)",
+                        (bid, run_id, node["id"], i, "pending",
+                         json.dumps({"entry": entry}), _now_iso(),
+                         _now_iso()))
+                    conn.commit()
+                    r = {"branch_id": bid, "status": "pending",
+                         "output_json": json.dumps({"entry": entry})}
+                branches.append({"branch_id": r["branch_id"],
+                                 "entry": entry, "index": i,
+                                 "status": r["status"]})
+        else:
+            for i, entry in enumerate(entries):
+                bid = _new_id("br")
+                conn.execute(
+                    "INSERT INTO workflow_branch_v1 (branch_id,"
+                    " run_id, node_id, branch_index, status,"
+                    " output_json, created_at, updated_at)"
+                    " VALUES (?,?,?,?,?,?,?,?)",
+                    (bid, run_id, node["id"], i, "pending",
+                     json.dumps({"entry": entry}), _now_iso(),
+                     _now_iso()))
+                conn.commit()
+                branches.append({"branch_id": bid, "entry": entry,
+                                 "index": i, "status": "pending"})
+        self.store.emit_event(
+            event_id=_new_id("evt"),
+            event_type="workflow.parallel_started",
+            run_id=run_id, work_id=work_id, correlation_id=corr,
+            actor_type="system", actor_id="workflow_runtime",
+            payload={"node": node["id"], "join": join_id,
+                     "branches": [b["branch_id"] for b in branches],
+                     "max_concurrency": max_conc, "mode": mode,
+                     "need": need})
+        if run_id:
+            self.store.upsert_node_execution(
+                run_id, node["id"], node_type="parallel",
+                status="running",
+                output_data={"branches": [b["branch_id"]
+                                          for b in branches],
+                             "max_concurrency": max_conc})
+
+        todo = [b for b in branches
+                if b["status"] not in ("completed",)]
+        bctx_map: dict[str, dict] = {}
+        results: dict[str, dict] = {b["branch_id"]: {"status": "failed",
+                                                     "error": "未执行"}
+                                    for b in todo}
+        # 已完成分支（resume 场景）的结果从行内恢复
+        for b in branches:
+            if b["status"] == "completed":
+                results[b["branch_id"]] = {"status": "completed"}
+
+        def _worker(b: dict) -> dict:
+            bctx = copy.deepcopy(ctx)
+            self._branch_row(b["branch_id"], "running")
+            try:
+                out = self._exec_branch(
+                    d, b["entry"], stop, bctx, run_id=run_id,
+                    work_id=work_id, corr=corr,
+                    branch_id=b["branch_id"])
+                bctx_map[b["branch_id"]] = bctx
+                self._branch_row(b["branch_id"], "completed",
+                                 output={"entry": b["entry"], **out})
+                return {"status": "completed"}
+            except Exception as e:
+                self._branch_row(b["branch_id"], "failed",
+                                 error=str(e))
+                return {"status": "failed", "error": str(e)[:300]}
+
+        if simulate:
+            for b in todo:
+                results[b["branch_id"]] = {"status": "completed",
+                                           "note": "simulate"}
+                self._branch_row(b["branch_id"], "completed",
+                                 output={"entry": b["entry"],
+                                         "note": "simulate"})
+        else:
+            # 不用 with 块：超时/取消后 shutdown(wait=False)，
+            # 不被仍在 sleep 的分支线程阻塞 wall-time；后台线程
+            # 到达当前节点后自然退出，其结果已被丢弃。
+            ex = ThreadPoolExecutor(max_workers=max_conc,
+                                    thread_name_prefix="wfbr")
+            try:
+                futs = {ex.submit(_worker, b): b for b in todo}
+                pending = set(futs)
+                while pending:
+                    done_set, pending = wait(
+                        pending, timeout=timeout or None,
+                        return_when=FIRST_COMPLETED)
+                    if not done_set:
+                        # 超时：剩余分支标 timeout
+                        for f in pending:
+                            b = futs[f]
+                            self._branch_row(b["branch_id"], "timeout",
+                                             error="branch_timeout")
+                            results[b["branch_id"]] = {
+                                "status": "timeout",
+                                "error": "branch_timeout"}
+                        pending = set()
+                        break
+                    for f in done_set:
+                        b = futs[f]
+                        try:
+                            results[b["branch_id"]] = f.result()
+                        except Exception as e:
+                            self._branch_row(b["branch_id"], "failed",
+                                             error=str(e))
+                            results[b["branch_id"]] = {
+                                "status": "failed",
+                                "error": str(e)[:300]}
+                    ok_n = sum(1 for r in results.values()
+                               if r["status"] == "completed")
+                    if ok_n >= need and mode != "all":
+                        # any/quorum 达成：剩余未完成分支标 cancelled
+                        for f in pending:
+                            f.cancel()
+                            b = futs[f]
+                            self._branch_row(b["branch_id"], "cancelled",
+                                             error="quorum 达成后取消")
+                            results[b["branch_id"]] = {
+                                "status": "cancelled"}
+                        pending = set()
+                        break
+            finally:
+                ex.shutdown(wait=False, cancel_futures=True)
+        ok = [b for b in branches
+              if results.get(b["branch_id"], {}).get("status")
+              == "completed"]
+        failed = {bid: r for bid, r in results.items()
+                  if r.get("status") in ("failed", "timeout")}
+        if len(ok) < need:
+            self.store.emit_event(
+                event_id=_new_id("evt"),
+                event_type="workflow.parallel_failed",
+                run_id=run_id, work_id=work_id, correlation_id=corr,
+                actor_type="system", actor_id="workflow_runtime",
+                payload={"node": node["id"], "mode": mode,
+                         "need": need, "completed": len(ok),
+                         "failed": failed})
+            raise WorkflowError(
+                f"parallel {node['id']} 分支失败：{len(ok)}/{need}"
+                f"（mode={mode}）失败明细 {json.dumps(failed, ensure_ascii=False)[:300]}")
+        # 合并分支 ctx（冲突记录 + 分支输出命名空间）
+        conflicts: list[dict] = []
+        ctx.setdefault("branches", {})
+        for b in ok:
+            bctx = bctx_map.get(b["branch_id"])
+            if not bctx:
+                continue
+            ctx["branches"][b["branch_id"]] = {
+                "entry": b["entry"],
+                "nodes": {k: v for k, v in bctx["nodes"].items()
+                          if k not in ctx["nodes"]}}
+            for k, v in (bctx.get("vars") or {}).items():
+                if k in ctx["vars"] and ctx["vars"][k] != v:
+                    conflicts.append({"var": k,
+                                      "branch": b["branch_id"],
+                                      "previous": ctx["vars"][k],
+                                      "value": v})
+                ctx["vars"][k] = v
+        ctx["branch_conflicts"] = conflicts
+        # 执行 join 节点（在合并后的主 ctx）
+        jnode = nodes[join_id]
+        self.store.upsert_node_execution(
+            run_id, join_id, node_type="join", status="succeeded",
+            output_data={"mode": mode, "need": need,
+                         "joined": sorted(b["entry"] for b in ok),
+                         "cancelled": sorted(
+                             b["branch_id"] for b in branches
+                             if results.get(b["branch_id"], {}).get(
+                                 "status") == "cancelled"),
+                         "conflicts": len(conflicts)})
+        ctx["nodes"][join_id] = {"status": "succeeded", "mode": mode,
+                                 "joined": len(ok)}
+        self.store.emit_event(
+            event_id=_new_id("evt"),
+            event_type="workflow.parallel_joined",
+            run_id=run_id, work_id=work_id, correlation_id=corr,
+            actor_type="system", actor_id="workflow_runtime",
+            payload={"node": node["id"], "join": join_id,
+                     "mode": mode, "completed": len(ok),
+                     "conflicts": len(conflicts)})
+        return join_id
+
+    def recover_interrupted_parallels(self) -> list[dict]:
+        """重启恢复：未完成分支（pending/running）重跑（at-least-once，
+        分支粒度；已完成分支不重复）。"""
+        recovered: list[dict] = []
+        rows = self.store._conn.execute(
+            "SELECT run_id FROM workflow_branch_v1 WHERE status IN"
+            " ('pending','running') GROUP BY run_id").fetchall()
+        for r in rows:
+            run = self.store.get_business_run(r["run_id"])
+            if run is None or run["status"] != "running":
+                continue
+            try:
+                d = self._must(run["workflow_definition_id"],
+                               int(run["workflow_version"]))
+            except Exception:
+                continue
+            brows = [dict(x) for x in self.store._conn.execute(
+                "SELECT * FROM workflow_branch_v1 WHERE run_id=?",
+                (r["run_id"],)).fetchall()]
+            if not brows:
+                continue
+            par_id = brows[0]["node_id"]
+            pnode = next((n for n in d["spec"]["nodes"]
+                          if n["id"] == par_id), None)
+            if pnode is None:
+                continue
+            entries = [json.loads(x["output_json"] or "{}").get("entry")
+                       for x in brows]
+            entries = [e for e in entries if e]
+            ctx = self._restore_ctx(r["run_id"], d)
+            try:
+                join_id = self._exec_parallel(
+                    d, pnode, entries, ctx, simulate=False,
+                    run_id=r["run_id"], work_id=run["work_id"],
+                    corr=run["correlation_id"], resume_rows=brows)
+                jsucc = [e["to"] for e in (d["spec"].get("edges") or [])
+                         if e["from"] == join_id]
+                self._run_nodes(d, jsucc, ctx, run_id=r["run_id"],
+                                work_id=run["work_id"],
+                                corr=run["correlation_id"])
+                recovered.append({"run_id": r["run_id"],
+                                  "node": par_id})
+            except Exception:
+                continue  # 单个 run 恢复失败不阻断其他
+        return recovered
+
     # ---------- 执行引擎 ----------
 
     def _adjacency(self, spec: dict) -> dict[str, list[str]]:
@@ -773,10 +1157,24 @@ class WorkflowService:
             succ = [e["to"] for e in spec_all_edges
                     if e["from"] == nid]
             if node["type"] == "parallel" and len(succ) > 1:
-                frontier = succ + frontier  # 扇出
-            else:
-                for s in succ:
+                # UATCC T3：真实有界并行（独立分支身份/独立 ctx/
+                # durable 分支状态/join all-any-quorum）；不得以
+                # 串行扇出冒充并行。
+                try:
+                    join_id = self._exec_parallel(
+                        d, node, succ, ctx, simulate=simulate,
+                        run_id=run_id, work_id=work_id, corr=corr)
+                except WorkflowError as pe:
+                    return self._fail_node(d, node, ctx, str(pe),
+                                           run_id=run_id,
+                                           work_id=work_id, corr=corr)
+                jsucc = [e["to"] for e in spec_all_edges
+                         if e["from"] == join_id]
+                for s in jsucc:
                     frontier.insert(0, s)
+                continue
+            for s in succ:
+                frontier.insert(0, s)
         status = "succeeded"
         if run_id:
             self.store.set_business_run_status(
@@ -838,7 +1236,8 @@ class WorkflowService:
 
     def _exec_node(self, d: dict, node: dict, ctx: dict, *,
                    simulate: bool, run_id: str, work_id: str,
-                   corr: str) -> tuple[Any, str | None]:
+                   corr: str, inline_wait: bool = False,
+                   branch_id: str = "") -> tuple[Any, str | None]:
         t = node["type"]
         cfg = node.get("config") or {}
         if run_id:
@@ -849,8 +1248,16 @@ class WorkflowService:
             return {}, None
         if t == "transform":
             mapping = cfg.get("map") or {}
-            return {k: _resolve_value(v, ctx) for k, v in mapping.items()}, \
-                None
+            out: dict[str, Any] = {}
+            for k, v in mapping.items():
+                val = _resolve_value(v, ctx)
+                if k.startswith("vars."):
+                    # UATCC T3：受限变量写（显式 vars.<name> 前缀），
+                    # 供并行分支写变量与合并冲突检测。
+                    ctx["vars"][k.split(".", 1)[1]] = val
+                else:
+                    out[k] = val
+            return out, None
         if t == "condition":
             for r in cfg.get("rules") or []:
                 when = r.get("when") or {}
@@ -866,6 +1273,24 @@ class WorkflowService:
                 return {"waited_seconds": seconds,
                         "note": ("即时通过" if seconds <= 0
                                  else "模拟：timer 未真实等待")}, None
+            if inline_wait:
+                # UATCC T3：并行分支内联等待（真实 sleep + 心跳）；
+                # 分支 durable 状态由 workflow_branch_v1 提供，重启
+                # 经 recover_interrupted_parallels 分支粒度重跑。
+                deadline = _time.monotonic() + seconds
+                while _time.monotonic() < deadline:
+                    _time.sleep(min(0.5, max(0.05,
+                                             deadline
+                                             - _time.monotonic())))
+                    if branch_id:
+                        self.store._conn.execute(
+                            "UPDATE workflow_branch_v1 SET updated_at=?"
+                            " WHERE branch_id=?",
+                            (_now_iso(), branch_id))
+                        self.store._conn.commit()
+                return {"waited_seconds": seconds,
+                        "mode": "inline_branch_wait",
+                        "branch_id": branch_id}, None
             fire_at = (datetime.now(timezone.utc)
                        + timedelta(seconds=seconds)).isoformat()
             timer_id = _new_id("tmr")
@@ -957,9 +1382,10 @@ class WorkflowService:
                 results.append(out)
             return {"count": len(results), "results": results}, None
         if t == "parallel":
-            # 扣资源租约：max_concurrency 记录在 config（本机单 worker
-            # 串行执行分支，不伪造并发吞吐；分支经边扇出）
-            return {"note": "扇出由边驱动",
+            # UATCC T3：真实有界并行由 _exec_parallel 在 _run_nodes
+            # 扇出处驱动（线程池 + durable 分支状态）；此处只是
+            # checkpoint 占位。
+            return {"note": "真实并行由 _exec_parallel 驱动",
                     "max_concurrency": int(
                         cfg.get("max_concurrency", 1))}, None
         if t == "join":

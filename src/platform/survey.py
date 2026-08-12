@@ -74,7 +74,6 @@ TEMPLATE_STORE_VISIT = {
              "min_count": 1, "max_count": 5,
              "require_storefront": False, "capture_role": "shelf",
              "selfie_optional": True, "recognition": True,
-             "recognition_profile_id": "v4_best_standard",
              "manual_confirmation_required": True,
              "quality": {"min_width": 320}},
         ],
@@ -641,8 +640,8 @@ class SurveyService:
                 command_kind="vision.recognition.create",
                 params={"images": [[f"{mid}.jpg", image_b64]],
                         "recognition_profile_id": q.get(
-                            "recognition_profile_id",
-                            "v4_best_standard"),
+                            "recognition_profile_id")
+                            or "production_legacy",
                         "service_tier": "standard"},
                 actor=actor, source="internal",
                 customer_id=r["customer_id"])
