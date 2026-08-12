@@ -692,6 +692,32 @@ Agent 不是万能管理员。Graph 节点必须声明 capability、数据域、
 - 下一步：用户验收（READY_FOR_USER_ACCEPTANCE 需用户确认）；剩余 P2 项
   （便签服务端化、event SSE、profile 信息架构）按 ISSUES.md 排期。
 
+## 2026-08-12 · Operational Workbench V3 实施收口（当前接续入口）
+
+- 实施 Agent：Lingma。入口仍为
+  `docs/implementation/agentic-business-os-operational-workbench-v3/`。
+- Gate：`READY_FOR_REAL_DATA_UAT`（T0–T12 全部 VERIFIED_LOCAL，
+  G0–G8 通过，P0/P1 清零，UAT 机器预演 23/23）。
+- 本轮 commit 链：a94cdc82（T1）→ 90eaa7e9/d9923cb5（T2）→ 419043d6
+  （T3）→ T4 链 → e7b3361c（T5）→ 37a45c53（T6）→ 5c634489（T7）→
+  1fd048b8（T8）→ d64a436a（T9）→ bbeaa643（T10）→ 7fd64b66（T11）
+  → T12 收口。分支 `feat/nextgen-training-cycle-v2`；未 merge/push/deploy。
+- 迁移 041–046 已应用；SQLite integrity ok；备份
+  `.platform/backups/platform_pre_v3_*.sqlite`。
+- **production bundle 已按用户授权切换为 `prod_v4_best_r1`**
+  （shadow 对比 + 回滚验证完成；CURRENT.previous.json 备份在位；
+  detector sha256 84bf9936…，classifier 与 v5 bundle 同 SHA 零变量）。
+  实验 profile（exp_classifier_only / exp_v4_detector_smoke /
+  exp_m3_grouped_classifier）诚实 disabled + blocker。
+- 新增能力：统一 current-work 端点；首页总控八段；Import Center
+  （14 模板）；真实 Agent Runtime（7 Agent 有界 health + 工具循环）；
+  React Flow 工作流画布（wait 持久化 timer）；问卷 Builder（matrix/
+  description）；地理编码 SPI + maplibre 地图（无 Key 诚实降级）；
+  BI 受限公式 DSL + ECharts；客户 Usage 工作台；帮助/系统管理拆分。
+- 测试基线：hermetic 1328 passed；host_mps 6 passed。
+- 诚实残留：地理编码/瓦片未配 Key（degraded）；本轮未启动长训练；
+  精细 rate limit 列入 P2。详见 STATUS.md。
+
 ## 2026-08-12 · 用户验收重新打开 + Operational Workbench V3
 
 - 当前唯一实施入口改为：

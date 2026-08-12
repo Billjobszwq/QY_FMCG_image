@@ -60,6 +60,121 @@
 - T3：Import Center（14 套 CSV/XLSX 模板、上传/映射/dry-run/逐行错误/
   提交/幂等/证据）+ IAM 自定义工作台 + 主数据完整 CRUD。
 
+## 2026-08-12 · T3 Import Center + IAM 自定义 + 主数据（commit 419043d6）
+
+- migration 042：import_batch_v1 / route_constraint_preset_v1 /
+  knowledge_document_v1；ImportCenter 服务：14 套模板（CSV/XLSX 双格式，
+  模板含字段说明且可 round-trip 重新解析）；上传→解析→自动映射→
+  dry-run（逐行 insert/skip/conflict/error）→幂等提交（走 Domain
+  Service，证据 bundle + 审计）。
+- IAM：自定义角色（scope 白名单 fail-closed）+ 权限模拟器（能否/为什么）；
+  主数据停用/启用 + 合并建议（规范化重名）。
+- 现场 E2E：坏 fixture validation_failed（逐行错误）→修复→committed
+  （uat-cust-a/b 落库，evidence+audit）。
+- 测试：8 红测试绿 + 2 IAM/主数据测试；hermetic 1287 passed。
+
+## 2026-08-12 · T4 真实 Agent Runtime（commit e2de6a7d 链）
+
+- migration 043：agent_definition_v1（版本化 soul/prompt/tools/budget/
+  approval）/ agent_asset_v1（Skill/Prompt/KB draft→发布）/
+  agent_memory_v1（L0-L4 ACL）/ agent_run_v1。
+- 有界工具目录 14 个；7 个 Agent（supervisor/modelops/data_steward/
+  survey/analytics/fieldops/finance）seed 为 published 定义；
+  health=有界探针（定义发布+事实查询+allowlist 有效）。
+- Supervisor 对话优先走真实工具循环（写动作→待批准命令）；
+  ABOSV3-P0-006 关闭（不再统一 ok=true）。
+- 现场：7/7 healthy；8 类工具意图真实执行（进度/SKU/问卷/工作流 draft/
+  缺坐标地址/识别预览/BI draft/Usage）；每次 invoke 落
+  agent_run + event + usage。
+
+## 2026-08-12 · T5 React Flow 可视化工作流（commit e7b3361c）
+
+- @xyflow/react 画布为默认（JSON 仅高级视图）；Palette 来自 Registry；
+  Inspector（wait 秒数/join 模式+quorum/agent_id/capability/loop）；
+  工具栏 lint/模拟/批准/发布/新版本/测试运行；运行面板暂停/恢复/
+  取消/重试。
+- runtime：wait=持久化 timer（migration 044，10s 轮询恢复，重启可恢复）；
+  join all/any/quorum（有界重排）；agent 节点调用指定 Agent；
+  UI 坐标不参与定义 hash（migration 含 _workflow_hash strip_ui）。
+- 现场 E2E：wf-701adc37a0 draft→lint→publish→run waiting_timer→
+  自动点火→succeeded；浏览器验收 6/6（.eval/v3_workflow_canvas/
+  inspector.png）。
+
+## 2026-08-12 · T6 空白问卷 Builder（commit 37a45c53）
+
+- 题型库（单选/多选/填空+数字/日期/打分/矩阵/拍照/说明）+ 画布
+  （排序/复制/删除）+ 属性面板 + 跳题编辑 + 预览（桌面/移动）；
+  后端新增 matrix/description 题型（lint fail-closed、逐行必填、
+  逐行计分）；PUT draft 更新端点。
+- 现场：svy-1a904ba6ba 空白→lint→发布→分配→矩阵响应→提交 score=5.0。
+
+## 2026-08-12 · T7 地址/地理编码/地图/路线（commit 5c634489）
+
+- ProviderGeocoder SPI（amap/tencent，无 Key 诚实降级+配置指引，
+  不写假坐标）；手工/导入坐标确认（source 标注）；RouteSolver SPI
+  （最近邻启发式诚实标注 + OR-Tools Adapter 预留）；migration 045
+  route_plan 复合主键（plan_id,version）支持人工调整新版本；
+  maplibre-gl 地图（可配置瓦片源，无瓦片诚实降级 SVG 散点）。
+- 现场：geocode degraded→手工坐标 verified→规划 solver 标注→
+  adjust v2→map-data points/fences/plans。
+
+## 2026-08-12 · T8 V4 best 受控切换 + 实验 profile（commit 1fd048b8）
+
+- 制品定位：best/sku_v4_best.pt sha256 84bf9936…（133,135,871 B）。
+- prod_v4_best_r1 bundle 构建（detector=V4 best；classifier/registry/
+  thresholds 与 v5 bundle 同 SHA 零变量）；shadow 对比 5 张失败样本：
+  v4 在 prod v5 零检出的 2 张上检出 2/3 件，无错误（报告
+  .eval/shadow_v4_best_report.json）。
+- StandardProfileService：原子 CURRENT 切换 + CURRENT.previous 备份 +
+  回滚 + hash fail-closed + 审计；制品状态 SHADOW_PENDING_SWITCH→
+  CANDIDATE 驱动 v4_best_standard profile 启用。
+- 实验 profile：exp_classifier_only（明示需 detector 组合）、
+  exp_v4_detector_smoke、exp_m3_grouped_classifier——一律诚实 blocker。
+- 现场：switch→rollback→switch 三次 API 验证；8091 重载
+  bundle:prod_v4_best_r1；真实识别 task 83c5500a sku_count=6（profile
+  v4_best_standard enabled）。
+- 训练控制面：dry-run 对不可训练快照正确 fail-closed（gold=0 诚实）；
+  四 Lane/Label Studio/数据集页面可达；本轮未启动长训练。
+
+## 2026-08-12 · T9 BI 工作台（commit d64a436a）
+
+- 受限公式 DSL（AST 白名单：仅注册指标引用+四则运算，禁任意 SQL/
+  代码/字符串，除零保护，嵌套≤4）；指标下钻到 usage/survey/
+  recognition 事实行；数据产品+血缘端点；migration 046
+  bi_dashboard_v1 + CRUD；ECharts BIWorkbench 画布。
+- 现场：uat.photo_x2 计算指标创建+求值；任意代码 409；
+  dash-23362a611c 持久化；11 红测试绿。
+
+## 2026-08-12 · T10 客户 Usage 工作台（commit bbeaa643）
+
+- usage/summary（单位/日期/异常规则 day>3×mean 标注口径/未归属）、
+  rows（run 状态+证据 bundle 下钻）、budgets（项目预算，计数口径
+  标注）、export.csv；finance.read 作用域强制（跨客户 403）。
+- 现场：uat-cust-a 汇总/明细/CSV 验证；4 红测试绿。
+
+## 2026-08-12 · T11 帮助与系统管理拆分（commit 7fd64b66）
+
+- 新 help 模块（全员）：可搜索角色/任务手册、导入模板说明（实时）、
+  API Explorer、排障；system 更名“系统管理（仅管理员）”，导航
+  按 me.role 过滤；integration ok=true（36 路由）。
+
+## 2026-08-12 · T12 UAT 机器预演 + 收口
+
+- scripts/v3_uat_rehearsal.py：05-UAT 七段预演 23/23 通过（报告
+  .eval/v3_uat_rehearsal_report.json，全部来自 API/DB 不可手填）。
+- 服务恢复：./bin/abos restart 四服务全部 UP；重启后 reconcile
+  consistent=true（business_facts_checked）；CURRENT 保持
+  prod_v4_best_r1；SQLite integrity ok。
+- 安全快检：未登录 401；无 CSRF 写 403；跨客户 403（测试覆盖）。
+- 测试基线：hermetic 1328 passed + host_mps 6 passed；前端 typecheck/
+  build 通过。
+- 浏览器巡检：9 页（home/import/studio/agents/survey/geo/analytics/
+  finance/help）复检全过，console 0 error（首轮因会话缓存旧 JS 误报，
+  强刷后复检通过；截图 .eval/v3_sweep_*.png）。
+- 诚实披露：地理编码/地图瓦片未配置 Key（degraded，配置指引已内置）；
+  训练长训练本轮未启动（红线）；浏览器视口部分用 CSS zoom/iframe 仿真
+  （物理窗口受限，已披露）。
+
 ## 2026-08-12 · 任务书建立
 
 - Codex 独立审查撤销旧 `READY_FOR_USER_ACCEPTANCE` 判断；

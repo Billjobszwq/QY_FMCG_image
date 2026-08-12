@@ -1,8 +1,11 @@
 # Agentic Business OS · 用户使用手册
 
-> 版本：v3（2026-08-12，随 ABOSV2 Phase A–F 发布）。
+> 版本：v4（2026-08-12，随 Operational Workbench V3 发布）。
+> v4 新增：首页总控台、Import Center（14 套模板）、真实 Agent 中心、
+> React Flow 工作流画布、问卷 Builder、地图与坐标、BI 工作台、
+> 客户 Usage 工作台、帮助与文档（见 §12）。
 > 本手册按角色给出“从登录到完成任务”的操作流；所有命令均在本机实测。
-> 会变化的事实（production、任务数、项目 ID）请在“系统与开发者 → 系统状态”
+> 会变化的事实（production、任务数、项目 ID）请在“系统管理 → 系统状态”
 > 或 API 实时查看，不在手册写死。
 
 ## 0. 这是什么 / 不是什么
@@ -142,4 +145,24 @@ UPDATE/DELETE）；旧的 admin 口令已失效。
 
 - 运维 Runbook：`docs/OPERATOR-RUNBOOK.md`
 - 模块与 Agent 开发指南：`docs/MODULE-AGENT-DEV-GUIDE.md`
-- 本轮实施记录：`docs/implementation/agentic-business-os-domain-packs-v2/`
+- 本轮实施记录：`docs/implementation/agentic-business-os-operational-workbench-v3/`
+
+## 12. V3 新工作台速览（2026-08-12）
+
+| 入口 | 能做什么 |
+|---|---|
+| 首页 | 待办/日历/进度/活动/容量/Agent 提醒/快速目标/便签（均服务端持久化） |
+| 数据与资产 → Import Center | 下载 14 套 CSV/XLSX 模板→上传→dry-run→修复错误→幂等提交 |
+| 调研与问卷 → 设计器 | 从空白搭建问卷（题型库/跳题/评分/照片）→lint→发布 |
+| 位置与外勤 | 地址导入/获取坐标（无 Key 时手工坐标）/地图/路线调版 |
+| 智能识别 | 默认 V4 best（standard）；实验 profile 诚实标注；五入口同台账 |
+| 分析与 BI | 指标/受限公式/ECharts 画布/下钻/看板保存 |
+| 工作流与 Agent | React Flow 画布搭建；Agent 中心（Soul/Prompt/资产/记忆/回滚） |
+| 财务与结算 | 客户 Usage 工作台（汇总/趋势/下钻/CSV 导出） |
+| 帮助与文档 | 可搜索手册/模板说明/API Explorer/排障 |
+| 系统管理（仅管理员） | 系统状态/模块/OpenAPI |
+
+配置提示（可选外部 Key，未配置均诚实降级不阻断使用）：
+地理编码 `GEOCODER_PROVIDER=amap|tencent` + `AMAP_API_KEY`/
+`TENCENT_MAP_KEY`；地图瓦片 `MAP_TILES_URL`；LLM 合成
+`DEEPSEEK_API_KEY`。
