@@ -13,7 +13,19 @@ from pydantic import BaseModel
 
 from ..auth import AuthService, require_principal
 from ..iam import IAMError, IAMService, MasterDataError, MasterDataService
-from ..scope import ScopeViolation, bind_fixture_scope
+from ..scope import (ScopeResolver, ScopeViolation,
+                     bind_fixture_scope)
+
+
+def _assert_test_run(store, test_run_id: str) -> None:
+    """SI3：受信创建路径前置校验——test_run 必须在 registry 且
+    current（fail-closed，指令四.5/6），先于对象创建。"""
+    if not test_run_id:
+        return
+    try:
+        ScopeResolver(store).assert_test_run_current(test_run_id)
+    except ScopeViolation as e:
+        raise HTTPException(409, str(e))
 
 
 class PrincipalBody(BaseModel):
@@ -249,6 +261,16 @@ def create_iam_router(store: Any, auth: AuthService | None) -> APIRouter:
         p = require_principal(auth, request, csrf=True)
         _guard(iam, p["actor"], p["role"], "master.manage",
                customer_id=body.customer_id)
+        _assert_test_run(store, body.test_run_id)
+        # SI3：fixture 客户不得产生 operational 子对象（指令四.4）
+        pc = master.get_customer(body.customer_id)
+        if pc and (pc.get("is_test_fixture")
+                   or pc.get("data_scope") in ("uat_fixture",
+                                                "demo_fixture")) \
+                and not body.test_run_id:
+            raise HTTPException(
+                409, "SCOPE_MISSING_TEST_RUN_ID: fixture 客户下创建"
+                "项目必须携带 test_run_id")
         try:
             out = master.create_project(
                 project_id=body.project_id, customer_id=body.customer_id,
@@ -275,6 +297,7 @@ def create_iam_router(store: Any, auth: AuthService | None) -> APIRouter:
     def create_sku(body: SkuBody, request: Request) -> dict:
         p = require_principal(auth, request, csrf=True)
         _guard(iam, p["actor"], p["role"], "master.manage")
+        _assert_test_run(store, body.test_run_id)
         try:
             out = master.create_sku(
                 sku_id=body.sku_id, canonical_name=body.canonical_name,

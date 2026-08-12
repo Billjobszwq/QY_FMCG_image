@@ -330,7 +330,8 @@ class HomeCenterService:
         try:
             rows = self.store._conn.execute(
                 "SELECT anomaly_id, metric_id, observed, threshold"
-                " FROM bi_anomaly_v1 WHERE status='open'").fetchall()
+                " FROM bi_anomaly_v1 WHERE status='open' AND "
+                + OPERATIONAL_FILTER).fetchall()
             for r in rows:
                 alerts.append({"kind": "anomaly",
                                "title": f"指标异常：{r['metric_id']}"

@@ -9,7 +9,16 @@ from pydantic import BaseModel
 from ..auth import AuthService, require_principal
 from ..field_ops import FieldOpsError, FieldOpsService
 from ..iam import IAMService
-from ..scope import bind_fixture_scope
+from ..scope import (ScopeViolation, assert_test_run_for_api,
+                     bind_fixture_scope)
+
+
+def _assert_test_run(store, test_run_id: str) -> None:
+    """SI3：test_run 前置校验（fail-closed → 409，指令四.5/6）。"""
+    try:
+        assert_test_run_for_api(store, test_run_id)
+    except ScopeViolation as e:
+        raise HTTPException(409, str(e))
 
 
 class AddressBody(BaseModel):
@@ -124,6 +133,7 @@ def create_geo_router(store: Any, svc: FieldOpsService, iam: IAMService,
     def add_address(body: AddressBody, request: Request) -> dict:
         p = require_principal(auth, request, csrf=True)
         _guard(iam, p["actor"], p["role"], body.customer_id)
+        _assert_test_run(store, body.test_run_id)
         addr = _wrap(svc.add_address)(
             customer_id=body.customer_id, raw=body.raw, actor=p["actor"])
         if body.test_run_id:
@@ -230,6 +240,7 @@ def create_geo_router(store: Any, svc: FieldOpsService, iam: IAMService,
     def add_employee(body: EmployeeBody, request: Request) -> dict:
         p = require_principal(auth, request, csrf=True)
         _guard(iam, p["actor"], p["role"], body.customer_id)
+        _assert_test_run(store, body.test_run_id)
         emp = _wrap(svc.add_employee)(
             customer_id=body.customer_id, name=body.name,
             skills=body.skills, vehicle=body.vehicle)
@@ -249,6 +260,7 @@ def create_geo_router(store: Any, svc: FieldOpsService, iam: IAMService,
     def create_task(body: TaskBody, request: Request) -> dict:
         p = require_principal(auth, request, csrf=True)
         _guard(iam, p["actor"], p["role"], body.customer_id)
+        _assert_test_run(store, body.test_run_id)
         task = _wrap(svc.create_task)(
             customer_id=body.customer_id, address_id=body.address_id,
             project_id=body.project_id, kind=body.kind,
@@ -271,6 +283,7 @@ def create_geo_router(store: Any, svc: FieldOpsService, iam: IAMService,
     def plan(body: PlanBody, request: Request) -> dict:
         p = require_principal(auth, request, csrf=True)
         _guard(iam, p["actor"], p["role"], body.customer_id)
+        _assert_test_run(store, body.test_run_id)
         out = _wrap(svc.plan_route)(
             customer_id=body.customer_id, task_ids=body.task_ids,
             constraints=body.constraints, actor=p["actor"])

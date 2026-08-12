@@ -12,7 +12,16 @@ from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 
 from ..auth import AuthService, require_principal
-from ..scope import bind_fixture_scope
+from ..scope import (ScopeViolation, assert_test_run_for_api,
+                     bind_fixture_scope)
+
+
+def _assert_test_run(store, test_run_id: str) -> None:
+    """SI3：test_run 前置校验（fail-closed → 409，指令四.5/6）。"""
+    try:
+        assert_test_run_for_api(store, test_run_id)
+    except ScopeViolation as e:
+        raise HTTPException(409, str(e))
 from ..workflow import WorkflowError, WorkflowService
 
 
@@ -89,6 +98,7 @@ def create_workflow_router(store: Any, service: WorkflowService,
         p = require_principal(auth, request, csrf=True)
         if not body.template_id and body.spec is None:
             raise HTTPException(422, "spec 或 template_id 必填")
+        _assert_test_run(store, body.test_run_id)
         try:
             out = service.create_draft(
                 name=body.name, spec=body.spec or {}, actor=p["actor"],

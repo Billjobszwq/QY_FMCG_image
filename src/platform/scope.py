@@ -284,8 +284,16 @@ class ScopeResolver:
         return ExecutionContext(customer_id=cust)
 
 
+def assert_test_run_for_api(store: Any, test_run_id: str) -> None:
+    """SI3：受信创建端点的前置校验（先于对象创建）：test_run 必须
+    在 uat_test_run_v1 且 status=current；archived/不存在 → 抛
+    ScopeViolation（端点映射 409，fail-closed，指令四.5/6）。"""
+    if test_run_id:
+        ScopeResolver(store).assert_test_run_current(test_run_id)
+
+
 # 允许经受信路径（迁移/一次性回填）直接绑定 fixture scope 的白名单；
-# 运行时创建必须走"同事务写入"（create_scoped_* / insert 时带列）。
+# 运行时创建必须走“同事务写入”（create_scoped_* / insert 时带列）。
 _BINDABLE_TABLES = {
     "md_customer_v1": "customer_id",
     "md_project_v1": "project_id",

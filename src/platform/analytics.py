@@ -433,7 +433,8 @@ class AnalyticsService:
 
     def check_anomaly(self, *, metric_id: str, customer_id: str,
                       op: str, threshold: float,
-                      actor: str) -> dict:
+                      actor: str, data_scope: str = "operational",
+                      test_run_id: str = "") -> dict:
         observed = self.evaluate_metric(metric_id, customer_id=customer_id)
         hit = {"lt": observed < threshold, "gt": observed > threshold,
                "le": observed <= threshold, "ge": observed >= threshold,
@@ -449,15 +450,19 @@ class AnalyticsService:
             "owner_type": "human", "owner_id": "analyst",
             "title": f"异常追问：{metric_id} {op} {threshold}",
             "business_summary": f"observed={observed}",
-            "subject_type": "bi_anomaly", "subject_id": anomaly_id})
+            "subject_type": "bi_anomaly", "subject_id": anomaly_id,
+            "customer_id": customer_id,
+            "data_scope": data_scope})
+        # SI3：异常对象与调用方 scope 同事务写入（指令四.11）。
         self.store._conn.execute(
             "INSERT INTO bi_anomaly_v1 (anomaly_id, metric_id,"
             " customer_id, rule_json, observed, threshold, status,"
-            " follow_up_work_id, created_at)"
-            " VALUES (?,?,?,?,?,?,?,?,?)",
+            " follow_up_work_id, created_at, data_scope, test_run_id)"
+            " VALUES (?,?,?,?,?,?,?,?,?,?,?)",
             (anomaly_id, metric_id, customer_id,
              json.dumps({"op": op, "threshold": threshold}), observed,
-             threshold, "open", work["work_id"], _now()))
+             threshold, "open", work["work_id"], _now(), data_scope,
+             test_run_id))
         self.store._conn.commit()
         return {"anomaly": self.get_anomaly(anomaly_id),
                 "observed": observed, "threshold": threshold, "hit": True}

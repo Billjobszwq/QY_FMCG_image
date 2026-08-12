@@ -198,10 +198,11 @@ class TestCustomerIsolationG4:
                 "is_test_fixture": True,
                 "test_run_id": "uatv5_iam_g4_fx"})
             assert r.status_code == 200, r.text
-        # 各建一个项目
+        # 各建一个项目（SI3：fixture 客户下必须携带 test_run）
         for pid, cid in (("pj-a", "cust-a"), ("pj-b", "cust-b")):
             r = c.post("/api/v1/master/projects", headers=h, json={
-                "project_id": pid, "customer_id": cid, "name": pid})
+                "project_id": pid, "customer_id": cid, "name": pid,
+                "test_run_id": "uatv5_iam_g4_fx"})
             assert r.status_code == 200, r.text
         # 各开一个客户管理员 + 一个 agent 身份（独立，不借用 admin）
         for u, cid in (("alice", "cust-a"), ("bruno", "cust-b")):
@@ -219,13 +220,15 @@ class TestCustomerIsolationG4:
                 "username": f"agent-{u}", "role": "agent_service",
                 "customer_id": cid})
             assert r.status_code == 200
-        # 各客户跑一条真实识别（经 gateway，带 customer/project 作用域）
+        # 各客户跑一条真实识别（经 gateway，带 customer/project 作用域；
+        # SI3：fixture 客户必须携带 test_run）
         for cid, pid in (("cust-a", "pj-a"), ("cust-b", "pj-b")):
             out = env["gateway"].submit(
                 command_kind="vision.recognition.create",
                 params={"images": [[f"{cid}.jpg", b"\xff\xd8fake"]]},
                 actor="admin", source="api",
-                customer_id=cid, project_id=pid)
+                customer_id=cid, project_id=pid,
+                test_run_id="uatv5_iam_g4_fx")
             assert out["status"] == "succeeded"
 
     def test_full_isolation_matrix(self, env):

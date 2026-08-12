@@ -103,7 +103,7 @@ def validate_report(report: dict) -> list[str]:
     健康、CURRENT 非 prod_v4_best_r1、存在长训练进程。
 
     SI2：protocol=uatv4 报告走 V4 协议校验（scope-first 检查集）。"""
-    if report.get("protocol") == "uatv4":
+    if report.get("protocol") in ("uatv4", "uatv5"):
         return _validate_uatv4(report)
     problems: list[str] = []
     ids = report.get("ids") or {}

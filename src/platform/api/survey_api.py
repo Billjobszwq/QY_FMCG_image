@@ -12,7 +12,16 @@ from pydantic import BaseModel
 
 from ..auth import AuthService, require_principal
 from ..iam import IAMService
-from ..scope import bind_fixture_scope
+from ..scope import (ScopeViolation, assert_test_run_for_api,
+                     bind_fixture_scope)
+
+
+def _assert_test_run(store, test_run_id: str) -> None:
+    """SI3：test_run 前置校验（fail-closed → 409，指令四.5/6）。"""
+    try:
+        assert_test_run_for_api(store, test_run_id)
+    except ScopeViolation as e:
+        raise HTTPException(409, str(e))
 from ..survey import SurveyError, SurveyService
 
 
@@ -98,6 +107,7 @@ def create_survey_router(store: Any, survey: SurveyService,
     def create(body: DraftBody, request: Request) -> dict:
         p = require_principal(auth, request, csrf=True)
         _guard(iam, p["actor"], p["role"], "survey.manage")
+        _assert_test_run(store, body.test_run_id)
         try:
             out = survey.create_draft(
                 name=body.name, spec=body.spec, actor=p["actor"],
@@ -175,6 +185,7 @@ def create_survey_router(store: Any, survey: SurveyService,
         p = require_principal(auth, request, csrf=True)
         _guard(iam, p["actor"], p["role"], "survey.manage",
                customer_id=body.customer_id)
+        _assert_test_run(store, body.test_run_id)
         try:
             out = survey.assign(
                 survey_id=body.survey_id, customer_id=body.customer_id,

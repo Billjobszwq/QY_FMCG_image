@@ -20,6 +20,7 @@ class ReportBody(BaseModel):
     customer_id: str
     dimensions: list[str] = []
     nl_query: str = ""
+    test_run_id: str = ""   # SI3：受信 UAT 路径
 
 
 class AgentDraftBody(BaseModel):
@@ -32,6 +33,7 @@ class AnomalyBody(BaseModel):
     customer_id: str
     op: str = "lt"
     threshold: float = 0
+    test_run_id: str = ""   # SI3：受信 UAT 路径
 
 
 class AnswerBody(BaseModel):
@@ -215,11 +217,22 @@ def create_analytics_router(store: Any, svc: AnalyticsService,
     def create_report(body: ReportBody, request: Request) -> dict:
         p = require_principal(auth, request, csrf=True)
         _guard(iam, p["actor"], p["role"], body.customer_id)
+        # SI3：服务端解析 scope（fail-closed；同事务写入）
+        from ..scope import ScopeResolver, ScopeViolation
+        try:
+            scope = ScopeResolver(store).resolve(
+                test_run_id=body.test_run_id,
+                customer_id=body.customer_id, actor_id=p["actor"],
+                source="api")
+        except ScopeViolation as e:
+            raise HTTPException(409, str(e))
         try:
             return {"report": svc.create_report_spec(
                 name=body.name, metrics=body.metrics,
                 customer_id=body.customer_id, actor=p["actor"],
-                dimensions=body.dimensions, nl_query=body.nl_query)}
+                dimensions=body.dimensions, nl_query=body.nl_query,
+                data_scope=scope.data_scope,
+                test_run_id=scope.test_run_id)}
         except AnalyticsError as e:
             raise HTTPException(409, str(e))
 
@@ -234,6 +247,10 @@ def create_analytics_router(store: Any, svc: AnalyticsService,
     def list_reports(request: Request) -> dict:
         p = require_principal(auth, request, csrf=False)
         reps = svc.list_report_specs()
+        # SI3：运营报表列表默认排除 fixture（指令三.10 同口径）
+        reps = [r for r in reps
+                if (r.get("data_scope") or "operational")
+                == "operational"]
         if not _platform(iam, p["actor"], p["role"]):
             limit = iam.visible_customers(p["actor"]) or []
             reps = [r for r in reps
@@ -296,10 +313,21 @@ def create_analytics_router(store: Any, svc: AnalyticsService,
     def check(body: AnomalyBody, request: Request) -> dict:
         p = require_principal(auth, request, csrf=True)
         _guard(iam, p["actor"], p["role"], body.customer_id)
+        # SI3：异常对象继承调用方 scope（fail-closed）
+        from ..scope import ScopeResolver, ScopeViolation
+        try:
+            ascope = ScopeResolver(store).resolve(
+                test_run_id=body.test_run_id,
+                customer_id=body.customer_id, actor_id=p["actor"],
+                source="api")
+        except ScopeViolation as e:
+            raise HTTPException(409, str(e))
         try:
             out = svc.check_anomaly(
                 metric_id=body.metric_id, customer_id=body.customer_id,
-                op=body.op, threshold=body.threshold, actor=p["actor"])
+                op=body.op, threshold=body.threshold, actor=p["actor"],
+                data_scope=ascope.data_scope,
+                test_run_id=ascope.test_run_id)
         except AnalyticsError as e:
             raise HTTPException(409, str(e))
         # UFC T8：命中异常 → Analytics Agent 生成追问（带 run/work/
@@ -316,7 +344,10 @@ def create_analytics_router(store: Any, svc: AnalyticsService,
                         f"指标 {body.metric_id} 异常"
                         f"（observed={out['observed']}，阈值"
                         f" {body.threshold}），请生成追问并查询相关指标",
-                        actor=p["actor"], customer_id=body.customer_id)
+                        actor=p["actor"], customer_id=body.customer_id,
+                        # SI3：追问 Agent 继承异常 scope（fixture 追问
+                        # 不得落 operational，指令四.11）
+                        test_run_id=ascope.test_run_id)
                     question = str(resp.get("message", ""))[:200]
                     agent_run = resp.get("business_run_id", "")
                 except Exception as ae:
