@@ -1,26 +1,79 @@
-"""UFC T4：UAT fixture 结构性隔离与归档服务。
+"""UFC T4 / SI2 T5：UAT fixture 结构性隔离与归档服务（测试与证据中心后端）。
 
 - 不删除任何历史数据：只做追加式标记（data_scope/visibility/
   superseded_at/test_run_id）；
-- 隔离按结构字段生效（名字前缀只是遗留回填的识别线索）；
+- 隔离按结构字段生效（名字前缀只是遗留回填的识别线索，运行时
+  禁止依赖名称模式）；
 - operational 投影默认排除全部 uat_fixture；当前一次 UAT 以
-  visibility=current 在"测试与证据"端点可查，结束后归档为 history。
+  visibility=current 在"测试与证据"端点可查，结束后归档为 history；
+- SI2：UAT 必须先 create_test_run_context（先建 Test Run，再在其
+  内部创建对象），归档按 test_run_id 结构化执行全 Domain。
 """
 from __future__ import annotations
 
+import json as _json
 from datetime import datetime, timezone
 from typing import Any
 
+from .scope import ScopedQuery
+
 LEGACY_PREFIXES = ("uatv2_", "uat_fixture_v3", "uat-cust")
+
+# SI2 T3：带结构化 scope 列、需随归档一并处理的 Domain 表（与
+# 02-DOMAIN-SCOPE-MATRIX / 迁移 051 同源）。
+_SCOPED_DOMAIN_TABLES = (
+    "md_project_v1", "md_sku_v1",
+    "field_task_v1", "route_plan_v1", "geofence_event_v1",
+    "user_calendar_v1",
+    "survey_definition_v1", "survey_assignment_v1", "survey_response_v1",
+    "survey_media_v1",
+    "workflow_definition_v1",
+    "agent_run_v1", "recognition_task",
+    "usage_event_v2", "evidence_bundle_v1",
+    "bi_report_spec_v1", "bi_anomaly_v1",
+)
 
 
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
-class TestDataService:
+class FixtureTestDataService:
+    """UAT fixture 隔离/归档/审计（类名避免 pytest 收集误判，
+    SI2-009；保留 TestDataService 别名兼容旧引用）。"""
+
+    __test__ = False  # 双保险：任何收集器不得视作测试类
+
     def __init__(self, store: Any) -> None:
         self.store = store
+
+    # ---------- Test Run 上下文（SI2：先建上下文再建对象） ----------
+
+    def create_test_run_context(self, namespace: str, *,
+                                customer_ids: list[str],
+                                actor: str = "system") -> dict:
+        """创建一次 UAT 的结构化作用域上下文：所有后续对象必须
+        携带 test_run_id=namespace 或从父对象继承（禁止后补标）。"""
+        if not namespace:
+            raise ValueError("namespace 不得为空")
+        conn = self.store._conn
+        conn.execute(
+            "INSERT OR REPLACE INTO uat_test_run_v1 (test_run_id,"
+            " namespace, status, customer_ids_json, created_by,"
+            " created_at) VALUES (?,?,?,?,?,?)",
+            (namespace, namespace, "current",
+             _json.dumps(customer_ids or []), actor, _now()))
+        if customer_ids:
+            qm = ",".join("?" * len(customer_ids))
+            conn.execute(
+                f"UPDATE md_customer_v1 SET data_scope='uat_fixture',"
+                f" updated_at=? WHERE customer_id IN ({qm})",
+                (_now(), *customer_ids))
+        conn.commit()
+        self._audit(actor, "test_data.context_created", namespace,
+                    {"customers": customer_ids})
+        return {"test_run_id": namespace, "namespace": namespace,
+                "customers": list(customer_ids), "status": "current"}
 
     # ---------- 标记 / 归档 ----------
 
@@ -58,31 +111,67 @@ class TestDataService:
 
     def archive_namespace(self, namespace: str, *,
                           actor: str = "system") -> dict:
-        """归档一次 UAT：visibility=history + superseded_at（行保留，
-        仍可审计）。"""
+        """归档一次 UAT（全 Domain，按 test_run_id 结构化；不删行）。
+
+        运行时不依赖名称前缀：只处理 test_run_id=namespace 的行与
+        该上下文登记的 fixture 客户行；operational 对象（哪怕名称含
+        UAT）不受影响。
+        """
         conn = self.store._conn
         now = _now()
+        # 1) work_item / business_run（既有结构字段）
         conn.execute(
             "UPDATE work_item_v2 SET visibility='history',"
             " superseded_at=? WHERE data_scope='uat_fixture' AND"
-            " (run_id IN (SELECT run_id FROM business_run_v1 WHERE"
-            " test_run_id=?) OR customer_id LIKE ?)",
-            (now, namespace, namespace + "%"))
+            " run_id IN (SELECT run_id FROM business_run_v1 WHERE"
+            " test_run_id=?)",
+            (now, namespace))
+        # 兼容旧数据：客户归属该 namespace 登记的 fixture 客户
+        cust_row = conn.execute(
+            "SELECT customer_ids_json FROM uat_test_run_v1 WHERE"
+            " test_run_id=?", (namespace,)).fetchone()
+        cids = _json.loads(cust_row["customer_ids_json"]) if cust_row else []
+        if cids:
+            qm = ",".join("?" * len(cids))
+            conn.execute(
+                f"UPDATE work_item_v2 SET visibility='history',"
+                f" superseded_at=? WHERE data_scope='uat_fixture' AND"
+                f" customer_id IN ({qm})", (now, *cids))
+            conn.execute(
+                f"UPDATE business_run_v1 SET data_scope='uat_fixture',"
+                f" test_run_id=? WHERE customer_id IN ({qm}) AND"
+                " COALESCE(test_run_id,'')='' AND"
+                " data_scope='uat_fixture'", (namespace, *cids))
+        # 2) 全 Domain 结构化归档：带 test_run_id 的行结构性地属于
+        # fixture（不得 operational；运行时不依赖名称）。
+        for table in _SCOPED_DOMAIN_TABLES:
+            try:
+                conn.execute(
+                    f"UPDATE {table} SET data_scope='uat_fixture' WHERE"
+                    " test_run_id=?", (namespace,))
+            except Exception:
+                continue
+        # node/timer/branch 随 run 归档（审计可见）
+        for table in ("workflow_node_execution_v1", "workflow_timer_v1",
+                      "workflow_branch_v1"):
+            try:
+                conn.execute(
+                    f"UPDATE {table} SET data_scope='uat_fixture' WHERE"
+                    " test_run_id=?", (namespace,))
+            except Exception:
+                continue
+        # 3) Test Run 上下文收尾
         conn.execute(
-            "UPDATE business_run_v1 SET data_scope='uat_fixture'"
-            " WHERE test_run_id=? OR customer_id LIKE ?",
-            (namespace, namespace + "%"))
-        # 运行期新建的 work（customer 可能为空）：按已标记 fixture
-        # 的 run 追加式归档。
-        conn.execute(
-            "UPDATE work_item_v2 SET data_scope='uat_fixture',"
-            " visibility='history', superseded_at=? WHERE"
-            " data_scope='operational' AND run_id IN (SELECT run_id"
-            " FROM business_run_v1 WHERE data_scope='uat_fixture')",
-            (now,))
+            "UPDATE uat_test_run_v1 SET status='archived', archived_at=?"
+            " WHERE test_run_id=?", (now, namespace))
         conn.commit()
         self._audit(actor, "test_data.archived", namespace, {})
         return {"namespace": namespace, "archived_at": now}
+
+    def operational_residue_full(self) -> dict[str, int]:
+        """全 Domain operational 投影中的 fixture 残留（归档后应为
+        空 dict）。Gate 2.1 直接消费；返回显式计数（0 也是 0）。"""
+        return ScopedQuery(self.store).operational_leakage()
 
     def converge_legacy_fixtures(self, *, actor: str = "system") -> int:
         """遗留 uat* 客户追加式回填为 fixture 并归档（不删除）。"""
@@ -171,8 +260,7 @@ class TestDataService:
         return [dict(r) for r in rows]
 
     def operational_residue(self) -> int:
-        """operational 投影中的 UAT 残留：visibility=current 的
-        fixture work 数（归档后应为 0）。"""
+        """operational 投影中的 UAT 残留（work 域；归档后应为 0）。"""
         return self.store._conn.execute(
             "SELECT count(*) c FROM work_item_v2 WHERE data_scope="
             "'uat_fixture' AND visibility='current'").fetchone()["c"]
@@ -190,3 +278,8 @@ class TestDataService:
             self.store._conn.commit()
         except Exception:
             pass
+
+
+# 兼容别名：旧代码引用 TestDataService；__test__=False 防止 pytest
+# 收集警告（SI2-009）。
+TestDataService = FixtureTestDataService

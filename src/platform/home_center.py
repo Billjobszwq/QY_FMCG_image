@@ -7,6 +7,8 @@
 - 系统容量：数据库/磁盘/队列/服务真实读数；
 - Agent 提醒：待批准/阻断/异常（来自统一事实，不硬编码）；
 - 便签：服务端持久化（关闭 ABOSV2-P2-001）。
+- SI2 T4：首页全部卡片默认 scope=operational；fixture 只在测试与
+  证据中心可见（统一 ScopedQuery 口径，不散落临时 SQL）。
 """
 from __future__ import annotations
 
@@ -16,6 +18,8 @@ import shutil
 import uuid
 from datetime import datetime, timezone
 from typing import Any
+
+from .scope import OPERATIONAL_FILTER
 
 
 class HomeCenterError(Exception):
@@ -57,9 +61,10 @@ class HomeCenterService:
                         actor: str = "") -> list[dict]:
         conn = self.store._conn
         out: list[dict] = []
-        # 1) 用户日程（专表，服务端持久化）
+        # 1) 用户日程（专表，服务端持久化；SI2：默认只看 operational）
         rows = conn.execute(
-            "SELECT * FROM user_calendar_v1 ORDER BY starts_at").fetchall()
+            "SELECT * FROM user_calendar_v1 WHERE " + OPERATIONAL_FILTER
+            + " ORDER BY starts_at").fetchall()
         for r in rows:
             d = dict(r)
             d["all_day"] = bool(d.get("all_day"))
@@ -83,7 +88,8 @@ class HomeCenterService:
         try:
             tasks = conn.execute(
                 "SELECT * FROM field_task_v1 WHERE status NOT IN"
-                " ('completed','cancelled') ORDER BY created_at"
+                " ('completed','cancelled') AND " + OPERATIONAL_FILTER
+                + " ORDER BY created_at"
                 ).fetchall()
             for r in tasks:
                 d = dict(r)
@@ -103,7 +109,8 @@ class HomeCenterService:
         try:
             asgs = conn.execute(
                 "SELECT * FROM survey_assignment_v1 WHERE status IN"
-                " ('assigned','in_progress') ORDER BY created_at"
+                " ('assigned','in_progress') AND " + OPERATIONAL_FILTER
+                + " ORDER BY created_at"
                 ).fetchall()
             for r in asgs:
                 d = dict(r)
@@ -179,11 +186,17 @@ class HomeCenterService:
 
     def activity(self, *, limit: int = 60) -> list[dict]:
         out: list[dict] = []
+        # SI2：fixture run 的事件不进运营活动日志（scope 来自 run 行）
+        _fixture_runs = {r["run_id"] for r in self.store._conn.execute(
+            "SELECT run_id FROM business_run_v1 WHERE data_scope IN"
+            " ('uat_fixture','demo_fixture')")}
         events = self.store.list_events()
         for e in reversed(events):  # 最新在前
             t = e.get("event_type", "")
             if t in ("node.started", "node.completed"):
                 continue  # 节点级噪声不进业务日志
+            if e.get("run_id") in _fixture_runs:
+                continue
             text = _EVENT_TEXT.get(t)
             if text is None and not any(
                     t.startswith(p) for p in ("survey.", "geo.",
@@ -383,9 +396,11 @@ class HomeCenterService:
         out: dict[str, list] = {}
 
         def _q(table: str, id_col: str, extra: str = "") -> list[dict]:
+            # SI2：最近对象默认 operational（统一口径，不散落 SQL）
             try:
                 rows = conn.execute(
-                    f"SELECT * FROM {table} ORDER BY created_at DESC"
+                    f"SELECT * FROM {table} WHERE " + OPERATIONAL_FILTER
+                    + f" ORDER BY created_at DESC"
                     f" LIMIT ?{extra}", (limit,)).fetchall()
                 return [dict(r) for r in rows]
             except Exception:
@@ -413,7 +428,8 @@ class HomeCenterService:
         try:
             rows = conn.execute(
                 "SELECT task_id, status, created_at FROM"
-                " recognition_task ORDER BY created_at DESC LIMIT ?",
+                " recognition_task WHERE " + OPERATIONAL_FILTER
+                + " ORDER BY created_at DESC LIMIT ?",
                 (limit,)).fetchall()
             out["recognition_tasks"] = [dict(r) for r in rows]
         except Exception:

@@ -2062,6 +2062,89 @@ ALTER TABLE bi_anomaly_v1 ADD COLUMN follow_up_question TEXT NOT NULL
     DEFAULT '';
 """
 
+# SI2 T3：统一执行作用域 ExecutionScopeV1（01-EXECUTION-SCOPE-CONTRACT）。
+# 唯一事实源 = 业务表 data_scope/test_run_id 字段；追加式、不删历史；
+# 名称模式仅用于一次性 legacy backfill（审计入 scope_backfill_audit_v1）。
+_M051 = """
+ALTER TABLE md_project_v1 ADD COLUMN data_scope TEXT NOT NULL DEFAULT 'operational';
+ALTER TABLE md_project_v1 ADD COLUMN test_run_id TEXT NOT NULL DEFAULT '';
+ALTER TABLE md_sku_v1 ADD COLUMN data_scope TEXT NOT NULL DEFAULT 'operational';
+ALTER TABLE md_sku_v1 ADD COLUMN test_run_id TEXT NOT NULL DEFAULT '';
+ALTER TABLE survey_definition_v1 ADD COLUMN data_scope TEXT NOT NULL DEFAULT 'operational';
+ALTER TABLE survey_definition_v1 ADD COLUMN test_run_id TEXT NOT NULL DEFAULT '';
+ALTER TABLE survey_assignment_v1 ADD COLUMN data_scope TEXT NOT NULL DEFAULT 'operational';
+ALTER TABLE survey_assignment_v1 ADD COLUMN test_run_id TEXT NOT NULL DEFAULT '';
+ALTER TABLE survey_response_v1 ADD COLUMN data_scope TEXT NOT NULL DEFAULT 'operational';
+ALTER TABLE survey_response_v1 ADD COLUMN test_run_id TEXT NOT NULL DEFAULT '';
+ALTER TABLE survey_media_v1 ADD COLUMN data_scope TEXT NOT NULL DEFAULT 'operational';
+ALTER TABLE survey_media_v1 ADD COLUMN test_run_id TEXT NOT NULL DEFAULT '';
+ALTER TABLE field_task_v1 ADD COLUMN data_scope TEXT NOT NULL DEFAULT 'operational';
+ALTER TABLE field_task_v1 ADD COLUMN test_run_id TEXT NOT NULL DEFAULT '';
+ALTER TABLE route_plan_v1 ADD COLUMN data_scope TEXT NOT NULL DEFAULT 'operational';
+ALTER TABLE route_plan_v1 ADD COLUMN test_run_id TEXT NOT NULL DEFAULT '';
+ALTER TABLE geofence_event_v1 ADD COLUMN data_scope TEXT NOT NULL DEFAULT 'operational';
+ALTER TABLE geofence_event_v1 ADD COLUMN test_run_id TEXT NOT NULL DEFAULT '';
+ALTER TABLE user_calendar_v1 ADD COLUMN data_scope TEXT NOT NULL DEFAULT 'operational';
+ALTER TABLE user_calendar_v1 ADD COLUMN test_run_id TEXT NOT NULL DEFAULT '';
+ALTER TABLE workflow_definition_v1 ADD COLUMN data_scope TEXT NOT NULL DEFAULT 'operational';
+ALTER TABLE workflow_definition_v1 ADD COLUMN test_run_id TEXT NOT NULL DEFAULT '';
+ALTER TABLE workflow_node_execution_v1 ADD COLUMN data_scope TEXT NOT NULL DEFAULT 'operational';
+ALTER TABLE workflow_node_execution_v1 ADD COLUMN test_run_id TEXT NOT NULL DEFAULT '';
+ALTER TABLE workflow_timer_v1 ADD COLUMN data_scope TEXT NOT NULL DEFAULT 'operational';
+ALTER TABLE workflow_timer_v1 ADD COLUMN test_run_id TEXT NOT NULL DEFAULT '';
+ALTER TABLE workflow_branch_v1 ADD COLUMN data_scope TEXT NOT NULL DEFAULT 'operational';
+ALTER TABLE workflow_branch_v1 ADD COLUMN test_run_id TEXT NOT NULL DEFAULT '';
+ALTER TABLE agent_run_v1 ADD COLUMN data_scope TEXT NOT NULL DEFAULT 'operational';
+ALTER TABLE agent_run_v1 ADD COLUMN test_run_id TEXT NOT NULL DEFAULT '';
+ALTER TABLE recognition_task ADD COLUMN data_scope TEXT NOT NULL DEFAULT 'operational';
+ALTER TABLE recognition_task ADD COLUMN test_run_id TEXT NOT NULL DEFAULT '';
+ALTER TABLE usage_event_v2 ADD COLUMN data_scope TEXT NOT NULL DEFAULT 'operational';
+ALTER TABLE usage_event_v2 ADD COLUMN test_run_id TEXT NOT NULL DEFAULT '';
+ALTER TABLE evidence_bundle_v1 ADD COLUMN data_scope TEXT NOT NULL DEFAULT 'operational';
+ALTER TABLE evidence_bundle_v1 ADD COLUMN test_run_id TEXT NOT NULL DEFAULT '';
+ALTER TABLE bi_report_spec_v1 ADD COLUMN data_scope TEXT NOT NULL DEFAULT 'operational';
+ALTER TABLE bi_report_spec_v1 ADD COLUMN test_run_id TEXT NOT NULL DEFAULT '';
+ALTER TABLE bi_anomaly_v1 ADD COLUMN data_scope TEXT NOT NULL DEFAULT 'operational';
+ALTER TABLE bi_anomaly_v1 ADD COLUMN test_run_id TEXT NOT NULL DEFAULT '';
+
+CREATE TABLE IF NOT EXISTS uat_test_run_v1 (
+    test_run_id TEXT PRIMARY KEY,
+    namespace TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'current',
+    customer_ids_json TEXT NOT NULL DEFAULT '[]',
+    created_by TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL,
+    archived_at TEXT NOT NULL DEFAULT ''
+);
+
+CREATE TABLE IF NOT EXISTS scope_backfill_audit_v1 (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    occurred_at TEXT NOT NULL,
+    actor TEXT NOT NULL DEFAULT '',
+    table_name TEXT NOT NULL,
+    matched_by TEXT NOT NULL DEFAULT '',
+    matched_count INTEGER NOT NULL DEFAULT 0,
+    assigned_scope TEXT NOT NULL DEFAULT '',
+    assigned_test_run_id TEXT NOT NULL DEFAULT '',
+    detail_json TEXT NOT NULL DEFAULT '{}'
+);
+
+CREATE VIEW IF NOT EXISTS object_scope_binding_v1 AS
+    SELECT 'business_run' object_type, run_id object_id,
+           COALESCE(data_scope,'operational') data_scope,
+           COALESCE(test_run_id,'') test_run_id,
+           customer_id, project_id, parent_run_id parent_id, created_at
+    FROM business_run_v1
+    UNION ALL
+    SELECT 'work_item', work_id, COALESCE(data_scope,'operational'),
+           '', customer_id, project_id, run_id, created_at
+    FROM work_item_v2
+    UNION ALL
+    SELECT 'customer', customer_id, COALESCE(data_scope,'operational'),
+           '', customer_id, '', '', created_at
+    FROM md_customer_v1;
+"""
+
 MIGRATIONS: tuple[tuple[str, str], ...] = (
     ("001_platform_init", _M001),
     ("002_labeling_inbox", _M002),
@@ -2113,6 +2196,7 @@ MIGRATIONS: tuple[tuple[str, str], ...] = (
     ("048_agent_run_business_link", _M048),
     ("049_fixture_isolation", _M049),
     ("050_anomaly_followup", _M050),
+    ("051_execution_scope_v1", _M051),
 )
 
 
@@ -3669,8 +3753,9 @@ class PlatformStore:
             " correlation_id, causation_id, subject_type, subject_id,"
             " initiator_type, initiator_id, status, current_node,"
             " version, usage_account_id, command_kind, params_json,"
-            " idempotency_key, goal_id, created_at, updated_at)"
-            " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?, ?,?,1,?,?,?,?,?,?,?)",
+            " idempotency_key, goal_id, data_scope, test_run_id,"
+            " created_at, updated_at)"
+            " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?, ?,?,1,?,?,?,?,?,?,?,?,?)",
             (row["run_id"], row.get("work_id", ""),
              row.get("tenant_id", "local"), row.get("customer_id", ""),
              row.get("project_id", ""),
@@ -3685,6 +3770,8 @@ class PlatformStore:
              row.get("command_kind", ""),
              json.dumps(row.get("params", {}), ensure_ascii=False),
              row.get("idempotency_key"), row.get("goal_id", ""),
+             row.get("data_scope", "operational"),
+             row.get("test_run_id", ""),
              now, now))
         self._conn.commit()
         return self.get_business_run(row["run_id"])
@@ -3748,15 +3835,17 @@ class PlatformStore:
             "INSERT INTO work_item_v2 (work_id, tenant_id, customer_id,"
             " project_id, run_id, status, owner_type, owner_id, title,"
             " business_summary, subject_type, subject_id, idempotency_key,"
-            " created_at, updated_at)"
-            " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            " data_scope, visibility, created_at, updated_at)"
+            " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
             (row["work_id"], row.get("tenant_id", "local"),
              row.get("customer_id", ""), row.get("project_id", ""),
              row.get("run_id", ""), row.get("status", "todo"),
              row.get("owner_type", "human"), row.get("owner_id", ""),
              row.get("title", ""), row.get("business_summary", ""),
              row.get("subject_type", ""), row.get("subject_id", ""),
-             row.get("idempotency_key"), now, now))
+             row.get("idempotency_key"),
+             row.get("data_scope", "operational"),
+             row.get("visibility", "current"), now, now))
         self._conn.commit()
         return self.get_work_item_v2(row["work_id"])
 
@@ -3860,15 +3949,20 @@ class PlatformStore:
                               capability: str = "", model: str = "",
                               profile_id: str = "", tier: str = "",
                               customer_id: str = "", project_id: str = "",
-                              source_evidence: str = "") -> dict[str, Any]:
+                              source_evidence: str = "",
+                              data_scope: str = "operational",
+                              test_run_id: str = "") -> dict[str, Any]:
+        # SI2：Usage 必须可从来源 Run 定责；缺省 operational，fixture
+        # 必带 test_run_id（ScopePolicy 在调用方 fail-closed）。
         self._conn.execute(
             "INSERT INTO usage_event_v2 (usage_id, customer_id, project_id,"
             " run_id, work_id, node, capability, model, profile_id, tier,"
-            " unit, quantity, source_evidence, occurred_at)"
-            " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            " unit, quantity, source_evidence, data_scope, test_run_id,"
+            " occurred_at)"
+            " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
             (usage_id, customer_id, project_id, run_id, work_id, node,
              capability, model, profile_id, tier, unit, float(quantity),
-             source_evidence, _utcnow()))
+             source_evidence, data_scope, test_run_id, _utcnow()))
         self._conn.commit()
         return _row_to_dict(self._conn.execute(
             "SELECT * FROM usage_event_v2 WHERE usage_id=?",
@@ -3891,14 +3985,18 @@ class PlatformStore:
                                source_uri: str = "", cas_hash: str = "",
                                content_type: str = "", producer: str = "",
                                input_hash: str = "",
-                               config_version: str = "") -> dict[str, Any]:
+                               config_version: str = "",
+                               data_scope: str = "operational",
+                               test_run_id: str = "") -> dict[str, Any]:
         self._conn.execute(
             "INSERT INTO evidence_bundle_v1 (evidence_id, run_id, work_id,"
             " kind, source_uri, cas_hash, content_type, producer,"
-            " input_hash, config_version, created_at)"
-            " VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+            " input_hash, config_version, data_scope, test_run_id,"
+            " created_at)"
+            " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
             (evidence_id, run_id, work_id, kind, source_uri, cas_hash,
-             content_type, producer, input_hash, config_version, _utcnow()))
+             content_type, producer, input_hash, config_version,
+             data_scope, test_run_id, _utcnow()))
         self._conn.commit()
         return self.get_evidence_bundle(evidence_id)
 
@@ -4114,15 +4212,23 @@ class PlatformStore:
             (run_id, node_id)).fetchone()
         now = _utcnow()
         if row is None:
+            # SI2：scope 从持久化 run 行继承（唯一事实源，不猜进程内
+            # 变量），保证 retry/restart 恢复路径不丢作用域。
+            srow = self._conn.execute(
+                "SELECT COALESCE(data_scope,'operational') ds,"
+                " COALESCE(test_run_id,'') tr FROM business_run_v1"
+                " WHERE run_id=?", (run_id,)).fetchone()
+            ds, tr = ((srow["ds"], srow["tr"]) if srow
+                      else ("operational", ""))
             self._conn.execute(
                 "INSERT INTO workflow_node_execution_v1 (run_id, node_id,"
                 " node_type, status, input_json, output_json, error,"
-                " attempts, started_at, ended_at)"
-                " VALUES (?,?,?,?,?,?,?,?,?,?)",
+                " attempts, data_scope, test_run_id, started_at, ended_at)"
+                " VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
                 (run_id, node_id, node_type, status,
                  json.dumps(input_data or {}, ensure_ascii=False),
                  json.dumps(output_data or {}, ensure_ascii=False),
-                 error, 1,
+                 error, 1, ds, tr,
                  now, now if status in ("succeeded", "failed", "skipped")
                  else None))
         else:

@@ -151,9 +151,12 @@ class AnalyticsService:
                 customer_id=customer_id, project_id=project_id,
                 _depth=_depth)
         conn = self.store._conn
+        # SI2 T4：BI 默认不聚合 fixture（统一 operational 口径）
+        from .scope import OPERATIONAL_FILTER
         if source.startswith("usage:"):
             _, unit, agg = source.split(":")
-            where = "WHERE unit=? AND customer_id=?"
+            where = ("WHERE unit=? AND customer_id=? AND "
+                     + OPERATIONAL_FILTER)
             params: list = [unit, customer_id]
             if project_id:
                 where += " AND project_id=?"; params.append(project_id)
@@ -165,26 +168,29 @@ class AnalyticsService:
             val = conn.execute(
                 "SELECT count(*) v FROM recognition_task t"
                 " JOIN business_run_v1 r ON r.run_id=t.run_id"
-                " WHERE r.customer_id=?", (customer_id,)).fetchone()["v"]
+                " WHERE r.customer_id=? AND"
+                " COALESCE(r.data_scope,'operational')='operational'",
+                (customer_id,)).fetchone()["v"]
             return float(val or 0)
         if source == "survey:submitted:count":
             val = conn.execute(
                 "SELECT count(*) v FROM survey_response_v1"
-                " WHERE customer_id=? AND status='submitted'",
-                (customer_id,)).fetchone()["v"]
+                " WHERE customer_id=? AND status='submitted' AND "
+                + OPERATIONAL_FILTER, (customer_id,)).fetchone()["v"]
             return float(val or 0)
         if source == "survey:avg_score":
             rows = conn.execute(
                 "SELECT scores_json FROM survey_response_v1"
-                " WHERE customer_id=? AND status='submitted'",
-                (customer_id,)).fetchall()
+                " WHERE customer_id=? AND status='submitted' AND "
+                + OPERATIONAL_FILTER, (customer_id,)).fetchall()
             totals = [json.loads(r["scores_json"] or "{}").get("total", 0)
                       for r in rows]
             return float(sum(totals) / len(totals)) if totals else 0.0
         if source == "workflow_runs:count":
             val = conn.execute(
                 "SELECT count(*) v FROM business_run_v1"
-                " WHERE command_kind='workflow.run' AND customer_id=?",
+                " WHERE command_kind='workflow.run' AND customer_id=?"
+                " AND " + OPERATIONAL_FILTER,
                 (customer_id,)).fetchone()["v"]
             return float(val or 0)
         raise AnalyticsError(f"未知指标来源: {source}")

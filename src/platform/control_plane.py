@@ -18,6 +18,7 @@ import uuid
 from typing import Any
 
 from .api.recognition_tasks import run_recognition_batch
+from .scope import ScopeResolver, ScopeViolation
 
 RUN_FAILED = "failed"
 
@@ -52,6 +53,7 @@ class CommandGateway:
                goal_id: str = "", tenant_id: str = "local",
                customer_id: str = "", project_id: str = "",
                parent_run_id: str | None = None,
+               test_run_id: str = "",
                ) -> dict[str, Any]:
         # 幂等：同一键返回同一 run（不重复执行副作用）
         if idempotency_key:
@@ -68,6 +70,13 @@ class CommandGateway:
                 f"未注册的命令: {command_kind}（fail-closed）")
         corr = correlation_id or "corr-" + uuid.uuid4().hex[:12]
         run_id, work_id = _new_id("run"), _new_id("work")
+        # SI2 T2：服务端解析执行作用域（fail-closed；客户端不得自证
+        # operational）。父 fixture 产生 operational 子对象 → 拒绝。
+        scope = ScopeResolver(self.store).resolve(
+            parent_run_id=parent_run_id, test_run_id=test_run_id,
+            customer_id=customer_id, project_id=project_id,
+            actor_id=actor, source=source, correlation_id=corr,
+            tenant_id=tenant_id)
         images = self._decode_images(params.get("images", []))
         self._replay_images[run_id] = images
         # 入库 params 脱敏：bytes 不落库（只记图片数），保证可序列化；
@@ -78,7 +87,8 @@ class CommandGateway:
         # 同一事务：run + work + command.accepted 事件 + outbox
         self.store.insert_business_run({
             "run_id": run_id, "work_id": work_id, "tenant_id": tenant_id,
-            "customer_id": customer_id, "project_id": project_id,
+            "customer_id": scope.customer_id,
+            "project_id": scope.project_id,
             "trigger_type": "command", "correlation_id": corr,
             "parent_run_id": parent_run_id,
             "initiator_type": "agent" if source == "agent" else "human",
@@ -86,15 +96,19 @@ class CommandGateway:
             "command_kind": command_kind, "params": stored_params,
             "idempotency_key": idempotency_key, "goal_id": goal_id,
             "workflow_definition_id": "recognition_inline_v1",
-            "workflow_version": "1"})
+            "workflow_version": "1",
+            "data_scope": scope.data_scope,
+            "test_run_id": scope.test_run_id})
         self.store.insert_work_item_v2({
             "work_id": work_id, "tenant_id": tenant_id,
-            "customer_id": customer_id, "project_id": project_id,
+            "customer_id": scope.customer_id,
+            "project_id": scope.project_id,
             "run_id": run_id, "status": "running",
             "owner_type": "system", "owner_id": "recognition_node",
             "title": "识别任务执行",
             "business_summary": f"{command_kind} · 来源 {source}",
-            "idempotency_key": idempotency_key})
+            "idempotency_key": idempotency_key,
+            "data_scope": scope.data_scope})
         self.store.emit_event(
             event_id=_new_id("evt"), event_type="command.accepted",
             run_id=run_id, work_id=work_id, correlation_id=corr,
@@ -104,7 +118,9 @@ class CommandGateway:
                      "goal_id": goal_id},
             idempotency_key=(f"{idempotency_key}:accepted"
                              if idempotency_key else None))
-        return self._execute(run_id, work_id, corr, actor, source)
+        return self._execute(run_id, work_id, corr, actor, source,
+                             scope=(scope.data_scope,
+                                    scope.test_run_id))
 
     def retry(self, run_id: str, *, actor: str) -> dict[str, Any]:
         run = self.store.get_business_run(run_id)
@@ -126,7 +142,9 @@ class CommandGateway:
                              json.loads(run.get("params_json") or "{}")
                              .get("source", "api"),
                              params=json.loads(run.get("params_json") or "{}"),
-                             images=self._replay_images.get(run_id))
+                             images=self._replay_images.get(run_id),
+                             scope=(run.get("data_scope") or "operational",
+                                    run.get("test_run_id") or ""))
 
     def cancel(self, run_id: str, *, actor: str) -> dict[str, Any]:
         run = self.store.get_business_run(run_id)
@@ -149,6 +167,7 @@ class CommandGateway:
                  actor: str, source: str,
                  params: dict[str, Any] | None = None,
                  images: list[tuple[str, bytes]] | None = None,
+                 scope: tuple[str, str] = ("operational", ""),
                  ) -> dict[str, Any]:
         store = self.store
         run = store.get_business_run(run_id)
@@ -206,7 +225,8 @@ class CommandGateway:
             tier=out.get("service_tier", ""),
             customer_id=run.get("customer_id", ""),
             project_id=run.get("project_id", ""),
-            source_evidence=evidence_ref)
+            source_evidence=evidence_ref,
+            data_scope=scope[0], test_run_id=scope[1])
         store.insert_usage_event_v2(
             usage_id=_new_id("usage"), unit="model_compute_ms",
             quantity=float(out.get("elapsed_ms") or 0), run_id=run_id,
@@ -216,7 +236,8 @@ class CommandGateway:
             tier=out.get("service_tier", ""),
             customer_id=run.get("customer_id", ""),
             project_id=run.get("project_id", ""),
-            source_evidence=evidence_ref)
+            source_evidence=evidence_ref,
+            data_scope=scope[0], test_run_id=scope[1])
         # 证据 bundle：输入 hash + 产物引用 + 生成者/配置版本
         input_hash = hashlib.sha256(json.dumps(
             [[n, hashlib.sha256(d).hexdigest()] for n, d in images],
@@ -228,7 +249,8 @@ class CommandGateway:
             producer="vision.recognition@" + str(
                 out.get("recognition_profile_id")),
             input_hash=input_hash,
-            config_version="tier=" + str(out.get("service_tier")))
+            config_version="tier=" + str(out.get("service_tier")),
+            data_scope=scope[0], test_run_id=scope[1])
         status = "succeeded" if task["status"] == "completed" else "failed"
         store.set_business_run_status(
             run_id, status, current_node="recognition",

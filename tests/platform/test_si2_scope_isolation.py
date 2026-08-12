@@ -92,9 +92,11 @@ class TestHomeFixtureIsolation:
         cid = _mk_fixture_customer(store)
         store._conn.execute(
             "INSERT INTO field_task_v1 (task_id, kind, status,"
-            " customer_id, data_scope, test_run_id, created_at)"
-            " VALUES ('ft-fx1','visit','assigned',?,?,?,datetime('now'))",
-            (cid, "uat_fixture", "uatv4_t1_fx"))
+            " customer_id, address_id, data_scope, test_run_id,"
+            " created_at, updated_at)"
+            " VALUES ('ft-fx1','visit','assigned',?,?,?,?,"
+            "datetime('now'),datetime('now'))",
+            (cid, "addr-fx", "uat_fixture", "uatv4_t1_fx"))
         store._conn.commit()
         events = home.calendar_events()
         assert not any(e.get("ref_id") == "ft-fx1" for e in events), \
@@ -105,13 +107,17 @@ class TestHomeFixtureIsolation:
         cid = _mk_fixture_customer(store)
         store._conn.execute(
             "INSERT INTO survey_definition_v1 (survey_id, name, status,"
-            " version, data_scope, test_run_id, created_at)"
-            " VALUES ('sv-fx1','fx','published',1,?,?,datetime('now'))",
+            " version, spec_json, created_by, data_scope, test_run_id,"
+            " created_at, updated_at)"
+            " VALUES ('sv-fx1','fx','published',1,'{}','t',?,?,"
+            "datetime('now'),datetime('now'))",
             ("uat_fixture", "uatv4_t1_fx"))
         store._conn.execute(
             "INSERT INTO survey_assignment_v1 (assignment_id, survey_id,"
-            " status, customer_id, data_scope, test_run_id, created_at)"
-            " VALUES ('sa-fx1','sv-fx1','assigned',?,?,?,datetime('now'))",
+            " survey_version, status, customer_id, data_scope,"
+            " test_run_id, created_at, updated_at)"
+            " VALUES ('sa-fx1','sv-fx1',1,'assigned',?,?,?,"
+            "datetime('now'),datetime('now'))",
             (cid, "uat_fixture", "uatv4_t1_fx"))
         store._conn.commit()
         events = home.calendar_events()
@@ -153,14 +159,14 @@ class TestHomeFixtureIsolation:
         store, home = env["store"], env["home"]
         store._conn.execute(
             "INSERT INTO workflow_definition_v1 (definition_id, name,"
-            " status, version, spec_json, spec_hash, data_scope,"
-            " test_run_id, created_at, updated_at)"
-            " VALUES ('wf-fx1','UAT V4 fx','published',1,'{}','h',"
+            " status, version, spec_json, spec_hash, created_by,"
+            " data_scope, test_run_id, created_at, updated_at)"
+            " VALUES ('wf-fx1','UAT V4 fx','published',1,'{}','h','t',"
             "'uat_fixture','uatv4_t1_fx',datetime('now'),datetime('now'))")
         store._conn.execute(
             "INSERT INTO bi_report_spec_v1 (spec_id, name, status,"
-            " version, spec_json, data_scope, test_run_id, created_at,"
-            " updated_at) VALUES ('bi-fx1','UAT fx 报表','draft',1,'{}',"
+            " version, created_by, data_scope, test_run_id, created_at,"
+            " updated_at) VALUES ('bi-fx1','UAT fx 报表','draft',1,'t',"
             "'uat_fixture','uatv4_t1_fx',datetime('now'),datetime('now'))")
         store._conn.commit()
         recent = home.recent_objects()
@@ -187,7 +193,7 @@ class TestHomeFixtureIsolation:
 
 class TestAgentBiFinanceIsolation:
     def test_07_supervisor_default_query_excludes_fixture(self, env):
-        from src.platform.agents.runtime import AgentRuntimeService
+        from src.platform.agents.runtime import AgentRuntime
         store = env["store"]
         cid = _mk_fixture_customer(store)
         store._conn.execute(
@@ -201,7 +207,7 @@ class TestAgentBiFinanceIsolation:
             " VALUES ('prj-op1','real-cust','real','operational',"
             "datetime('now'),datetime('now'))")
         store._conn.commit()
-        rt = AgentRuntimeService(store)
+        rt = AgentRuntime(store)
         out = rt._exec_tool("master.data.summary", {}, actor="sup",
                             customer_id="")
         assert out["projects"] == 1, \
@@ -250,7 +256,8 @@ class TestAgentBiFinanceIsolation:
         from datetime import datetime, timezone
         period = datetime.now(timezone.utc).strftime("%Y-%m")
         inv = svc.generate_invoice(customer_id="uatv4-fx-cust",
-                                   period=period, actor="fin")
+                                   period=period, actor="fin",
+                                   include_subscription=False)
         assert float(inv["total"]) == 0.0, \
             f"fixture Usage 混入客户账单：total={inv['total']}"
 
@@ -262,12 +269,12 @@ class TestAgentBiFinanceIsolation:
 class TestScopeInheritance:
     def test_10_agent_child_run_inherits_test_run_id(self, env):
         store = env["store"]
-        from src.platform.agents.runtime import AgentRuntimeService
+        from src.platform.agents.runtime import AgentRuntime
         cid = _mk_fixture_customer(store)
         _mk_run(store, "run-fx-parent", "work-fx-parent",
                 customer_id=cid, status="running",
                 command_kind="workflow.run")
-        rt = AgentRuntimeService(store)
+        rt = AgentRuntime(store)
         try:
             rt.invoke("supervisor", "汇总", actor="tester",
                       customer_id=cid, parent_run_id="run-fx-parent")
@@ -307,16 +314,16 @@ class TestScopeInheritance:
         _mk_run(store, "run-fx-wf", "work-fx-wf", customer_id=cid,
                 status="running")
         store._conn.execute(
-            "INSERT INTO workflow_node_execution_v1 (execution_id,"
-            " run_id, node_id, node_type, status, data_scope,"
-            " test_run_id, created_at)"
-            " VALUES ('ne-fx1','run-fx-wf','n1','transform','running',"
+            "INSERT INTO workflow_node_execution_v1 (run_id, node_id,"
+            " node_type, status, data_scope, test_run_id, started_at)"
+            " VALUES ('run-fx-wf','n1','transform','running',"
             "'uat_fixture','uatv4_t1_fx',datetime('now'))")
         store._conn.execute(
             "INSERT INTO workflow_timer_v1 (timer_id, run_id, node_id,"
-            " wake_at, status, data_scope, test_run_id, created_at)"
+            " fire_at, seconds, status, data_scope, test_run_id,"
+            " created_at)"
             " VALUES ('tm-fx1','run-fx-wf','n2',"
-            "'2026-08-20T00:00:00Z','pending','uat_fixture',"
+            "'2026-08-20T00:00:00Z',5,'pending','uat_fixture',"
             "'uatv4_t1_fx',datetime('now'))")
         store._conn.commit()
         from src.platform.scope import ScopedQuery
@@ -362,18 +369,20 @@ class TestArchiveAndGateLineage:
         cid = _mk_fixture_customer(store, ns="uatv4_t1_ar")
         _mk_run(store, "run-ar1", "work-ar1", customer_id=cid,
                 test_run_id="uatv4_t1_ar", status="running")
-        for table, sql in (
-            ("field_task_v1",
-             "INSERT INTO field_task_v1 (task_id, kind, status,"
-             " customer_id, data_scope, test_run_id, created_at) VALUES"
-             " ('ft-ar1','visit','assigned',?,?,?,datetime('now'))"),
-            ("survey_assignment_v1",
-             "INSERT INTO survey_assignment_v1 (assignment_id,"
-             " survey_id, status, customer_id, data_scope, test_run_id,"
-             " created_at) VALUES ('sa-ar1','sv','assigned',?,?,?,"
-             "datetime('now'))"),
-        ):
-            store._conn.execute(sql, (cid, "uat_fixture", "uatv4_t1_ar"))
+        store._conn.execute(
+            "INSERT INTO field_task_v1 (task_id, kind, status,"
+            " customer_id, address_id, data_scope, test_run_id,"
+            " created_at, updated_at) VALUES"
+            " ('ft-ar1','visit','assigned',?,?,?,?,datetime('now'),"
+            "datetime('now'))",
+            (cid, "addr-ar", "uat_fixture", "uatv4_t1_ar"))
+        store._conn.execute(
+            "INSERT INTO survey_assignment_v1 (assignment_id,"
+            " survey_id, survey_version, status, customer_id, data_scope,"
+            " test_run_id, created_at, updated_at)"
+            " VALUES ('sa-ar1','sv',1,'assigned',?,?,?,"
+            "datetime('now'),datetime('now'))",
+            (cid, "uat_fixture", "uatv4_t1_ar"))
         store._conn.commit()
         tds.archive_namespace("uatv4_t1_ar")
         assert tds.operational_residue_full() == {}, \

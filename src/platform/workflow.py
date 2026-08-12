@@ -502,21 +502,36 @@ class WorkflowService:
             raise WorkflowError(f"workflow 定义不存在: {definition_id}")
         return d
 
+    def _scope_cols(self, run_id: str) -> tuple[str, str]:
+        """SI2：从持久化 run 行读 scope（唯一事实源；恢复路径同口径）。"""
+        r = self.store.get_business_run(run_id)
+        return ((r or {}).get("data_scope") or "operational",
+                (r or {}).get("test_run_id") or "")
+
     # ---------- 运行 ----------
 
     def start_run(self, definition_id: str, *, inputs: dict, actor: str,
                   source: str = "web", version: int | None = None,
                   parent_run_id: str | None = None,
                   correlation_id: str | None = None,
-                  customer_id: str = "", project_id: str = "") -> dict:
+                  customer_id: str = "", project_id: str = "",
+                  test_run_id: str = "") -> dict:
         d = self._must(definition_id, version)
         if d["status"] != "published":
             raise WorkflowError(
                 f"只有 published 可运行（当前 {d['status']}）")
         corr = correlation_id or "corr-" + uuid.uuid4().hex[:12]
+        # SI2 T2：服务端解析作用域（父 Run/Test Run/Customer 继承，
+        # fail-closed）。
+        from .scope import ScopeResolver
+        scope = ScopeResolver(self.store).resolve(
+            parent_run_id=parent_run_id, test_run_id=test_run_id,
+            customer_id=customer_id, project_id=project_id,
+            actor_id=actor, source=source, correlation_id=corr)
         run = self.store.insert_business_run({
             "run_id": _new_id("run"), "work_id": _new_id("work"),
-            "customer_id": customer_id, "project_id": project_id,
+            "customer_id": scope.customer_id,
+            "project_id": scope.project_id,
             "trigger_type": d["spec"].get("trigger", {}).get(
                 "type", "manual"),
             "correlation_id": corr, "parent_run_id": parent_run_id,
@@ -525,13 +540,16 @@ class WorkflowService:
             "params": {"definition_id": definition_id,
                        "version": d["version"]},
             "workflow_definition_id": definition_id,
-            "workflow_version": str(d["version"])})
+            "workflow_version": str(d["version"]),
+            "data_scope": scope.data_scope,
+            "test_run_id": scope.test_run_id})
         self.store.insert_work_item_v2({
             "work_id": run["work_id"], "run_id": run["run_id"],
             "status": "running", "owner_type": "system",
             "owner_id": "workflow_runtime",
             "title": f"工作流：{d['name']}",
-            "business_summary": f"{definition_id}@v{d['version']}"})
+            "business_summary": f"{definition_id}@v{d['version']}",
+            "data_scope": scope.data_scope})
         self.store.emit_event(
             event_id=_new_id("evt"), event_type="workflow.started",
             run_id=run["run_id"], work_id=run["work_id"],
@@ -987,13 +1005,16 @@ class WorkflowService:
                 r = by_entry.get(entry)
                 if r is None:
                     bid = _new_id("br")
+                    bds, btr = self._scope_cols(run_id)
                     conn.execute(
                         "INSERT INTO workflow_branch_v1 (branch_id,"
                         " run_id, node_id, branch_index, status,"
-                        " output_json, created_at, updated_at)"
-                        " VALUES (?,?,?,?,?,?,?,?)",
+                        " output_json, data_scope, test_run_id,"
+                        " created_at, updated_at)"
+                        " VALUES (?,?,?,?,?,?,?,?,?,?)",
                         (bid, run_id, node["id"], i, "pending",
-                         json.dumps({"entry": entry}), _now_iso(),
+                         json.dumps({"entry": entry}), bds, btr,
+                         _now_iso(),
                          _now_iso()))
                     conn.commit()
                     r = {"branch_id": bid, "status": "pending",
@@ -1004,13 +1025,16 @@ class WorkflowService:
         else:
             for i, entry in enumerate(entries):
                 bid = _new_id("br")
+                bds, btr = self._scope_cols(run_id)
                 conn.execute(
                     "INSERT INTO workflow_branch_v1 (branch_id,"
                     " run_id, node_id, branch_index, status,"
-                    " output_json, created_at, updated_at)"
-                    " VALUES (?,?,?,?,?,?,?,?)",
+                    " output_json, data_scope, test_run_id,"
+                    " created_at, updated_at)"
+                    " VALUES (?,?,?,?,?,?,?,?,?,?)",
                     (bid, run_id, node["id"], i, "pending",
-                     json.dumps({"entry": entry}), _now_iso(),
+                     json.dumps({"entry": entry}), bds, btr,
+                     _now_iso(),
                      _now_iso()))
                 conn.commit()
                 branches.append({"branch_id": bid, "entry": entry,
@@ -1459,12 +1483,14 @@ class WorkflowService:
             fire_at = (datetime.now(timezone.utc)
                        + timedelta(seconds=seconds)).isoformat()
             timer_id = _new_id("tmr")
+            tds, ttr = self._scope_cols(run_id)
             self.store._conn.execute(
                 "INSERT INTO workflow_timer_v1 (timer_id, run_id,"
-                " node_id, fire_at, seconds, status, created_at)"
-                " VALUES (?,?,?,?,?,?,?)",
+                " node_id, fire_at, seconds, status, data_scope,"
+                " test_run_id, created_at)"
+                " VALUES (?,?,?,?,?,?,?,?,?)",
                 (timer_id, run_id, node["id"], fire_at, seconds,
-                 "pending", _now_iso()))
+                 "pending", tds, ttr, _now_iso()))
             self.store._conn.commit()
             self.store.set_business_run_status(
                 run_id, "waiting_timer", current_node=node["id"])

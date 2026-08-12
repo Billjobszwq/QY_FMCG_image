@@ -17,7 +17,8 @@ import time
 from pathlib import Path
 
 READY = "READY_FOR_REAL_DATA_UAT"
-EVALUATOR_VERSION = "2.0.0"
+STALE = "STALE_GATE_EVIDENCE"
+EVALUATOR_VERSION = "2.1.0"
 
 # UAT 主工作流必备节点类型；model/command 任一即可作为 capability
 # 节点（指令："model或command/capability"）。
@@ -163,20 +164,63 @@ def evaluate_gate_from_evidence(*, store=None,
                                 test_report_path=None,
                                 service_health=None,
                                 source_commit: str = "",
+                                current_head: str = "",
+                                recorded_tree_hash: str = "",
+                                current_tree_hash: str = "",
                                 out_path=None) -> dict:
-    """从证据自动计算 Gate。任一证据缺失/失败 → BLOCKED_BY_*。"""
+    """从证据自动计算 Gate（2.1）。任一证据缺失/失败 → BLOCKED_BY_*；
+    Gate 生成后代码/证据变化 → STALE_GATE_EVIDENCE。判定优先级：
+    STALE > 浏览器语义 > scope lineage > fixture 泄漏 > 状态投影 >
+    其余证据缺失。"""
     checks: list[dict] = []
     block_hint: list[str] = []
 
     def chk(name: str, ok: bool, evidence: str = "",
             block: str = "") -> bool:
         checks.append({"check": name, "ok": bool(ok),
-                       "evidence": str(evidence)[:300]})
+                       "evidence": str(evidence)[:300],
+                       "block": block})
         if not ok and block and block not in block_hint:
             block_hint.append(block)
         return bool(ok)
 
     evidence_hashes: dict[str, str] = {}
+
+    # ---- SI2 T6：Gate 必须绑定当前代码状态（P1-004） ----
+    if current_head:
+        chk("gate_bound_to_head", source_commit == current_head,
+            f"source_commit={source_commit} head={current_head}",
+            STALE)
+    if recorded_tree_hash or current_tree_hash:
+        chk("code_tree_hash_match",
+            bool(recorded_tree_hash)
+            and recorded_tree_hash == current_tree_hash,
+            f"recorded={recorded_tree_hash[:16]}"
+            f" current={current_tree_hash[:16]}",
+            STALE)
+
+    # ---- SI2 T6：全 Domain scope lineage（直接重算，不信自报） ----
+    if store is not None:
+        try:
+            from .scope import ScopedQuery
+            sq = ScopedQuery(store)
+            leak = sq.operational_leakage()
+            leak_total = sum(leak.values())
+            chk("full_domain_fixture_leakage_zero", not leak,
+                f"{leak_total} tables={sorted(leak)[:6]}",
+                "BLOCKED_BY_UAT_FIXTURE_PROJECTION")
+            missing = sq.fixture_missing_test_run()
+            chk("fixture_test_run_id_full", missing == 0,
+                str(missing), "BLOCKED_BY_SCOPE_LINEAGE")
+            mismatch = sq.parent_child_mismatch()
+            chk("parent_child_scope_consistent", mismatch == 0,
+                str(mismatch), "BLOCKED_BY_SCOPE_LINEAGE")
+            residue = sq.recovery_residue()
+            chk("recovery_scope_consistent", residue == 0,
+                str(residue), "BLOCKED_BY_SCOPE_LINEAGE")
+        except Exception as e:
+            chk("scope_lineage_scanned", False, f"扫描异常: {e}",
+                "BLOCKED_BY_SCOPE_LINEAGE")
 
     # ---- UAT 报告与 validator ----
     rep = _load_json(uat_report_path) if uat_report_path else None
@@ -255,9 +299,10 @@ def evaluate_gate_from_evidence(*, store=None,
             int(rep.get("operational_residue",
                         (rep.get("projection") or {})
                         .get("operational_residue", 1))) == 0,
-            str(rep.get("operational_residue"
-                        or (rep.get("projection") or {})
-                        .get("operational_residue"))),
+            # SI2-007：0 必须显示为数字 0，不得因 falsy/or 变 None
+            str(int(rep.get("operational_residue",
+                            (rep.get("projection") or {})
+                            .get("operational_residue", 1)))),
             "BLOCKED_BY_UAT_FIXTURE_POLLUTION")
         # Usage 完整率
         usage = rep.get("usage_lineage") or {}
@@ -325,7 +370,7 @@ def evaluate_gate_from_evidence(*, store=None,
         chk("test_report_present", False, "测试报告缺失",
             "BLOCKED_BY_GATE_EVIDENCE")
 
-    # ---- 浏览器证据（文件必须存在，不接受纯文字） ----
+    # ---- 浏览器证据（文件必须存在，不接受纯文字；SI2 T7：语义断言） ----
     brow = _load_json(browser_report_path) if browser_report_path else None
     if browser_report_path:
         evidence_hashes["browser_report"] = _file_sha(
@@ -346,6 +391,20 @@ def evaluate_gate_from_evidence(*, store=None,
             brow.get("console_errors_unexplained", 1) == 0,
             str(brow.get("console_errors_unexplained")),
             "BLOCKED_BY_GATE_EVIDENCE")
+        # SI2 T7：实际对象 ID/文本必须与预期一致（不得只看截图存在）
+        pages = brow.get("pages") or []
+        bad = [p.get("route", "?") for p in pages
+               if not p.get("assertion", False)
+               or str(p.get("actual_object_id", ""))
+               != str(p.get("expected_object_id", ""))]
+        if pages:
+            chk("browser_semantic_assertions", not bad,
+                f"pages={len(pages)} failed={bad[:5]}",
+                "BLOCKED_BY_BROWSER_SEMANTICS")
+        else:
+            chk("browser_semantic_assertions", False,
+                "无语义断言页面（pages=[]）",
+                "BLOCKED_BY_BROWSER_SEMANTICS")
 
     # ---- 服务健康 ----
     if service_health is not None:
@@ -356,14 +415,25 @@ def evaluate_gate_from_evidence(*, store=None,
         chk("service_health_present", False, "服务健康证据缺失",
             "BLOCKED_BY_GATE_EVIDENCE")
 
-    # ---- 判定 ----
+    # ---- 判定（优先级：STALE > 语义 > lineage > 泄漏 > 投影 > 证据） ----
     all_ok = all(c["ok"] for c in checks)
     if all_ok:
         gate = READY
         reasons: list[str] = []
     else:
-        gate = block_hint[0] if block_hint else "BLOCKED_BY_GATE_EVIDENCE"
-        reasons = [c["check"] for c in checks if not c["ok"]]
+        failed = [c for c in checks if not c["ok"]]
+        reasons = [c["check"] for c in failed]
+        gate = "BLOCKED_BY_GATE_EVIDENCE"
+        for prio in (STALE, "BLOCKED_BY_BROWSER_SEMANTICS",
+                     "BLOCKED_BY_SCOPE_LINEAGE",
+                     "BLOCKED_BY_UAT_FIXTURE_PROJECTION",
+                     "BLOCKED_BY_UAT_FIXTURE_POLLUTION",
+                     "BLOCKED_BY_STATE_PROJECTION"):
+            if any(c.get("block") == prio for c in failed):
+                gate = prio
+                break
+        else:
+            gate = block_hint[0] if block_hint else gate
     result = {"gate": gate, "reasons": reasons, "checks": checks,
               "evidence_hashes": evidence_hashes,
               "evaluated_at": time.strftime("%Y-%m-%dT%H:%M:%S%z"),

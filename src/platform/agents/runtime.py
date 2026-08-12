@@ -315,16 +315,18 @@ class AgentRuntime:
                     return conn.execute(sql).fetchone()["c"]
                 except Exception:
                     return 0
-            # UFC T4：Agent 默认查询不混入 fixture
+            # UFC T4 / SI2 T4：Agent 默认查询不混入 fixture（全表统一口径）
             return {"customers": _c("md_customer_v1", True),
-                    "projects": _c("md_project_v1"),
-                    "skus": _c("md_sku_v1"),
-                    "addresses": _c("geo_address_v1"),
-                    "employees": _c("geo_employee_v1")}
+                    "projects": _c("md_project_v1", True),
+                    "skus": _c("md_sku_v1", True),
+                    "addresses": _c("geo_address_v1", True),
+                    "employees": _c("geo_employee_v1", True)}
         if tool_id == "survey.list":
             rows = conn.execute(
                 "SELECT survey_id, name, status, version FROM"
-                " survey_definition_v1 ORDER BY created_at DESC"
+                " survey_definition_v1 WHERE"
+                " COALESCE(data_scope,'operational')='operational'"
+                " ORDER BY created_at DESC"
                 " LIMIT 10").fetchall()
             return {"surveys": [dict(r) for r in rows],
                     "ui_intent": {"kind": "navigate",
@@ -440,7 +442,7 @@ class AgentRuntime:
                session_id: str = "", customer_id: str = "",
                project_id: str = "", parent_run_id: str | None = None,
                correlation_id: str = "", tenant_id: str = "local",
-               branch_id: str = "") -> dict:
+               branch_id: str = "", test_run_id: str = "") -> dict:
         d = self.get_published_definition(agent_id)
         degraded = False
         if d is None:
@@ -460,8 +462,16 @@ class AgentRuntime:
         # UATCC T2：统一身份模型——每次调用必有 agent_run +
         # BusinessRun + WorkItem + Evidence + 挂链 Usage。
         # 缺 customer/project 时明确写 unattributed（不静默空串）。
-        attr_customer = customer_id or "unattributed"
-        attr_project = project_id or "unattributed"
+        # SI2 T2：作用域服务端解析（父 Run/Test Run 继承，fail-closed）。
+        from ..scope import ScopeResolver
+        corr_pre = correlation_id or ""
+        scope = ScopeResolver(self.store).resolve(
+            parent_run_id=parent_run_id, test_run_id=test_run_id,
+            customer_id=customer_id, project_id=project_id,
+            actor_id=actor, source="agent" if parent_run_id else "web",
+            correlation_id=corr_pre, tenant_id=tenant_id)
+        attr_customer = scope.customer_id or "unattributed"
+        attr_project = scope.project_id or "unattributed"
         run_id = _new_id("arun")
         biz_run_id = _new_id("run")
         work_id = _new_id("work")
@@ -471,10 +481,12 @@ class AgentRuntime:
         t0 = time.time()
         self.store._conn.execute(
             "INSERT INTO agent_run_v1 (run_id, agent_id, session_id,"
-            " intent, status, actor, customer_id, project_id, created_at)"
-            " VALUES (?,?,?,?,?,?,?,?,?)",
+            " intent, status, actor, customer_id, project_id, data_scope,"
+            " test_run_id, created_at)"
+            " VALUES (?,?,?,?,?,?,?,?,?,?,?)",
             (run_id, agent_id, session_id, text[:400], "running",
-             actor, attr_customer, attr_project, _now()))
+             actor, attr_customer, attr_project, scope.data_scope,
+             scope.test_run_id, _now()))
         self.store.insert_business_run({
             "run_id": biz_run_id, "work_id": work_id,
             "tenant_id": tenant_id, "customer_id": attr_customer,
@@ -485,7 +497,9 @@ class AgentRuntime:
             "status": "queued", "command_kind": "agent.invoke",
             "params": {"agent_id": agent_id, "intent": text[:200],
                        "definition_version": d["version"],
-                       "provider": d["provider"]}})
+                       "provider": d["provider"]},
+            "data_scope": scope.data_scope,
+            "test_run_id": scope.test_run_id})
         self.store.insert_work_item_v2({
             "work_id": work_id, "tenant_id": tenant_id,
             "customer_id": attr_customer, "project_id": attr_project,
@@ -493,7 +507,8 @@ class AgentRuntime:
             "owner_type": "agent", "owner_id": agent_id,
             "title": f"Agent {agent_id} 调用",
             "business_summary": text[:120],
-            "subject_type": "agent_run", "subject_id": run_id})
+            "subject_type": "agent_run", "subject_id": run_id,
+            "data_scope": scope.data_scope})
         self.store.emit_event(
             event_id=_new_id("evt"), event_type="command.accepted",
             run_id=biz_run_id, work_id=work_id, correlation_id=corr,
@@ -628,7 +643,9 @@ class AgentRuntime:
                 source_uri=f"agent_run:{run_id}", cas_hash=cas_hash,
                 content_type="application/json",
                 producer=f"agent:{agent_id}",
-                config_version=f"def@v{d['version']}")
+                config_version=f"def@v{d['version']}",
+                data_scope=scope.data_scope,
+                test_run_id=scope.test_run_id)
             self.store.set_business_run_status(
                 biz_run_id, final if final != "succeeded" else "succeeded",
                 error=hard_error,
@@ -652,7 +669,9 @@ class AgentRuntime:
                 node=branch_id or agent_id,
                 capability=f"agent.{agent_id}.invoke",
                 customer_id=attr_customer, project_id=attr_project,
-                source_evidence=f"evidence_bundle:{evid_id}")
+                source_evidence=f"evidence_bundle:{evid_id}",
+                data_scope=scope.data_scope,
+                test_run_id=scope.test_run_id)
         except Exception as e:
             # 账本写失败 → fail-closed：不得静默吞错
             raise AgentRuntimeError(
@@ -681,12 +700,24 @@ class AgentRuntime:
         evid_id = _new_id("evid")
         initiator_type = "agent" if parent_run_id else "human"
         err = "AGENT_DEFINITION_NOT_FOUND"
+        # SI2：受控失败同样继承作用域（失败账本也分 fixture/operational）
+        from ..scope import ScopeResolver
+        try:
+            fscope = ScopeResolver(self.store).resolve(
+                parent_run_id=parent_run_id, customer_id=customer_id,
+                project_id=project_id, actor_id=actor,
+                correlation_id=corr, tenant_id=tenant_id)
+        except Exception:
+            from ..scope import ExecutionScopeV1
+            fscope = ExecutionScopeV1()
         self.store._conn.execute(
             "INSERT INTO agent_run_v1 (run_id, agent_id, session_id,"
-            " intent, status, actor, customer_id, project_id," " created_at, ended_at)"
-            " VALUES (?,?,?,?,?,?,?,?,?,?)",
+            " intent, status, actor, customer_id, project_id, data_scope,"
+            " test_run_id, created_at, ended_at)"
+            " VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
             (arun, agent_id, session_id, text[:400], "failed",
-             actor, attr_customer, attr_project, _now(), _now()))
+             actor, attr_customer, attr_project, fscope.data_scope,
+             fscope.test_run_id, _now(), _now()))
         self.store.insert_business_run({
             "run_id": biz_run_id, "work_id": work_id,
             "tenant_id": tenant_id, "customer_id": attr_customer,
@@ -696,7 +727,9 @@ class AgentRuntime:
             "initiator_type": initiator_type, "initiator_id": actor,
             "status": "queued", "command_kind": "agent.invoke",
             "params": {"agent_id": agent_id, "intent": text[:200],
-                       "error_code": err}})
+                       "error_code": err},
+            "data_scope": fscope.data_scope,
+            "test_run_id": fscope.test_run_id})
         self.store.insert_work_item_v2({
             "work_id": work_id, "tenant_id": tenant_id,
             "customer_id": attr_customer, "project_id": attr_project,
@@ -723,7 +756,9 @@ class AgentRuntime:
                                 "agent_id": agent_id}).encode()
                 ).hexdigest(),
                 content_type="application/json",
-                producer=f"agent:{agent_id}", config_version="def@v0")
+                producer=f"agent:{agent_id}", config_version="def@v0",
+                data_scope=fscope.data_scope,
+                test_run_id=fscope.test_run_id)
             self.store.set_business_run_status(
                 biz_run_id, "failed", error=err,
                 evidence_bundle_id=evid["evidence_id"])
@@ -744,7 +779,9 @@ class AgentRuntime:
                 node=branch_id or agent_id,
                 capability=f"agent.{agent_id}.invoke",
                 customer_id=attr_customer, project_id=attr_project,
-                source_evidence=f"evidence_bundle:{evid_id}")
+                source_evidence=f"evidence_bundle:{evid_id}",
+                data_scope=fscope.data_scope,
+                test_run_id=fscope.test_run_id)
             self.store._conn.execute(
                 "UPDATE agent_run_v1 SET business_run_id=?,"
                 " evidence_bundle_id=? WHERE run_id=?",
