@@ -155,14 +155,18 @@ class AnalyticsService:
         from .scope import OPERATIONAL_FILTER
         if source.startswith("usage:"):
             _, unit, agg = source.split(":")
-            where = ("WHERE unit=? AND customer_id=? AND "
-                     + OPERATIONAL_FILTER)
+            # SI2：usage 为不可变账本；fixture 经来源 run 的 scope 判定
+            where = ("WHERE unit=? AND u.customer_id=? AND "
+                     "COALESCE(u.data_scope,'operational')='operational'"
+                     " AND COALESCE(r.data_scope,'operational')"
+                     "='operational'")
             params: list = [unit, customer_id]
             if project_id:
-                where += " AND project_id=?"; params.append(project_id)
+                where += " AND u.project_id=?"; params.append(project_id)
             val = conn.execute(
-                f"SELECT {'sum(quantity)' if agg == 'sum' else 'count(*)'}"
-                f" v FROM usage_event_v2 {where}", params).fetchone()["v"]
+                f"SELECT {'sum(u.quantity)' if agg == 'sum' else 'count(*)'}"
+                f" v FROM usage_event_v2 u LEFT JOIN business_run_v1 r"
+                f" ON r.run_id=u.run_id {where}", params).fetchone()["v"]
             return float(val or 0)
         if source == "recognition_tasks:count":
             val = conn.execute(

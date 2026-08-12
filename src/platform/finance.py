@@ -137,6 +137,7 @@ class FinanceService:
             " LEFT JOIN business_run_v1 r ON r.run_id=u.run_id"
             " WHERE u.customer_id=? AND strftime('%Y-%m', u.occurred_at)=?"
             " AND COALESCE(u.data_scope,'operational')='operational'"
+            " AND COALESCE(r.data_scope,'operational')='operational'"
             " ORDER BY u.occurred_at", (customer_id, period)).fetchall()
         groups: dict[str, list[dict]] = {}
         for u in usage_rows:
