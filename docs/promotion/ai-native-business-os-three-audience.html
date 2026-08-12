@@ -81,7 +81,7 @@
       background: transparent;
       cursor: pointer;
     }
-    .audience-tab { min-height: 42px; padding: 8px 16px; }
+    .audience-tab { min-height: 44px; padding: 8px 16px; }
     .audience-tab[aria-selected="true"] { color: var(--ink); border-color: var(--token-violet); border-bottom-width: 3px; background: linear-gradient(90deg, rgba(217,43,85,.10), rgba(114,0,255,.12), rgba(7,156,148,.09)); font-weight: 700; }
     .hero { min-height: 650px; display: grid; grid-template-columns: minmax(0, 2fr) minmax(260px, .85fr); gap: clamp(38px, 6vw, 88px); align-items: center; padding-block: clamp(72px, 10vw, 140px) 72px; }
     .hero-copy { align-self: end; }
@@ -142,7 +142,7 @@
     .chapter-button { flex: 0 0 auto; padding: 10px 12px; font-size: 13px; border-bottom-color: transparent; }
     .chapter-button[aria-current="step"] { color: var(--ink); border-bottom: 3px solid var(--execution); background: var(--execution-soft); font-weight: 700; }
     .controls { display: flex; gap: 6px; align-items: center; }
-    .mode-button, .nav-button { min-height: 38px; padding: 7px 12px; border-color: var(--line); }
+    .mode-button, .nav-button { min-height: 44px; padding: 8px 12px; border-color: var(--line); }
     .mode-button[aria-pressed="true"] { color: var(--ink); border: 2px solid var(--trust); background: var(--trust-soft); font-weight: 700; }
     .nav-button:disabled { opacity: .35; cursor: not-allowed; }
     main { padding-bottom: 88px; }
@@ -254,8 +254,6 @@
       .chapter-copy, .chapter-visual { grid-column: 1; }
       .chapter-copy { max-width: 700px; }
       .chapter-visual { padding-left: 0; }
-      .diagram-label, .state-title, .gate span, .converge,
-      .layer span, .cap-row span, .wheel-node, .value-rung small { font-size: 12px; }
       .loop-svg { display: none; }
       .loop-mobile { display: grid; gap: 0; }
       .loop-mobile-stage { position: relative; min-height: 66px; display: grid; grid-template-columns: 38px 1fr; gap: 12px; align-items: center; padding: 10px 12px; border-left: 2px solid var(--token-violet); background: var(--surface-paper); }
@@ -278,7 +276,7 @@
       .hero-flow-mobile .mobile-flow-stage + .mobile-flow-stage::before,
       .hero-flow-mobile small, .hero-flow-mobile .mobile-governance,
       .loop-mobile-stage strong, .diagram-label, .state-title,
-      .gate span, .converge, .layer span, .cap-row span,
+      .gate span, .layer span, .cap-row span,
       .wheel-node, .value-rung small { font-size: 12px; }
     }
     @media (max-width: 520px) {
@@ -292,8 +290,8 @@
       .workspace-bar { position: static; }
       .chapter-nav { width: 100%; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
       .chapter-button { width: 100%; white-space: normal; text-align: left; }
-      .controls { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); }
-      .controls button { width: 100%; min-width: 0; padding-inline: 5px; white-space: normal; }
+      .controls { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .controls button { width: 100%; min-width: 0; white-space: normal; }
       .hero { padding-top: 56px; }
       .hero-copy, .hero-statement, .hero-loop-summary { grid-column: 1; }
       .hero-statement { padding: 22px 0 0 18px; }
@@ -465,6 +463,7 @@
     const $ = (selector) => document.querySelector(selector);
     const $$ = (selector) => Array.from(document.querySelectorAll(selector));
     const escapeHtml = (value) => String(value).replace(/[&<>"]/g, (char) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[char]));
+    const scrollBehavior = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth';
 
     function classForLoopIndex(index) {
       if (index === 2) return 'node node-trust';
@@ -522,7 +521,7 @@
       $$('.chapter').forEach((section,i)=>section.classList.toggle('is-active',i===safe));
       $$('.chapter-button').forEach((button,i)=>i===safe?button.setAttribute('aria-current','step'):button.removeAttribute('aria-current'));
       updateChapterState();
-      if(state.mode==='browse') document.querySelector(`#chapter-${safe}`)?.scrollIntoView({behavior:'smooth',block:'start'});
+      if(state.mode==='browse') document.querySelector(`#chapter-${safe}`)?.scrollIntoView({behavior:scrollBehavior(),block:'start'});
     }
 
     function setMode(mode) {
@@ -530,7 +529,7 @@
       state.mode=mode; document.body.dataset.mode=mode;
       $('#browse-mode').setAttribute('aria-pressed',String(mode==='browse')); $('#present-mode').setAttribute('aria-pressed',String(mode==='present'));
       updateChapterState();
-      if(mode==='present') window.scrollTo({top:0,behavior:'smooth'});
+      if(mode==='present') window.scrollTo({top:0,behavior:scrollBehavior()});
     }
 
     function updateChapterState(){
