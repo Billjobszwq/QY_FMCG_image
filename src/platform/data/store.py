@@ -2145,6 +2145,14 @@ CREATE VIEW IF NOT EXISTS object_scope_binding_v1 AS
     FROM md_customer_v1;
 """
 
+# SI2 T8：Geo 域主数据（地址/员工）补齐结构化 scope 字段。
+_M052 = """
+ALTER TABLE geo_address_v1 ADD COLUMN data_scope TEXT NOT NULL DEFAULT 'operational';
+ALTER TABLE geo_address_v1 ADD COLUMN test_run_id TEXT NOT NULL DEFAULT '';
+ALTER TABLE geo_employee_v1 ADD COLUMN data_scope TEXT NOT NULL DEFAULT 'operational';
+ALTER TABLE geo_employee_v1 ADD COLUMN test_run_id TEXT NOT NULL DEFAULT '';
+"""
+
 MIGRATIONS: tuple[tuple[str, str], ...] = (
     ("001_platform_init", _M001),
     ("002_labeling_inbox", _M002),
@@ -2197,6 +2205,7 @@ MIGRATIONS: tuple[tuple[str, str], ...] = (
     ("049_fixture_isolation", _M049),
     ("050_anomaly_followup", _M050),
     ("051_execution_scope_v1", _M051),
+    ("052_execution_scope_geo_v1", _M052),
 )
 
 

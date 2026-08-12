@@ -164,6 +164,47 @@ class ScopeResolver:
             parent_run_id=run.get("parent_run_id") or "")
 
 
+# 允许经受信 API（管理员显式携带 test_run_id）直接绑定 fixture
+# scope 的表白名单（与迁移 051 同源；防止任意表写入）。
+_BINDABLE_TABLES = {
+    "md_customer_v1": "customer_id",
+    "md_project_v1": "project_id",
+    "md_sku_v1": "sku_id",
+    "geo_employee_v1": "employee_id",
+    "geo_address_v1": "address_id",
+    "field_task_v1": "task_id",
+    "route_plan_v1": "plan_id",
+    "user_calendar_v1": "event_id",
+    "survey_definition_v1": "survey_id",
+    "survey_assignment_v1": "assignment_id",
+    "survey_response_v1": "response_id",
+    "survey_media_v1": "media_id",
+    "workflow_definition_v1": "definition_id",
+    "bi_report_spec_v1": "spec_id",
+    "bi_dashboard_v1": "dashboard_id",
+    "bi_anomaly_v1": "anomaly_id",
+    "recognition_task": "task_id",
+}
+
+
+def bind_fixture_scope(store: Any, table: str, object_id: str,
+                       test_run_id: str) -> None:
+    """受信创建路径：对象创建后立即结构化绑定 fixture scope（同一
+    连接；非名称模式）。仅限白名单表；违规 fail-closed。"""
+    if table not in _BINDABLE_TABLES:
+        raise ScopeViolation("SCOPE_BIND_TABLE_NOT_ALLOWED", table)
+    if not test_run_id:
+        raise ScopeViolation("SCOPE_MISSING_TEST_RUN_ID", table)
+    id_col = _BINDABLE_TABLES[table]
+    n = store._conn.execute(
+        f"UPDATE {table} SET data_scope='uat_fixture', test_run_id=?"
+        f" WHERE {id_col}=?", (test_run_id, object_id))
+    store._conn.commit()
+    if n.rowcount != 1:
+        raise ScopeViolation("SCOPE_BIND_OBJECT_NOT_FOUND",
+                             f"{table}:{object_id}")
+
+
 class ScopedQuery:
     """默认 operational 的查询口径与一致性扫描（T4/T6 消费）。"""
 

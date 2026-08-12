@@ -22,6 +22,7 @@ class CommandBody(BaseModel):
     customer_id: str = ""
     project_id: str = ""
     idempotency_key: str | None = None
+    test_run_id: str = ""   # SI2：UAT Test Run 上下文（受信路径）
 
 
 class RetryBody(BaseModel):
@@ -46,7 +47,8 @@ def create_control_plane_router(store: Any, gateway: CommandGateway,
                 command_kind=body.command_kind, params=body.params,
                 actor=p["actor"], source=body.source,
                 idempotency_key=idem, goal_id=body.goal_id,
-                customer_id=body.customer_id, project_id=body.project_id)
+                customer_id=body.customer_id, project_id=body.project_id,
+                test_run_id=body.test_run_id)
         except CommandGatewayError as e:
             raise HTTPException(400, str(e))
         run = store.get_business_run(out["run_id"])

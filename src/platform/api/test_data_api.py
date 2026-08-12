@@ -1,4 +1,5 @@
-"""UFC T4：测试与证据 API（UAT fixture 隔离/归档/查询）。"""
+"""UFC T4 / SI2 T5：测试与证据 API（UAT fixture 隔离/归档/查询/
+Test Run 上下文/一致性扫描）。"""
 from __future__ import annotations
 
 from typing import Any
@@ -14,6 +15,11 @@ from ..test_data import TestDataService
 class MarkBody(BaseModel):
     namespace: str
     customer_ids: list[str]
+
+
+class TestRunBody(BaseModel):
+    namespace: str
+    customer_ids: list[str] = []
 
 
 class ArchiveBody(BaseModel):
@@ -36,7 +42,28 @@ def create_test_data_router(store: Any, svc: TestDataService,
     def namespaces(request: Request) -> dict:
         p = require_principal(auth, request, csrf=False)
         return {"namespaces": svc.list_namespaces(),
-                "operational_residue": svc.operational_residue()}
+                "operational_residue": svc.operational_residue(),
+                "operational_residue_full": svc.operational_residue_full()}
+
+    @router.get("/api/v1/test-data/center")
+    def center(request: Request) -> dict:
+        """SI2 T5：测试与证据中心总览（fixture 历史完整可审计；
+        不提供不可恢复删除）。"""
+        p = require_principal(auth, request, csrf=False)
+        return svc.center_summary()
+
+    @router.post("/api/v1/test-data/run")
+    def create_test_run(body: TestRunBody, request: Request) -> dict:
+        """SI2：UAT 必须先建 Test Run 上下文，再在其内部创建对象。"""
+        p = require_principal(auth, request, csrf=True)
+        if not _is_admin(iam, p["actor"], p["role"]):
+            raise HTTPException(403, "仅平台管理员可创建 UAT 上下文")
+        try:
+            return svc.create_test_run_context(
+                body.namespace, customer_ids=body.customer_ids,
+                actor=p["actor"])
+        except ValueError as e:
+            raise HTTPException(400, str(e))
 
     @router.get("/api/v1/test-data/work")
     def fixture_work(request: Request, namespace: str = "",

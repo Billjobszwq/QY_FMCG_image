@@ -9,11 +9,13 @@ from pydantic import BaseModel
 from ..auth import AuthService, require_principal
 from ..field_ops import FieldOpsError, FieldOpsService
 from ..iam import IAMService
+from ..scope import bind_fixture_scope
 
 
 class AddressBody(BaseModel):
     customer_id: str
     raw: str
+    test_run_id: str = ""
 
 
 class VerifyBody(BaseModel):
@@ -36,6 +38,7 @@ class EmployeeBody(BaseModel):
     name: str
     skills: list = []
     vehicle: str = ""
+    test_run_id: str = ""
 
 
 class TaskBody(BaseModel):
@@ -46,12 +49,14 @@ class TaskBody(BaseModel):
     survey_id: str = ""
     require_storefront: bool = True
     selfie_required: bool = False
+    test_run_id: str = ""
 
 
 class PlanBody(BaseModel):
     customer_id: str
     task_ids: list[str] = []
     constraints: dict = {}
+    test_run_id: str = ""
 
 
 class DispatchBody(BaseModel):
@@ -119,8 +124,12 @@ def create_geo_router(store: Any, svc: FieldOpsService, iam: IAMService,
     def add_address(body: AddressBody, request: Request) -> dict:
         p = require_principal(auth, request, csrf=True)
         _guard(iam, p["actor"], p["role"], body.customer_id)
-        return {"address": _wrap(svc.add_address)(
-            customer_id=body.customer_id, raw=body.raw, actor=p["actor"])}
+        addr = _wrap(svc.add_address)(
+            customer_id=body.customer_id, raw=body.raw, actor=p["actor"])
+        if body.test_run_id:
+            bind_fixture_scope(store, "geo_address_v1",
+                               addr["address_id"], body.test_run_id)
+        return {"address": addr}
 
     @router.get("/api/v1/geo/addresses")
     def addresses(request: Request, customer_id: str) -> dict:
@@ -221,9 +230,13 @@ def create_geo_router(store: Any, svc: FieldOpsService, iam: IAMService,
     def add_employee(body: EmployeeBody, request: Request) -> dict:
         p = require_principal(auth, request, csrf=True)
         _guard(iam, p["actor"], p["role"], body.customer_id)
-        return {"employee": _wrap(svc.add_employee)(
+        emp = _wrap(svc.add_employee)(
             customer_id=body.customer_id, name=body.name,
-            skills=body.skills, vehicle=body.vehicle)}
+            skills=body.skills, vehicle=body.vehicle)
+        if body.test_run_id:
+            bind_fixture_scope(store, "geo_employee_v1",
+                               emp["employee_id"], body.test_run_id)
+        return {"employee": emp}
 
     @router.get("/api/v1/geo/employees")
     def employees(request: Request, customer_id: str) -> dict:
@@ -236,12 +249,16 @@ def create_geo_router(store: Any, svc: FieldOpsService, iam: IAMService,
     def create_task(body: TaskBody, request: Request) -> dict:
         p = require_principal(auth, request, csrf=True)
         _guard(iam, p["actor"], p["role"], body.customer_id)
-        return {"task": _wrap(svc.create_task)(
+        task = _wrap(svc.create_task)(
             customer_id=body.customer_id, address_id=body.address_id,
             project_id=body.project_id, kind=body.kind,
             survey_id=body.survey_id,
             require_storefront=body.require_storefront,
-            selfie_required=body.selfie_required, actor=p["actor"])}
+            selfie_required=body.selfie_required, actor=p["actor"])
+        if body.test_run_id:
+            bind_fixture_scope(store, "field_task_v1",
+                               task["task_id"], body.test_run_id)
+        return {"task": task}
 
     @router.get("/api/v1/geo/tasks")
     def tasks(request: Request, customer_id: str) -> dict:
@@ -254,9 +271,13 @@ def create_geo_router(store: Any, svc: FieldOpsService, iam: IAMService,
     def plan(body: PlanBody, request: Request) -> dict:
         p = require_principal(auth, request, csrf=True)
         _guard(iam, p["actor"], p["role"], body.customer_id)
-        return {"plan": _wrap(svc.plan_route)(
+        out = _wrap(svc.plan_route)(
             customer_id=body.customer_id, task_ids=body.task_ids,
-            constraints=body.constraints, actor=p["actor"])}
+            constraints=body.constraints, actor=p["actor"])
+        if body.test_run_id and out.get("plan_id"):
+            bind_fixture_scope(store, "route_plan_v1",
+                               out["plan_id"], body.test_run_id)
+        return {"plan": out}
 
     @router.get("/api/v1/geo/plans")
     def plans(request: Request, customer_id: str) -> dict:

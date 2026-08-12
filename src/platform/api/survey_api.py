@@ -12,6 +12,7 @@ from pydantic import BaseModel
 
 from ..auth import AuthService, require_principal
 from ..iam import IAMService
+from ..scope import bind_fixture_scope
 from ..survey import SurveyError, SurveyService
 
 
@@ -19,6 +20,7 @@ class DraftBody(BaseModel):
     name: str = ""
     spec: dict | None = None
     template_id: str | None = None
+    test_run_id: str = ""
 
 
 class AssignBody(BaseModel):
@@ -26,6 +28,7 @@ class AssignBody(BaseModel):
     customer_id: str
     project_id: str = ""
     assignee: str = ""
+    test_run_id: str = ""
 
 
 class StartBody(BaseModel):
@@ -96,9 +99,13 @@ def create_survey_router(store: Any, survey: SurveyService,
         p = require_principal(auth, request, csrf=True)
         _guard(iam, p["actor"], p["role"], "survey.manage")
         try:
-            return {"definition": survey.create_draft(
+            out = survey.create_draft(
                 name=body.name, spec=body.spec, actor=p["actor"],
-                from_template=body.template_id)}
+                from_template=body.template_id)
+            if body.test_run_id:
+                bind_fixture_scope(store, "survey_definition_v1",
+                                   out["survey_id"], body.test_run_id)
+            return {"definition": out}
         except SurveyError as e:
             raise HTTPException(409, str(e))
 
@@ -169,10 +176,24 @@ def create_survey_router(store: Any, survey: SurveyService,
         _guard(iam, p["actor"], p["role"], "survey.manage",
                customer_id=body.customer_id)
         try:
-            return {"assignment": survey.assign(
+            out = survey.assign(
                 survey_id=body.survey_id, customer_id=body.customer_id,
                 project_id=body.project_id, assignee=body.assignee,
-                actor=p["actor"])}
+                actor=p["actor"])
+            trid = body.test_run_id
+            if not trid:
+                # 继承问卷定义的 scope（唯一事实源）
+                row = store._conn.execute(
+                    "SELECT COALESCE(data_scope,'operational') ds,"
+                    " COALESCE(test_run_id,'') tr FROM"
+                    " survey_definition_v1 WHERE survey_id=?",
+                    (body.survey_id,)).fetchone()
+                if row and row["ds"] == "uat_fixture":
+                    trid = row["tr"]
+            if trid:
+                bind_fixture_scope(store, "survey_assignment_v1",
+                                   out["assignment_id"], trid)
+            return {"assignment": out}
         except SurveyError as e:
             raise HTTPException(409, str(e))
 
@@ -197,6 +218,19 @@ def create_survey_router(store: Any, survey: SurveyService,
                                       respondent=p["actor"])
         except SurveyError as e:
             raise HTTPException(409, str(e))
+        # SI2：response 继承 assignment 的 scope（含 fixture）
+        try:
+            arow = store._conn.execute(
+                "SELECT COALESCE(data_scope,'operational') ds,"
+                " COALESCE(test_run_id,'') tr FROM survey_assignment_v1"
+                " WHERE assignment_id=?",
+                (body.assignment_id,)).fetchone()
+            if arow and arow["ds"] == "uat_fixture" and arow["tr"] \
+                    and r.get("response_id"):
+                bind_fixture_scope(store, "survey_response_v1",
+                                   r["response_id"], arow["tr"])
+        except Exception:
+            pass
         _guard(iam, p["actor"], p["role"], "survey.read",
                customer_id=r["customer_id"])
         return {"response": r}

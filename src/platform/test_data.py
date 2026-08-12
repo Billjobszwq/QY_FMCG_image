@@ -173,6 +173,78 @@ class FixtureTestDataService:
         空 dict）。Gate 2.1 直接消费；返回显式计数（0 也是 0）。"""
         return ScopedQuery(self.store).operational_leakage()
 
+    # ---------- 测试与证据中心（SI2 T5） ----------
+
+    def center_summary(self) -> dict:
+        """测试中心总览：每个 Test Run 的跨 Domain 对象计数/状态/
+        归档时间与一致性扫描（只读；fixture 历史完整可审计）。"""
+        conn = self.store._conn
+        sq = ScopedQuery(self.store)
+        runs = [dict(r) for r in conn.execute(
+            "SELECT * FROM uat_test_run_v1 ORDER BY created_at DESC"
+        ).fetchall()]
+        count_tables = {
+            "runs": ("business_run_v1", None),
+            "work_items": ("work_item_v2", None),
+            "customers": ("md_customer_v1", None),
+            "projects": ("md_project_v1", None),
+            "field_tasks": ("field_task_v1", None),
+            "surveys": ("survey_definition_v1", None),
+            "survey_assignments": ("survey_assignment_v1", None),
+            "survey_responses": ("survey_response_v1", None),
+            "workflows": ("workflow_definition_v1", None),
+            "agent_runs": ("agent_run_v1", None),
+            "recognition_tasks": ("recognition_task", None),
+            "bi_reports": ("bi_report_spec_v1", None),
+        }
+        for r in runs:
+            r["customer_ids"] = _json.loads(r.get(
+                "customer_ids_json") or "[]")
+            counts: dict[str, int] = {}
+            for key, (table, _x) in count_tables.items():
+                try:
+                    if key == "customers":
+                        qm = ",".join("?" * len(r["customer_ids"])) \
+                            if r["customer_ids"] else "''"
+                        counts[key] = conn.execute(
+                            f"SELECT count(*) c FROM {table} WHERE"
+                            f" customer_id IN ({qm})",
+                            tuple(r["customer_ids"])).fetchone()["c"] \
+                            if r["customer_ids"] else 0
+                    else:
+                        if key == "work_items":
+                            counts[key] = conn.execute(
+                                "SELECT count(*) c FROM work_item_v2"
+                                " WHERE run_id IN (SELECT run_id FROM"
+                                " business_run_v1 WHERE test_run_id=?)",
+                                (r["test_run_id"],)).fetchone()["c"]
+                        else:
+                            counts[key] = conn.execute(
+                                f"SELECT count(*) c FROM {table} WHERE"
+                                " test_run_id=?",
+                                (r["test_run_id"],)).fetchone()["c"]
+                except Exception:
+                    counts[key] = 0
+            r["objects"] = counts
+        audit = [dict(r) for r in conn.execute(
+            "SELECT occurred_at, actor, table_name, matched_by,"
+            " matched_count, assigned_scope, assigned_test_run_id FROM"
+            " scope_backfill_audit_v1 ORDER BY id DESC LIMIT 100"
+        ).fetchall()]
+        return {"test_runs": runs,
+                "backfill_audit": audit,
+                "scope_scan": {
+                    "operational_leakage": sq.operational_leakage(),
+                    "fixture_missing_test_run":
+                        sq.fixture_missing_test_run(),
+                    "parent_child_mismatch": sq.parent_child_mismatch(),
+                    "recovery_residue": sq.recovery_residue(),
+                    "work_residue_current": self.operational_residue()},
+                "unresolved": conn.execute(
+                    "SELECT count(*) c FROM business_run_v1 WHERE"
+                    " data_scope='unresolved_fixture_scope'"
+                ).fetchone()["c"]}
+
     def converge_legacy_fixtures(self, *, actor: str = "system") -> int:
         """遗留 uat* 客户追加式回填为 fixture 并归档（不删除）。"""
         conn = self.store._conn

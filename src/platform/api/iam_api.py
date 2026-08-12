@@ -13,6 +13,7 @@ from pydantic import BaseModel
 
 from ..auth import AuthService, require_principal
 from ..iam import IAMError, IAMService, MasterDataError, MasterDataService
+from ..scope import bind_fixture_scope
 
 
 class PrincipalBody(BaseModel):
@@ -34,6 +35,8 @@ class CustomerBody(BaseModel):
     name: str
     is_test_fixture: bool = False
     retention_policy: str = ""
+    # SI2：显式携带 test_run_id 时结构性绑定 fixture（受信路径）
+    test_run_id: str = ""
 
 
 class ProjectBody(BaseModel):
@@ -42,6 +45,7 @@ class ProjectBody(BaseModel):
     name: str
     sku_scope: list = []
     budget: dict = {}
+    test_run_id: str = ""
 
 
 class SkuBody(BaseModel):
@@ -53,6 +57,7 @@ class SkuBody(BaseModel):
     barcode: str = ""
     package_version: str = "v1"
     valid_from: str | None = None
+    test_run_id: str = ""
     valid_to: str | None = None
 
 
@@ -193,11 +198,16 @@ def create_iam_router(store: Any, auth: AuthService | None) -> APIRouter:
         p = require_principal(auth, request, csrf=True)
         _guard(iam, p["actor"], p["role"], "master.manage")
         try:
-            return {"customer": master.create_customer(
+            out = master.create_customer(
                 customer_id=body.customer_id, name=body.name,
-                is_test_fixture=body.is_test_fixture,
+                is_test_fixture=body.is_test_fixture
+                or bool(body.test_run_id),
                 retention_policy=body.retention_policy,
-                created_by=p["actor"])}
+                created_by=p["actor"])
+            if body.test_run_id:
+                bind_fixture_scope(store, "md_customer_v1",
+                                   body.customer_id, body.test_run_id)
+            return {"customer": out}
         except MasterDataError as e:
             raise HTTPException(409, str(e))
 
@@ -236,10 +246,14 @@ def create_iam_router(store: Any, auth: AuthService | None) -> APIRouter:
         _guard(iam, p["actor"], p["role"], "master.manage",
                customer_id=body.customer_id)
         try:
-            return {"project": master.create_project(
+            out = master.create_project(
                 project_id=body.project_id, customer_id=body.customer_id,
                 name=body.name, sku_scope=body.sku_scope,
-                budget=body.budget, created_by=p["actor"])}
+                budget=body.budget, created_by=p["actor"])
+            if body.test_run_id:
+                bind_fixture_scope(store, "md_project_v1",
+                                   body.project_id, body.test_run_id)
+            return {"project": out}
         except MasterDataError as e:
             raise HTTPException(409, str(e))
 
@@ -258,13 +272,17 @@ def create_iam_router(store: Any, auth: AuthService | None) -> APIRouter:
         p = require_principal(auth, request, csrf=True)
         _guard(iam, p["actor"], p["role"], "master.manage")
         try:
-            return {"sku": master.create_sku(
+            out = master.create_sku(
                 sku_id=body.sku_id, canonical_name=body.canonical_name,
                 brand=body.brand, category=body.category,
                 volume=body.volume, barcode=body.barcode,
                 package_version=body.package_version,
                 valid_from=body.valid_from, valid_to=body.valid_to,
-                created_by=p["actor"])}
+                created_by=p["actor"])
+            if body.test_run_id:
+                bind_fixture_scope(store, "md_sku_v1",
+                                   body.sku_id, body.test_run_id)
+            return {"sku": out}
         except MasterDataError as e:
             raise HTTPException(409, str(e))
 

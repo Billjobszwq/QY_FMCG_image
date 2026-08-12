@@ -204,7 +204,10 @@ def create_agent_runtime_router(store: Any,
                 agent_id, str(body.get("text", "")), actor=p["actor"],
                 session_id=str(body.get("session_id", "")),
                 customer_id=str(body.get("customer_id", "")),
-                project_id=str(body.get("project_id", "")))
+                project_id=str(body.get("project_id", "")),
+                parent_run_id=(str(body["parent_run_id"])
+                               if body.get("parent_run_id") else None),
+                test_run_id=str(body.get("test_run_id", "")))
         except Exception as e:
             raise HTTPException(409, str(e))
 

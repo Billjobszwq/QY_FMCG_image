@@ -12,6 +12,7 @@ from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 
 from ..auth import AuthService, require_principal
+from ..scope import bind_fixture_scope
 from ..workflow import WorkflowError, WorkflowService
 
 
@@ -20,6 +21,7 @@ class DraftBody(BaseModel):
     spec: dict | None = None
     template_id: str | None = None
     definition_id: str | None = None
+    test_run_id: str = ""
 
 
 class UpdateBody(BaseModel):
@@ -37,6 +39,7 @@ class StartBody(BaseModel):
     version: int | None = None
     customer_id: str = ""   # UFC T7：工作流内命令链继承客户上下文
     project_id: str = ""
+    test_run_id: str = ""   # SI2：UAT Test Run 上下文（先建后用）
 
 
 class ApproveRunBody(BaseModel):
@@ -87,16 +90,26 @@ def create_workflow_router(store: Any, service: WorkflowService,
         if not body.template_id and body.spec is None:
             raise HTTPException(422, "spec 或 template_id 必填")
         try:
-            return {"definition": service.create_draft(
+            out = service.create_draft(
                 name=body.name, spec=body.spec or {}, actor=p["actor"],
                 definition_id=body.definition_id,
-                from_template=body.template_id)}
+                from_template=body.template_id)
+            if body.test_run_id:
+                bind_fixture_scope(
+                    store, "workflow_definition_v1",
+                    out["definition_id"], body.test_run_id)
+            return {"definition": out}
         except WorkflowError as e:
             raise HTTPException(409, str(e))
 
     @router.get("/api/v1/workflows")
-    def list_definitions() -> dict:
+    def list_definitions(include_fixture: bool = False) -> dict:
         defs = store.list_workflow_definitions()
+        if not include_fixture:
+            # SI2 T4：工作流列表默认 operational（fixture 只在测试中心）
+            defs = [d for d in defs
+                    if (d.get("data_scope") or "operational")
+                    == "operational"]
         return {"count": len(defs), "definitions": defs}
 
     @router.get("/api/v1/workflows/{definition_id}")
@@ -187,7 +200,8 @@ def create_workflow_router(store: Any, service: WorkflowService,
             out = service.start_run(
                 definition_id, inputs=body.inputs, actor=p["actor"],
                 source=body.source, version=body.version,
-                customer_id=body.customer_id, project_id=body.project_id)
+                customer_id=body.customer_id, project_id=body.project_id,
+                test_run_id=body.test_run_id)
         except WorkflowError as e:
             raise HTTPException(409, str(e))
         return {"run": out["run"],
