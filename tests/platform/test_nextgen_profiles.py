@@ -29,9 +29,13 @@ class TestProfileCatalog:
     def test_required_profiles_present(self, store):
         reg = ProfileRegistry(store)
         ids = {p["profile_id"] for p in reg.list_profiles()}
+        # ABOSV3 T8：新增 v4_best_standard 与实验 profile（诚实 blocker）
         assert ids == {"production_legacy", "nextgen_detector",
                        "nextgen_detector_segmenter_classifier",
-                       "full_cascade_qwen", "shadow_compare"}
+                       "full_cascade_qwen", "shadow_compare",
+                       "v4_best_standard", "exp_classifier_only",
+                       "exp_nextgen_detector_smoke",
+                       "exp_m3_grouped_classifier"}
 
     def test_production_legacy_enabled_others_blocked(self, store):
         reg = ProfileRegistry(store)

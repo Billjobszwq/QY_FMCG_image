@@ -23,6 +23,7 @@ import SurveyBuilder from "../pages/SurveyBuilder";
 import {
   AnalyticsAnomalies, AnalyticsReports, AnalyticsSemantics,
 } from "../pages/Analytics";
+import BIWorkbench from "../pages/BIWorkbench";
 import { GeoAddresses, GeoField, GeoVisit } from "../pages/Geo";
 import { FinanceContracts, FinanceInvoices } from "../pages/Finance";
 import {
@@ -144,7 +145,8 @@ export const MODULE_ROUTES: Record<
   "/survey/field": () => wide(<SurveyField />),
   "/survey/report": () => wide(<SurveyReport />),
   // 分析与 BI
-  "/analytics/reports": () => wide(<AnalyticsReports />),
+  "/analytics/reports": () => wide(
+    <><BIWorkbench /><AnalyticsReports /></>),
   "/analytics/anomalies": () => wide(<AnalyticsAnomalies />),
   "/analytics/semantics": () => wide(<AnalyticsSemantics />),
   // 位置与外勤

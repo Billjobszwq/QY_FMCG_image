@@ -5,10 +5,13 @@
   生成新版本（不覆盖旧报告）；
 - Analytics Agent：NL→指标映射只命中已注册 metric（fail-closed），
   产出 draft，发布必须人工批准；
-- 异常规则：observed 越界 → 异常 + 追问 WorkItem → 回答 → 报表刷新。
+- 异常规则：observed 越界 → 异常 + 追问 WorkItem → 回答 → 报表刷新；
+- ABOSV3 T9：受限公式 DSL 计算指标（AST 白名单，禁任意 SQL/代码）；
+  指标下钻到响应/识别/导入事实行。
 """
 from __future__ import annotations
 
+import ast
 import json
 import uuid
 from typing import Any
@@ -64,9 +67,77 @@ class AnalyticsService:
             out.append(d)
         return out
 
+    # ---- ABOSV3 T9：受限公式 DSL（AST 白名单，禁任意 SQL/代码） ----
+
+    def create_computed_metric(self, *, metric_id: str, name: str,
+                               formula: str, actor: str) -> dict:
+        refs = self._validate_formula(formula)
+        if self.store._conn.execute(
+                "SELECT 1 FROM bi_metric_v1 WHERE metric_id=?",
+                (metric_id,)).fetchone():
+            raise AnalyticsError(f"指标已存在: {metric_id}")
+        self.store._conn.execute(
+            "INSERT INTO bi_metric_v1 (metric_id, name, definition_json,"
+            " created_at) VALUES (?,?,?,?)",
+            (metric_id, name,
+             json.dumps({"source": "computed", "formula": formula,
+                         "refs": refs, "created_by": actor}), _now()))
+        self.store._conn.commit()
+        return {"metric_id": metric_id, "formula": formula,
+                "refs": refs}
+
+    def _validate_formula(self, formula: str) -> list[str]:
+        """AST 白名单：只允许 数字/+ - * //() 与已注册指标引用。"""
+        try:
+            tree = ast.parse(formula, mode="eval")
+        except SyntaxError as e:
+            raise AnalyticsError(f"公式语法错误: {e}")
+        registered = {m["metric_id"] for m in self.list_metrics()}
+        refs: list[str] = []
+
+        def dotted(node) -> str | None:
+            parts = []
+            while isinstance(node, ast.Attribute):
+                parts.append(node.attr)
+                node = node.value
+            if isinstance(node, ast.Name):
+                parts.append(node.id)
+                return ".".join(reversed(parts))
+            return None
+
+        def walk(node):
+            if isinstance(node, ast.Expression):
+                walk(node.body)
+            elif isinstance(node, ast.BinOp) and isinstance(
+                    node.op, (ast.Add, ast.Sub, ast.Mult, ast.Div)):
+                walk(node.left); walk(node.right)
+            elif isinstance(node, ast.UnaryOp) and isinstance(
+                    node.op, (ast.USub, ast.UAdd)):
+                walk(node.operand)
+            elif isinstance(node, ast.Constant):
+                if not isinstance(node.value, (int, float)):
+                    raise AnalyticsError("公式只允许数字常量")
+            elif isinstance(node, (ast.Name, ast.Attribute)):
+                name = dotted(node)
+                if name is None or name not in registered:
+                    raise AnalyticsError(
+                        f"公式引用未注册指标（fail-closed）: {name}")
+                refs.append(name)
+            else:
+                raise AnalyticsError(
+                    "公式含不允许的构造（禁任意 SQL/代码/函数调用）")
+
+        walk(tree)
+        if not refs:
+            raise AnalyticsError("公式必须至少引用一个已注册指标")
+        return sorted(set(refs))
+
     def evaluate_metric(self, metric_id: str, *, customer_id: str,
-                        project_id: str = "") -> float:
+                        project_id: str = "",
+                        _depth: int = 0) -> float:
         """只从注册定义求值；未注册指标 fail-closed。"""
+        if _depth > 4:
+            raise AnalyticsError("计算指标嵌套过深（最多 4 层）")
         row = self.store._conn.execute(
             "SELECT definition_json FROM bi_metric_v1 WHERE metric_id=?",
             (metric_id,)).fetchone()
@@ -74,6 +145,11 @@ class AnalyticsService:
             raise AnalyticsError(
                 f"指标未注册（禁止任意查询）: {metric_id}")
         source = json.loads(row["definition_json"])["source"]
+        if source == "computed":
+            return self._eval_computed(
+                json.loads(row["definition_json"]),
+                customer_id=customer_id, project_id=project_id,
+                _depth=_depth)
         conn = self.store._conn
         if source.startswith("usage:"):
             _, unit, agg = source.split(":")
@@ -112,6 +188,98 @@ class AnalyticsService:
                 (customer_id,)).fetchone()["v"]
             return float(val or 0)
         raise AnalyticsError(f"未知指标来源: {source}")
+
+    def _eval_computed(self, definition: dict, *, customer_id: str,
+                       project_id: str, _depth: int) -> float:
+        formula = definition["formula"]
+        values = {}
+        for ref in definition.get("refs", []):
+            values[ref] = self.evaluate_metric(
+                ref, customer_id=customer_id, project_id=project_id,
+                _depth=_depth + 1)
+
+        def _eval(node):
+            if isinstance(node, ast.Expression):
+                return _eval(node.body)
+            if isinstance(node, ast.BinOp):
+                l, r = _eval(node.left), _eval(node.right)
+                if isinstance(node.op, ast.Add):
+                    return l + r
+                if isinstance(node.op, ast.Sub):
+                    return l - r
+                if isinstance(node.op, ast.Mult):
+                    return l * r
+                if isinstance(node.op, ast.Div):
+                    if r == 0:
+                        raise AnalyticsError("计算指标除零")
+                    return l / r
+            if isinstance(node, ast.UnaryOp):
+                v = _eval(node.operand)
+                return -v if isinstance(node.op, ast.USub) else v
+            if isinstance(node, ast.Constant):
+                return float(node.value)
+            if isinstance(node, (ast.Name, ast.Attribute)):
+                parts = []
+                cur = node
+                while isinstance(cur, ast.Attribute):
+                    parts.append(cur.attr)
+                    cur = cur.value
+                parts.append(cur.id)
+                return values[".".join(reversed(parts))]
+            raise AnalyticsError("公式含不允许的构造")
+
+        return float(_eval(ast.parse(formula, mode="eval")))
+
+    # ---- ABOSV3 T9：指标下钻到事实行（每个数字可追溯） ----
+
+    def drilldown(self, metric_id: str, *, customer_id: str,
+                  limit: int = 20) -> dict:
+        row = self.store._conn.execute(
+            "SELECT definition_json FROM bi_metric_v1 WHERE metric_id=?",
+            (metric_id,)).fetchone()
+        if row is None:
+            raise AnalyticsError(f"指标未注册: {metric_id}")
+        source = json.loads(row["definition_json"])["source"]
+        conn = self.store._conn
+        rows: list[dict] = []
+        if source.startswith("usage:"):
+            unit = source.split(":")[1]
+            for r in conn.execute(
+                    "SELECT usage_id, unit, quantity, run_id, work_id,"
+                    " project_id, occurred_at FROM usage_event_v2"
+                    " WHERE unit=? AND customer_id=?"
+                    " ORDER BY occurred_at DESC LIMIT ?",
+                    (unit, customer_id, limit)).fetchall():
+                rows.append(dict(r))
+            return {"metric_id": metric_id, "source": source,
+                    "rows": rows, "entity": "usage_event"}
+        if source == "survey:submitted:count" or \
+                source == "survey:avg_score":
+            for r in conn.execute(
+                    "SELECT response_id, survey_id, status,"
+                    " scores_json, submitted_at FROM survey_response_v1"
+                    " WHERE customer_id=? AND status='submitted'"
+                    " ORDER BY submitted_at DESC LIMIT ?",
+                    (customer_id, limit)).fetchall():
+                d = dict(r)
+                d["scores"] = json.loads(d.pop("scores_json") or "{}")
+                rows.append(d)
+            return {"metric_id": metric_id, "source": source,
+                    "rows": rows, "entity": "survey_response"}
+        if source == "recognition_tasks:count":
+            for r in conn.execute(
+                    "SELECT t.task_id, t.status, t.sku_count,"
+                    " t.created_at, r.run_id FROM recognition_task t"
+                    " JOIN business_run_v1 r ON r.run_id=t.run_id"
+                    " WHERE r.customer_id=?"
+                    " ORDER BY t.created_at DESC LIMIT ?",
+                    (customer_id, limit)).fetchall():
+                rows.append(dict(r))
+            return {"metric_id": metric_id, "source": source,
+                    "rows": rows, "entity": "recognition_task"}
+        return {"metric_id": metric_id, "source": source,
+                "rows": [], "entity": "computed_or_unknown",
+                "note": "计算指标请按 refs 逐项下钻"}
 
     # ---------- ReportSpec 生命周期 ----------
 

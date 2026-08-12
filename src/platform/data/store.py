@@ -1963,6 +1963,21 @@ DROP TABLE route_plan_v1;
 ALTER TABLE route_plan_v1_new RENAME TO route_plan_v1;
 """
 
+# ABOSV3 T9：BI Dashboard 持久化（画布布局/图表/筛选）。
+_M046 = """
+CREATE TABLE IF NOT EXISTS bi_dashboard_v1 (
+    dashboard_id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    customer_id TEXT NOT NULL DEFAULT '',
+    widgets_json TEXT NOT NULL DEFAULT '[]',
+    filters_json TEXT NOT NULL DEFAULT '{}',
+    status TEXT NOT NULL DEFAULT 'draft',
+    created_by TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+"""
+
 MIGRATIONS: tuple[tuple[str, str], ...] = (
     ("001_platform_init", _M001),
     ("002_labeling_inbox", _M002),
@@ -2009,6 +2024,7 @@ MIGRATIONS: tuple[tuple[str, str], ...] = (
     ("043_agent_runtime_v3", _M043),
     ("044_workflow_timer_v1", _M044),
     ("045_route_plan_versions", _M045),
+    ("046_bi_dashboard_v1", _M046),
 )
 
 
