@@ -59,6 +59,14 @@ REQUIRED_UATV4_CHECKS = (
     "home_zero_fixture_after_archive",
 )
 
+# SI3 / UAT V5：report.json ids 必备关键对象（指令十.13）。
+REQUIRED_UAT_IDS = (
+    "test_run", "customer", "project", "sku", "employee", "address",
+    "field_task", "route", "survey", "assignment", "response", "media",
+    "workflow_def", "run", "work", "agent_run", "agent_failed_run",
+    "bi_report", "anomaly", "recognition_task", "evidence", "usage",
+)
+
 
 def _validate_uatv4(report: dict) -> list[str]:
     problems: list[str] = []
@@ -73,6 +81,16 @@ def _validate_uatv4(report: dict) -> list[str]:
     for req in REQUIRED_UATV4_CHECKS:
         if req not in checks:
             problems.append(f"缺必备断言: {req}")
+    # SI3：UAT 报告 ids 必须非空且覆盖全领域关键对象（指令三.19/
+    # 十.13）：空 ids 即证据不可回查，fail-closed。
+    ids = report.get("ids") or {}
+    if not ids:
+        problems.append("ids 为空：UAT 报告必须记录全部关键对象 ID"
+                        "（Run/Work/Evidence/Usage/Task/Media/BI/Geo）")
+    else:
+        for k in REQUIRED_UAT_IDS:
+            if not ids.get(k):
+                problems.append(f"缺关键 ID: ids.{k}")
     return problems
 
 

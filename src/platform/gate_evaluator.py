@@ -18,7 +18,7 @@ from pathlib import Path
 
 READY = "READY_FOR_REAL_DATA_UAT"
 STALE = "STALE_GATE_EVIDENCE"
-EVALUATOR_VERSION = "2.1.0"
+EVALUATOR_VERSION = "3.0.0"
 
 # UAT 主工作流必备节点类型；model/command 任一即可作为 capability
 # 节点（指令："model或command/capability"）。
@@ -138,7 +138,61 @@ def scan_terminal_drift(store) -> list[dict]:
     for r in rows:
         drift.append({"kind": "branch_open", "run_id": r["run_id"],
                       "branch": r["branch_id"]})
+    # SI3：节点层同样必须收敛（指令八/九.10）：terminal Run 下
+    # 不得残留任何活动态 node。
+    rows = conn.execute(
+        "SELECT n.run_id, n.node_id, n.status FROM"
+        " workflow_node_execution_v1 n JOIN business_run_v1 br ON"
+        " br.run_id=n.run_id WHERE br.status IN"
+        " ('succeeded','failed','partial_failed','cancelled') AND"
+        " n.status IN ('running','pending','queued','waiting',"
+        "'paused','started','in_progress','scheduled',"
+        "'waiting_timer','waiting_approval','waiting_human') AND"
+        " COALESCE(br.data_scope,'operational')='operational'")
+    rows = rows.fetchall()
+    for r in rows:
+        drift.append({"kind": "node_open", "run_id": r["run_id"],
+                      "node": r["node_id"], "status": r["status"]})
     return drift
+
+
+# --------------------------------------------------------------------
+# SI3 T7：数据库绑定 fingerprint（Gate 3.0 freshness，指令九.2/3）
+# --------------------------------------------------------------------
+
+def db_fingerprint(store) -> dict:
+    """数据库实时绑定：scope graph 聚合 + 事件/outbox 水位 +
+    work 投影 hash + 关键表计数。任一变化 → 旧 Gate STALE。
+    计算必须便宜（<200ms）；异常 fail-fast。"""
+    from .scope import _SCOPED_TABLES
+    conn = store._conn
+    agg: list[str] = []
+    for t in _SCOPED_TABLES:
+        rows = conn.execute(
+            f"SELECT COALESCE(data_scope,'operational') ds, count(*) c"
+            f" FROM {t} GROUP BY ds ORDER BY ds").fetchall()
+        agg.append(t + ":" + ",".join(
+            f"{r['ds']}={r['c']}" for r in rows))
+    h = hashlib.sha256("\n".join(agg).encode()).hexdigest()[:16]
+    watermark = conn.execute(
+        "SELECT COALESCE(max(seq),0) s FROM event_envelope_v1"
+    ).fetchone()["s"]
+    outbox_pending = conn.execute(
+        "SELECT count(*) c FROM outbox_v1 WHERE status='pending'"
+    ).fetchone()["c"]
+    try:
+        proj = store.rebuild_work_projection()
+        proj_hash = proj.get("hash", "")
+    except Exception as e:  # noqa: BLE001
+        proj_hash = f"ERR:{e}"
+    counts = {}
+    for t in ("business_run_v1", "work_item_v2", "usage_event_v2",
+              "recognition_task", "survey_media_v1"):
+        counts[t] = conn.execute(
+            f"SELECT count(*) c FROM {t}").fetchone()["c"]
+    return {"scope_graph": h, "event_watermark": int(watermark),
+            "outbox_pending": int(outbox_pending),
+            "projection_hash": str(proj_hash), "counts": counts}
 
 
 def _open_issues(issue_ledger_path) -> list[dict]:
@@ -170,11 +224,56 @@ def evaluate_gate_from_evidence(*, store=None,
                                 recorded_migration_hash: str = "",
                                 current_migration_hash: str = "",
                                 worktree_clean: bool | None = None,
+                                recorded_gate_path=None,
                                 out_path=None) -> dict:
-    """从证据自动计算 Gate（2.1）。任一证据缺失/失败 → BLOCKED_BY_*；
-    Gate 生成后代码/证据变化 → STALE_GATE_EVIDENCE。判定优先级：
-    STALE > 浏览器语义 > scope lineage > fixture 泄漏 > 状态投影 >
-    其余证据缺失。"""
+    """从证据自动计算 Gate（3.0）。任一证据缺失/失败 → BLOCKED_BY_*；
+    Gate 生成后代码/数据变化 → STALE_GATE_EVIDENCE。
+
+    SI3：传 recorded_gate_path 时执行 **freshness 复评**（指令九.4）：
+    实时重算 DB fingerprint/HEAD 绑定，与已记录 Gate 比对；不一致
+    即 STALE，绝不允许 DB 已变化仍返回 READY。
+    判定优先级：STALE > 浏览器语义 > scope lineage > fixture 泄漏 >
+    状态投影 > 其余证据缺失。"""
+    # ---- SI3 T7：freshness 复评路径（不重跑全量证据，只验绑定） ----
+    if recorded_gate_path:
+        recorded = _load_json(recorded_gate_path)
+        if recorded is None:
+            return {"gate": "BLOCKED_BY_GATE_EVIDENCE",
+                    "reasons": ["recorded gate.json 缺失/不可读"],
+                    "checks": [], "evidence_hashes": {},
+                    "evaluated_at": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
+                    "evaluator_version": EVALUATOR_VERSION,
+                    "source_commit": source_commit}
+        stale: list[str] = []
+        if current_head and recorded.get("source_commit") \
+                and recorded["source_commit"] != current_head:
+            stale.append(
+                f"head 已变化: {recorded['source_commit']} →"
+                f" {current_head}")
+        if store is not None:
+            rec_fp = recorded.get("db_fingerprint") or {}
+            cur_fp = db_fingerprint(store)
+            if rec_fp:
+                for key in ("scope_graph", "event_watermark",
+                            "outbox_pending", "projection_hash",
+                            "counts"):
+                    if rec_fp.get(key) != cur_fp.get(key):
+                        stale.append(f"db_fingerprint.{key} 已变化")
+            else:
+                stale.append("recorded gate 无 db_fingerprint 绑定")
+        if stale:
+            return {"gate": STALE, "reasons": stale,
+                    "checks": [{"check": "gate_freshness", "ok": False,
+                                "evidence": "; ".join(stale)[:300],
+                                "block": STALE}],
+                    "evidence_hashes": recorded.get("evidence_hashes", {}),
+                    "evaluated_at": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
+                    "evaluator_version": EVALUATOR_VERSION,
+                    "source_commit": recorded.get("source_commit", "")}
+        recorded["freshness_verified_at"] = time.strftime(
+            "%Y-%m-%dT%H:%M:%S%z")
+        return recorded
+
     checks: list[dict] = []
     block_hint: list[str] = []
 
@@ -253,6 +352,14 @@ def evaluate_gate_from_evidence(*, store=None,
                 " status='current'").fetchone()["c"]
             chk("no_open_uat_test_run", open_ctx == 0,
                 str(open_ctx), "BLOCKED_BY_UAT_FIXTURE_PROJECTION")
+            # SI3：全表 Scope Registry 覆盖率必须 100%（指令五）
+            from .scope_registry import registry_coverage
+            cov = registry_coverage(conn)
+            chk("scope_registry_full", not cov["missing"]
+                and cov["coverage"] == 100.0,
+                f"coverage={cov['coverage']}%"
+                f" missing={cov['missing'][:5]}",
+                "BLOCKED_BY_SCOPE_REGISTRY")
         except Exception as e:
             chk("scope_lineage_scanned", False, f"扫描异常: {e}",
                 "BLOCKED_BY_SCOPE_LINEAGE")
@@ -493,6 +600,19 @@ def evaluate_gate_from_evidence(*, store=None,
               "evaluated_at": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
               "evaluator_version": EVALUATOR_VERSION,
               "source_commit": source_commit}
+    # SI3：绑定数据库 fingerprint（freshness 复评依据，指令九.2）
+    if store is not None:
+        try:
+            result["db_fingerprint"] = db_fingerprint(store)
+        except Exception as e:  # noqa: BLE001
+            result["db_fingerprint"] = {"error": str(e)}
+            result["checks"].append({"check": "db_fingerprint_bound",
+                                     "ok": False,
+                                     "evidence": str(e)[:300],
+                                     "block": STALE})
+            if result["gate"] == READY:
+                result["gate"] = STALE
+                result["reasons"] = ["db_fingerprint 计算失败"]
     if out_path:
         p = Path(out_path)
         p.parent.mkdir(parents=True, exist_ok=True)

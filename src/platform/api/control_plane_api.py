@@ -29,6 +29,10 @@ class RetryBody(BaseModel):
     images: list | None = None  # 进程重启后重放表为空时可补交输入
 
 
+# SI3：git HEAD 短缓存（freshness 复评用；5s TTL）
+_gate_cache: dict = {"head": None, "ts": 0.0}
+
+
 def create_control_plane_router(store: Any, gateway: CommandGateway,
                                 auth: AuthService | None) -> APIRouter:
     router = APIRouter(tags=["control-plane"])
@@ -51,6 +55,11 @@ def create_control_plane_router(store: Any, gateway: CommandGateway,
                 test_run_id=body.test_run_id)
         except CommandGatewayError as e:
             raise HTTPException(400, str(e))
+        except Exception as e:  # ScopeViolation 等 fail-closed → 409
+            from ..scope import ScopeViolation
+            if isinstance(e, ScopeViolation):
+                raise HTTPException(409, str(e))
+            raise
         run = store.get_business_run(out["run_id"])
         work = store.get_work_item_v2(out["work_id"])
         status_code = 200
@@ -177,15 +186,37 @@ def create_control_plane_router(store: Any, gateway: CommandGateway,
 
     @router.get("/api/v1/control/gate")
     def gate_current() -> dict:
-        """UFC：机器 Gate（只读，读最近一次 evidence-driven 评估结果）。"""
+        """SI3 Gate 3.0：机器 Gate 实时 freshness 复评（指令九.4）。
+
+        不再只读静态 gate.json：读最新记录后立即重算 DB
+        fingerprint/HEAD 绑定；数据已变化 → STALE_GATE_EVIDENCE，
+        绝不继续返回旧 READY。"""
         import json as _json
+        import subprocess
+        import time as _time
         from pathlib import Path as _Path
+        from ..gate_evaluator import evaluate_gate_from_evidence
         root = _Path(__file__).resolve().parents[3]
         candidates = sorted(root.glob(".eval/*/gate.json"),
                             key=lambda p: p.stat().st_mtime)
         if not candidates:
             return {"gate": None,
-                    "note": "尚未生成 gate.json（运行 UAT V3 --gate）"}
-        return _json.loads(candidates[-1].read_text(encoding="utf-8"))
+                    "note": "尚未生成 gate.json（运行 UAT --gate）"}
+        latest = candidates[-1]
+        # git HEAD 短缓存（5s）：freshness 判定保持同步且便宜
+        cache = _gate_cache
+        now = _time.monotonic()
+        if cache["head"] is None or now - cache["ts"] > 5:
+            try:
+                head = subprocess.run(
+                    ["git", "rev-parse", "HEAD"], cwd=str(root),
+                    capture_output=True, text=True, timeout=5
+                ).stdout.strip()
+            except Exception:  # noqa: BLE001
+                head = ""
+            cache.update({"head": head, "ts": now})
+        return evaluate_gate_from_evidence(
+            store=store, recorded_gate_path=latest,
+            current_head=cache["head"] or "")
 
     return router
