@@ -334,7 +334,7 @@ export function WorkflowRunCenter() {
                         {" "}#{b.branch_index}</td>
                       <td data-label="状态" style={{ color:
                         b.status === "completed" ? "var(--ok)"
-                        : b.status === "running" ? "var(--accent)"
+                        : b.status === "running" ? "var(--accent-violet)"
                         : "var(--err)" }}>{b.status}</td>
                       <td data-label="错误" className="v"
                         style={{ fontSize: 11 }}>
