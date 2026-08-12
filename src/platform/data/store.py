@@ -1978,6 +1978,65 @@ CREATE TABLE IF NOT EXISTS bi_dashboard_v1 (
 );
 """
 
+# UATCC T1–T3/T6：照片角色、Usage 归属账本、并行分支、限流窗口。
+_M047 = """
+ALTER TABLE survey_media_v1 ADD COLUMN capture_role TEXT NOT NULL
+    DEFAULT 'other';
+ALTER TABLE survey_media_v1 ADD COLUMN status TEXT NOT NULL
+    DEFAULT 'active';
+CREATE TABLE IF NOT EXISTS usage_attribution_v1 (
+    attribution_id TEXT PRIMARY KEY,
+    usage_id TEXT NOT NULL,
+    run_id TEXT NOT NULL DEFAULT '',
+    work_id TEXT NOT NULL DEFAULT '',
+    evidence_bundle_id TEXT NOT NULL DEFAULT '',
+    customer_id TEXT NOT NULL DEFAULT '',
+    project_id TEXT NOT NULL DEFAULT '',
+    attribution_status TEXT NOT NULL DEFAULT 'legacy_unattributed',
+    note TEXT NOT NULL DEFAULT '',
+    created_by TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS workflow_branch_v1 (
+    branch_id TEXT PRIMARY KEY,
+    run_id TEXT NOT NULL,
+    node_id TEXT NOT NULL,
+    branch_index INTEGER NOT NULL DEFAULT 0,
+    status TEXT NOT NULL DEFAULT 'pending',
+    started_at TEXT,
+    ended_at TEXT,
+    error TEXT NOT NULL DEFAULT '',
+    output_json TEXT NOT NULL DEFAULT '{}',
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_wf_branch_run
+    ON workflow_branch_v1(run_id);
+CREATE TABLE IF NOT EXISTS rate_limit_v1 (
+    key TEXT NOT NULL,
+    window_start TEXT NOT NULL,
+    count INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (key, window_start)
+);
+CREATE TABLE IF NOT EXISTS rate_limit_rule_v1 (
+    capability TEXT PRIMARY KEY,
+    max_per_window INTEGER NOT NULL,
+    window_seconds INTEGER NOT NULL DEFAULT 60,
+    burst INTEGER NOT NULL DEFAULT 0,
+    enabled INTEGER NOT NULL DEFAULT 1,
+    updated_by TEXT NOT NULL DEFAULT '',
+    updated_at TEXT NOT NULL
+);
+"""
+
+# UATCC T2：agent_run 挂统一 BusinessRun（可下钻）。
+_M048 = """
+ALTER TABLE agent_run_v1 ADD COLUMN business_run_id TEXT NOT NULL
+    DEFAULT '';
+ALTER TABLE agent_run_v1 ADD COLUMN evidence_bundle_id TEXT NOT NULL
+    DEFAULT '';
+"""
+
 MIGRATIONS: tuple[tuple[str, str], ...] = (
     ("001_platform_init", _M001),
     ("002_labeling_inbox", _M002),
@@ -2025,6 +2084,8 @@ MIGRATIONS: tuple[tuple[str, str], ...] = (
     ("044_workflow_timer_v1", _M044),
     ("045_route_plan_versions", _M045),
     ("046_bi_dashboard_v1", _M046),
+    ("047_contract_correction_v1", _M047),
+    ("048_agent_run_business_link", _M048),
 )
 
 

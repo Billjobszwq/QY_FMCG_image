@@ -277,6 +277,7 @@ function PhotoPanel({ responseId, q, onMsg }: {
   const [metas, setMetas] = useState({ lat: "31.23", lng: "121.47",
     device: "web-browser" });
   const [medias, setMedias] = useState<any[]>([]);
+  const [role, setRole] = useState<string>(q.capture_role ?? "other");
   const toB64 = (f: File) => new Promise<string>((res, rej) => {
     const rd = new FileReader();
     rd.onload = () => res(String(rd.result).split(",")[1]);
@@ -285,9 +286,21 @@ function PhotoPanel({ responseId, q, onMsg }: {
   return (
     <div style={{ border: "1px dashed var(--border)", padding: 8,
       marginTop: 4 }}>
+      {q.require_storefront && (
+        <p className="v" style={{ fontSize: 12, color: "var(--warn)" }}>
+          门头必拍：必须上传至少 1 张 capture_role=storefront 的照片；
+          缺门头照无法提交。</p>)}
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
         <input type="file" accept="image/*" aria-label={`${q.id} 照片`}
           onChange={(e) => setFile(e.target.files?.[0] ?? null)} />
+        <select aria-label="拍摄角色" value={role}
+          onChange={(e) => setRole(e.target.value)}>
+          <option value="storefront">storefront 门头</option>
+          <option value="shelf">shelf 货架</option>
+          <option value="employee_selfie">employee_selfie 自拍</option>
+          <option value="product">product 商品</option>
+          <option value="other">other 其他</option>
+        </select>
         <input style={{ width: 90 }} aria-label="纬度" value={metas.lat}
           onChange={(e) => setMetas({ ...metas, lat: e.target.value })} />
         <input style={{ width: 90 }} aria-label="经度" value={metas.lng}
@@ -308,10 +321,11 @@ function PhotoPanel({ responseId, q, onMsg }: {
                   device: metas.device,
                   quality: { width: 0, note: "web 上传无质量探测" },
                   image_b64: await toB64(file),
+                  capture_role: role,
                 });
               setMedias((m) => [...m, out.media]);
-              onMsg(`照片已入库：识别建议 ${out.media.suggestion_status
-                }（需人工终审）`);
+              onMsg(`照片已入库（${out.media.capture_role}）：识别建议 `
+                + `${out.media.suggestion_status}（需人工终审）`);
             } catch (e) { onMsg(`照片上传失败：${e instanceof Error
               ? e.message : e}`); }
           }}>上传（位置/时间/设备证据）</button>
@@ -319,7 +333,14 @@ function PhotoPanel({ responseId, q, onMsg }: {
       {medias.map((m) => (
         <div key={m.media_id} className="v" style={{ fontSize: 12,
           marginTop: 6 }}>
-          {m.media_id} · 建议状态 {m.suggestion_status}
+          {m.media_id} · 角色 {m.capture_role ?? "other"} · 状态
+          {" "}{m.status ?? "active"} · 建议状态 {m.suggestion_status}
+          {m.suggestion_status === "accepted" && (
+            <span style={{ color: "var(--ok)" }}> · 人工已接受
+              （final）</span>)}
+          {m.suggestion_status === "rejected" && (
+            <span style={{ color: "var(--err)" }}> · 人工已拒绝
+              （反馈进评估链）</span>)}
           {m.suggestion?.task_id ? ` · 识别任务 ${m.suggestion.task_id}`
             : ""}
           {m.suggestion_status === "pending" && (

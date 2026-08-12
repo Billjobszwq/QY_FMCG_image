@@ -21,6 +21,10 @@ from typing import Any
 QUESTION_TYPES = ("single_choice", "multi_choice", "text", "rating",
                   "photo", "matrix", "description")
 
+# UATCC T1：照片拍摄角色（门头/货架/自拍/商品/其他不得混淆）
+CAPTURE_ROLES = ("storefront", "shelf", "employee_selfie", "product",
+                 "other")
+
 
 class SurveyError(Exception):
     pass
@@ -59,10 +63,19 @@ TEMPLATE_STORE_VISIT = {
              "title": "货架长度（米）", "input_type": "number"},
             {"id": "q_score_service", "section": "s2", "type": "rating",
              "title": "店员服务评分", "min": 1, "max": 5},
+            {"id": "q_storefront_photo", "section": "s2", "type": "photo",
+             "title": "门头照（必拍，capture_role=storefront）",
+             "min_count": 1, "max_count": 3, "required": True,
+             "require_storefront": True, "capture_role": "storefront",
+             "recognition": False,
+             "quality": {"min_width": 320}},
             {"id": "q_shelf_photo", "section": "s2", "type": "photo",
              "title": "货架拍照（识别建议需人工确认）",
-             "min_count": 1, "require_storefront": True,
+             "min_count": 1, "max_count": 5,
+             "require_storefront": False, "capture_role": "shelf",
              "selfie_optional": True, "recognition": True,
+             "recognition_profile_id": "v4_best_standard",
+             "manual_confirmation_required": True,
              "quality": {"min_width": 320}},
         ],
         "logic_edges": [
@@ -230,6 +243,36 @@ class SurveyService:
                         "level": "error", "code": "matrix_incomplete",
                         "message": f"{q.get('id')} 矩阵题需要 rows 与"
                                    " options"})
+            if q.get("type") == "photo":
+                # UATCC T1：门头必拍不得被 min_count=0 绕过
+                role = q.get("capture_role", "other")
+                if role not in CAPTURE_ROLES:
+                    issues.append({
+                        "level": "error", "code": "capture_role",
+                        "message": f"{q.get('id')} 拍摄角色非法: {role}"
+                                   f"（允许 {list(CAPTURE_ROLES)}）"})
+                if q.get("required") and int(q.get("min_count", 0) or 0) <= 0 \
+                        and not q.get("require_storefront"):
+                    issues.append({
+                        "level": "error",
+                        "code": "photo_required_conflict",
+                        "message": f"{q.get('id')} required=true 与"
+                                   " min_count=0 冲突（必填照片题必须"
+                                   " 最少 1 张）"})
+                if q.get("require_storefront") and role != "storefront":
+                    issues.append({
+                        "level": "error",
+                        "code": "storefront_role_mismatch",
+                        "message": f"{q.get('id')} require_storefront"
+                                   "=true 时 capture_role 必须为"
+                                   " storefront"})
+                mx = q.get("max_count")
+                if mx is not None and int(mx) < int(
+                        q.get("min_count", 0) or 0):
+                    issues.append({
+                        "level": "error", "code": "photo_count_range",
+                        "message": f"{q.get('id')} max_count 不得小于"
+                                   " min_count"})
         edges = spec.get("logic_edges") or []
         adj: dict[str, list[dict]] = {}
         for e in edges:
@@ -475,6 +518,35 @@ class SurveyService:
             q = qmap[qid]
             if q["type"] == "description":
                 continue  # 说明题不作答
+            if q["type"] == "photo":
+                # UATCC T1：照片契约（门头必拍不得绕过；只计当前
+                # response/question 下状态有效的 media）
+                medias = [m for m in self.list_media(
+                    response_id, question_id=qid)
+                    if m.get("status", "active") == "active"]
+                need_any = bool(q.get("required")
+                                or q.get("require_storefront")
+                                or int(q.get("min_count", 0) or 0) > 0)
+                if q.get("require_storefront"):
+                    sf = [m for m in medias
+                          if m.get("capture_role") == "storefront"]
+                    if not sf:
+                        missing.append(
+                            f"{qid}(缺门头照 storefront：必须至少 1 张"
+                            " capture_role=storefront 的照片)")
+                mn = int(q.get("min_count", 0) or 0)
+                if need_any and not medias and mn <= 0:
+                    missing.append(f"{qid}(照片缺失：必拍题不得无照片)")
+                elif mn > 0 and len(medias) < mn:
+                    missing.append(
+                        f"{qid}(照片不足：需至少 {mn} 张，当前"
+                        f" {len(medias)} 张)")
+                mx = q.get("max_count")
+                if mx is not None and len(medias) > int(mx):
+                    missing.append(
+                        f"{qid}(照片超出上限：最多 {int(mx)} 张，当前"
+                        f" {len(medias)} 张)")
+                continue
             if q.get("required") and qid not in r["answers"]:
                 missing.append(qid)
             if q["type"] == "matrix" and q.get("required"):
@@ -483,10 +555,6 @@ class SurveyService:
                               if row["id"] not in ans]
                 if unanswered:
                     missing.append(f"{qid}(矩阵未填全)")
-            if q["type"] == "photo" and q.get("min_count", 0) > 0:
-                medias = self.list_media(response_id, question_id=qid)
-                if len(medias) < q["min_count"]:
-                    missing.append(f"{qid}(照片不足)")
         if missing:
             raise SurveyError(f"必填未完成: {', '.join(missing)}")
         scores = self._score(spec, r["answers"])
@@ -540,7 +608,8 @@ class SurveyService:
     def attach_media(self, *, response_id: str, question_id: str,
                      location: dict | None = None, taken_at: str = "",
                      device: str = "", quality: dict | None = None,
-                     image_b64: str = "", actor: str) -> dict:
+                     image_b64: str = "", actor: str,
+                     capture_role: str | None = None) -> dict:
         r = self.get_response(response_id)
         if r["status"] != "draft":
             raise SurveyError("已提交响应不得追加媒体")
@@ -549,17 +618,31 @@ class SurveyService:
                   if q["id"] == question_id), None)
         if q is None or q["type"] != "photo":
             raise SurveyError(f"题目不是拍照题: {question_id}")
+        # UATCC T1：拍摄角色必须显式合法；未传时默认取题目配置；
+        # require_storefront 题不得以非门头角色冒充。
+        role = capture_role or q.get("capture_role") or "other"
+        if role not in CAPTURE_ROLES:
+            raise SurveyError(
+                f"capture_role 非法: {role}（允许 {list(CAPTURE_ROLES)}）")
+        if q.get("require_storefront") and q.get("capture_role") \
+                == "storefront" and role != "storefront":
+            raise SurveyError(
+                "门头必拍题：上传照片必须 capture_role=storefront，"
+                f"当前为 {role}")
         mid = _new_id("med")
         evidence_ref = ""
         run_id = ""
         suggestion: dict = {}
         suggestion_status = "none"
         if image_b64 and self.gateway is not None and q.get("recognition"):
-            # 识别只是 suggestion：进统一 gateway 链（事件/证据/用量）
+            # 识别只是 suggestion：进统一 gateway 链（事件/证据/用量）；
+            # profile 取题目配置（UATCC T1），缺省 standard 生产链。
             out = self.gateway.submit(
                 command_kind="vision.recognition.create",
                 params={"images": [[f"{mid}.jpg", image_b64]],
-                        "recognition_profile_id": "production_legacy",
+                        "recognition_profile_id": q.get(
+                            "recognition_profile_id",
+                            "v4_best_standard"),
                         "service_tier": "standard"},
                 actor=actor, source="internal",
                 customer_id=r["customer_id"])
@@ -577,15 +660,24 @@ class SurveyService:
             "INSERT INTO survey_media_v1 (media_id, response_id,"
             " question_id, evidence_ref, location_json, taken_at, device,"
             " quality_json, recognition_run_id, suggestion_json,"
-            " suggestion_status, created_at)"
-            " VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+            " suggestion_status, capture_role, status, created_at)"
+            " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
             (mid, response_id, question_id, evidence_ref,
              json.dumps(location or {}, ensure_ascii=False), taken_at,
              device, json.dumps(quality or {}, ensure_ascii=False),
              run_id, json.dumps(suggestion, ensure_ascii=False),
-             suggestion_status, _now()))
+             suggestion_status, role, "active", _now()))
         self.store._conn.commit()
         return self.get_media(mid)
+
+    def delete_media(self, media_id: str, *, actor: str) -> dict:
+        """软删除：追加式标记 deleted（不物理删除，提交时不计数）。"""
+        m = self.get_media(media_id)
+        self.store._conn.execute(
+            "UPDATE survey_media_v1 SET status='deleted'"
+            " WHERE media_id=?", (media_id,))
+        self.store._conn.commit()
+        return self.get_media(media_id)
 
     def get_media(self, media_id: str) -> dict:
         row = self.store._conn.execute(

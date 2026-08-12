@@ -58,6 +58,10 @@ function newQuestion(type: string): any {
   if (type === "photo") {
     base.min_count = 1; base.require_storefront = true;
     base.selfie_optional = false; base.recognition = true;
+    base.capture_role = "storefront"; base.max_count = 3;
+    base.recognition_profile_id = "v4_best_standard";
+    base.manual_confirmation_required = true;
+    base.quality_gate = { min_width: 320 };
     base.quality = { min_width: 320 };
   }
   return base;
@@ -516,17 +520,38 @@ export default function SurveyBuilder() {
                     </div>)}
                   {selQuestion.type === "photo" && (
                     <>
-                      <label className="v">最少张数</label>
-                      <input type="number" style={{ width: "100%" }}
-                        value={selQuestion.min_count ?? 0}
+                      <label className="v">拍摄角色（门头/货架/自拍/
+                        商品/其他不得混淆）</label>
+                      <select style={{ width: "100%" }}
+                        value={selQuestion.capture_role ?? "other"}
                         onChange={(e) => updateQ(selQuestion.id,
-                          { min_count: Number(e.target.value) })} />
+                          { capture_role: e.target.value })}>
+                        <option value="storefront">storefront 门头</option>
+                        <option value="shelf">shelf 货架</option>
+                        <option value="employee_selfie">employee_selfie
+                          员工自拍</option>
+                        <option value="product">product 商品</option>
+                        <option value="other">other 其他</option>
+                      </select>
+                      <label className="v">最少 / 最多张数</label>
+                      <div style={{ display: "flex", gap: 6 }}>
+                        <input type="number" style={{ width: 90 }}
+                          aria-label="最少张数"
+                          value={selQuestion.min_count ?? 0}
+                          onChange={(e) => updateQ(selQuestion.id,
+                            { min_count: Number(e.target.value) })} />
+                        <input type="number" style={{ width: 90 }}
+                          aria-label="最多张数"
+                          value={selQuestion.max_count ?? 5}
+                          onChange={(e) => updateQ(selQuestion.id,
+                            { max_count: Number(e.target.value) })} />
+                      </div>
                       <label className="v">
                         <input type="checkbox"
                           checked={!!selQuestion.require_storefront}
                           onChange={(e) => updateQ(selQuestion.id,
                             { require_storefront: e.target.checked })} />
-                        {" "}门头必拍</label>
+                        {" "}门头必拍（不得被 min_count=0 绕过）</label>
                       <label className="v">
                         <input type="checkbox"
                           checked={!!selQuestion.selfie_optional}
@@ -538,10 +563,27 @@ export default function SurveyBuilder() {
                           checked={!!selQuestion.recognition}
                           onChange={(e) => updateQ(selQuestion.id,
                             { recognition: e.target.checked })} />
-                        {" "}识别建议（suggestion→人工 final）</label>
+                        {" "}调用识别（suggestion→人工 final）</label>
+                      {selQuestion.recognition && (<>
+                        <label className="v">识别 Profile</label>
+                        <input style={{ width: "100%" }}
+                          value={selQuestion.recognition_profile_id ?? ""}
+                          placeholder="如 v4_best_standard"
+                          onChange={(e) => updateQ(selQuestion.id,
+                            { recognition_profile_id: e.target.value })} />
+                        <label className="v">
+                          <input type="checkbox"
+                            checked={!!selQuestion
+                              .manual_confirmation_required}
+                            onChange={(e) => updateQ(selQuestion.id, {
+                              manual_confirmation_required:
+                                e.target.checked })} />
+                          {" "}识别结果必须人工确认</label>
+                      </>)}
                       <label className="v">质量门 min_width</label>
                       <input type="number" style={{ width: "100%" }}
-                        value={selQuestion.quality?.min_width ?? 0}
+                        value={selQuestion.quality?.min_width
+                          ?? selQuestion.quality_gate?.min_width ?? 0}
                         onChange={(e) => updateQ(selQuestion.id,
                           { quality: { ...(selQuestion.quality ?? {}),
                             min_width: Number(e.target.value) } })} />

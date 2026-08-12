@@ -43,6 +43,7 @@ class MediaBody(BaseModel):
     device: str = ""
     quality: dict = {}
     image_b64: str = ""
+    capture_role: str | None = None  # UATCC T1：门头/货架/自拍/商品/其他
 
 
 class ReviewBody(BaseModel):
@@ -243,7 +244,17 @@ def create_survey_router(store: Any, survey: SurveyService,
                 response_id=response_id, question_id=body.question_id,
                 location=body.location, taken_at=body.taken_at,
                 device=body.device, quality=body.quality,
-                image_b64=body.image_b64, actor=p["actor"])}
+                image_b64=body.image_b64, actor=p["actor"],
+                capture_role=body.capture_role)}
+        except SurveyError as e:
+            raise HTTPException(409, str(e))
+
+    @router.delete("/api/v1/survey/media/{media_id}")
+    def delete_media(media_id: str, request: Request) -> dict:
+        p = require_principal(auth, request, csrf=True)
+        try:
+            return {"media": survey.delete_media(media_id,
+                                                 actor=p["actor"])}
         except SurveyError as e:
             raise HTTPException(409, str(e))
 
