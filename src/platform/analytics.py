@@ -507,8 +507,8 @@ class AnalyticsService:
         refreshed = None
         rows = self.store._conn.execute(
             "SELECT spec_id, version, name, customer_id, metrics_json,"
-            " dimensions_json, nl_query FROM bi_report_spec_v1"
-            " ORDER BY spec_id, version").fetchall()
+            " dimensions_json, nl_query, data_scope, test_run_id FROM"
+            " bi_report_spec_v1 ORDER BY spec_id, version").fetchall()
         latest: dict[str, dict] = {}
         for r in rows:
             if a["metric_id"] in json.loads(r["metrics_json"]) and \
@@ -516,16 +516,21 @@ class AnalyticsService:
                 latest[r["spec_id"]] = dict(r)
         for spec_id, r in latest.items():
             now = _now()
+            # SI3：新版本继承上一版 scope（fixture 报表的刷新版不得
+            # 落 operational，指令四.11）。
             self.store._conn.execute(
                 "INSERT INTO bi_report_spec_v1 (spec_id, version, name,"
                 " status, customer_id, metrics_json, dimensions_json,"
-                " nl_query, note, created_by, created_at, updated_at)"
-                " VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+                " nl_query, note, created_by, created_at, updated_at,"
+                " data_scope, test_run_id)"
+                " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                 (spec_id, r["version"] + 1, r["name"], "draft",
                  r["customer_id"], r["metrics_json"],
                  r["dimensions_json"], r["nl_query"],
                  f"异常 {anomaly_id} 已回答并刷新：{answer[:60]}",
-                 actor, now, now))
+                 actor, now, now,
+                 r["data_scope"] or "operational",
+                 r["test_run_id"] or ""))
             refreshed = self.get_report_spec(spec_id)
         self.store._conn.commit()
         self.store.rebuild_work_projection()

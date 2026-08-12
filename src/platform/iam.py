@@ -511,14 +511,18 @@ class MasterDataService:
 
         out: dict[str, list] = {"customers": [], "skus": []}
         groups: dict[str, list] = {}
+        # SI3：合并建议只针对运营客户（fixture 不进运营页面）。
         for r in self.store._conn.execute(
-                "SELECT customer_id, name FROM md_customer_v1").fetchall():
+                "SELECT customer_id, name FROM md_customer_v1 WHERE"
+                " COALESCE(data_scope,'operational')='operational'"
+                " AND is_test_fixture=0").fetchall():
             groups.setdefault(norm(r["name"]), []).append(r["customer_id"])
         out["customers"] = [{"name_key": k, "ids": v}
                             for k, v in groups.items() if len(v) > 1]
         groups = {}
         for r in self.store._conn.execute(
-                "SELECT sku_id, canonical_name FROM md_sku_v1"
+                "SELECT sku_id, canonical_name FROM md_sku_v1 WHERE"
+                " COALESCE(data_scope,'operational')='operational'"
                 ).fetchall():
             groups.setdefault(norm(r["canonical_name"]), []).append(
                 r["sku_id"])

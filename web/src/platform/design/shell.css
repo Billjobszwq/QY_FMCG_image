@@ -261,6 +261,12 @@ button:focus-visible, a:focus-visible, [tabindex]:focus-visible {
 @media (max-width: 1280px) {
   :root { --side-w: 320px; }
 }
+/* SI3（指令七.11）：窄视口下非卡片表格横向可滚，不得撞出页面
+   （如系统状态 Gate 明细表）。 */
+@media (max-width: 1279px) {
+  table:not(.table) { display: block; overflow-x: auto;
+    max-width: 100%; }
+}
 /* 1024–1439：主管默认收起（JS 阈值 1440）；打开时为不透明临时
    抽屉，不占据主内容布局。 */
 @media (max-width: 1439px) {

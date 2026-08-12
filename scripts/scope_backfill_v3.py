@@ -501,6 +501,99 @@ class Backfill:
                        [str(r["rid"]) for r in rows], "uat_fixture",
                        "per-row", "business_run_v1.run_id")
 
+    def r15_bi_version_chain(self) -> None:
+        """历史行：报表同一 spec 存在 fixture 版本但自身版本仍
+        operational（旧版刷新丢 scope）→ 继承同 spec 的 scope。"""
+        rows = self.conn.execute(
+            "SELECT b.spec_id, b.version, f.tr FROM bi_report_spec_v1 b"
+            " JOIN (SELECT spec_id, MAX(test_run_id) tr FROM"
+            " bi_report_spec_v1 WHERE COALESCE(test_run_id,'')!=''"
+            " GROUP BY spec_id) f ON f.spec_id=b.spec_id WHERE"
+            " COALESCE(b.data_scope,'operational')='operational'"
+        ).fetchall()
+        for r in rows:
+            if self.apply:
+                self.conn.execute(
+                    "UPDATE bi_report_spec_v1 SET data_scope="
+                    "'uat_fixture', test_run_id=? WHERE spec_id=? AND"
+                    " version=?", (r["tr"], r["spec_id"], r["version"]))
+        self.audit("bi_report_spec_v1", "r15_bi_version_chain",
+                   [f"{r['spec_id']}@{r['version']}" for r in rows],
+                   "uat_fixture", "per-row", "同 spec 版本链")
+
+    def r16_runs_under_fixture_customer(self) -> None:
+        """历史行：fixture 客户名下的 run 仍 operational（旧时代
+        失败账本）→ 随客户归档（一次性，审计）。"""
+        rows = self.conn.execute(
+            "SELECT r.run_id, COALESCE(c.test_run_id,'') tr FROM"
+            " business_run_v1 r JOIN md_customer_v1 c ON"
+            " c.customer_id=r.customer_id WHERE"
+            " COALESCE(r.data_scope,'operational')='operational' AND"
+            " (c.data_scope IN ('uat_fixture','demo_fixture') OR"
+            " c.is_test_fixture=1)").fetchall()
+        for r in rows:
+            if self.apply:
+                self.conn.execute(
+                    "UPDATE business_run_v1 SET data_scope="
+                    "'uat_fixture', test_run_id=? WHERE run_id=?",
+                    (r["tr"], r["run_id"]))
+        self.audit("business_run_v1",
+                   "r16_runs_under_fixture_customer",
+                   [r["run_id"] for r in rows], "uat_fixture",
+                   "per-row", "md_customer_v1.customer_id")
+
+    def r17_legacy_sku_namespaces(self) -> None:
+        """一次性 legacy backfill（指令六.7，审计）：旧时代 sku 等
+        对象 id 含已登记 namespace 但无 scope 列值 → 结构性归档。"""
+        namespaces = [r["test_run_id"] for r in self.conn.execute(
+            "SELECT test_run_id FROM uat_test_run_v1").fetchall()]
+        rows = self.conn.execute(
+            "SELECT sku_id FROM md_sku_v1 WHERE"
+            " COALESCE(data_scope,'operational')='operational'"
+        ).fetchall()
+        hit: list[tuple[str, str]] = []
+        for r in rows:
+            for ns in namespaces:
+                if ns in r["sku_id"]:
+                    hit.append((r["sku_id"], ns))
+                    break
+        for sku_id, ns in hit:
+            if self.apply:
+                self.conn.execute(
+                    "UPDATE md_sku_v1 SET data_scope='uat_fixture',"
+                    " test_run_id=? WHERE sku_id=?", (ns, sku_id))
+        self.audit("md_sku_v1", "r17_legacy_sku_namespaces",
+                   [h[0] for h in hit], "uat_fixture", "per-row",
+                   "uat_test_run_v1 registry（id 含已登记 namespace）")
+
+    def r18_legacy_prefix_objects(self) -> None:
+        """一次性 legacy backfill（指令六.7，审计）：UAT2/3 时代未
+        登记上下文的对象（id 含 uatv*/uat_fixture*/uat-cust* 前缀）
+        → 归入合成已归档上下文 legacy_uat_v2v3_backfill（结构性
+        fixture + 非空 test_run，不留无链 fixture 行）。"""
+        legacy_ns = "legacy_uat_v2v3_backfill"
+        if self.apply:
+            self.conn.execute(
+                "INSERT OR IGNORE INTO uat_test_run_v1 (test_run_id,"
+                " namespace, status, customer_ids_json, created_by,"
+                " created_at, archived_at) VALUES (?,?, 'archived',"
+                " '[]', 'si3-backfill', ?, ?)",
+                (legacy_ns, legacy_ns, _now(), _now()))
+        rows = self.conn.execute(
+            "SELECT sku_id FROM md_sku_v1 WHERE"
+            " COALESCE(data_scope,'operational')='operational' AND"
+            " (sku_id LIKE 'uatv%' OR sku_id LIKE 'uat_fixture%' OR"
+            " sku_id LIKE 'uat-cust%')").fetchall()
+        for r in rows:
+            if self.apply:
+                self.conn.execute(
+                    "UPDATE md_sku_v1 SET data_scope='uat_fixture',"
+                    " test_run_id=? WHERE sku_id=?",
+                    (legacy_ns, r["sku_id"]))
+        self.audit("md_sku_v1", "r18_legacy_prefix_objects",
+                   [r["sku_id"] for r in rows], "uat_fixture",
+                   legacy_ns, "legacy 前缀（一次性，合成归档上下文）")
+
     def r12_finance_under_fixture_customer(self) -> None:
         for table, id_col in (("fin_invoice_v1", "invoice_id"),
                               ("fin_invoice_line_v1", "invoice_id"),
@@ -557,6 +650,10 @@ def main() -> None:
                bf.r10_terminal_node_convergence,
                bf.r11_survey_def_by_fixture_lineage,
                bf.r14_parent_chain_children,
+               bf.r15_bi_version_chain,
+               bf.r16_runs_under_fixture_customer,
+               bf.r17_legacy_sku_namespaces,
+               bf.r18_legacy_prefix_objects,
                bf.r12_finance_under_fixture_customer):
         fn()
     if args.apply:
