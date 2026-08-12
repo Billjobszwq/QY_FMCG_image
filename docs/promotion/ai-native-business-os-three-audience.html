@@ -1,0 +1,438 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="AI 原生业务操作系统三受众推广架构演示">
+  <title>AI 原生业务操作系统｜三受众架构演示</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --ocean-0: #050b16;
+      --ocean-1: #081426;
+      --ocean-2: #0d2039;
+      --paper: #eef6ff;
+      --muted: #91a4b9;
+      --line: rgba(154, 185, 218, .18);
+      --line-strong: rgba(154, 185, 218, .34);
+      --execution: #4da3ff;
+      --execution-soft: rgba(77, 163, 255, .13);
+      --trust: #39d0b1;
+      --trust-soft: rgba(57, 208, 177, .12);
+      --human: #f1b84b;
+      --human-soft: rgba(241, 184, 75, .12);
+      --value: #a985ff;
+      --value-soft: rgba(169, 133, 255, .14);
+      --danger: #ff7d8c;
+      --content: 1240px;
+      --pad: clamp(20px, 4vw, 64px);
+      --display: "STKaiti", "KaiTi", "Songti SC", serif;
+      --body: "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+      --utility: "Avenir Next Condensed", "Arial Narrow", sans-serif;
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; background: var(--ocean-0); }
+    body {
+      margin: 0;
+      min-width: 320px;
+      color: var(--paper);
+      background:
+        linear-gradient(rgba(77,163,255,.035) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(77,163,255,.035) 1px, transparent 1px),
+        radial-gradient(circle at 80% 8%, rgba(77,163,255,.14), transparent 28%),
+        radial-gradient(circle at 12% 40%, rgba(57,208,177,.08), transparent 30%),
+        var(--ocean-0);
+      background-size: 48px 48px, 48px 48px, auto, auto, auto;
+      font: 400 16px/1.7 var(--body);
+      overflow-x: hidden;
+    }
+    button { font: inherit; }
+    button:focus-visible, a:focus-visible { outline: 2px solid var(--human); outline-offset: 3px; }
+    .shell { width: min(100%, var(--content)); margin: 0 auto; padding: 0 var(--pad); }
+    .topbar {
+      position: sticky;
+      top: 0;
+      z-index: 20;
+      border-bottom: 1px solid var(--line);
+      background: rgba(5,11,22,.91);
+      backdrop-filter: blur(18px);
+    }
+    .topbar-inner { min-height: 74px; display: flex; gap: 24px; align-items: center; justify-content: space-between; }
+    .brand { display: flex; gap: 12px; align-items: center; white-space: nowrap; }
+    .brand-mark { width: 30px; height: 30px; position: relative; transform: rotate(45deg); border: 1px solid var(--execution); }
+    .brand-mark::after { content: ""; position: absolute; inset: 6px; border: 1px solid var(--trust); }
+    .brand strong { display: block; font-weight: 500; letter-spacing: .04em; }
+    .brand small { display: block; color: var(--muted); font: 400 11px/1.2 var(--utility); letter-spacing: .14em; text-transform: uppercase; }
+    .audience-tabs { display: flex; gap: 6px; padding: 5px; border: 1px solid var(--line); background: rgba(13,32,57,.55); }
+    .audience-tab, .mode-button, .chapter-button, .nav-button {
+      border: 1px solid transparent;
+      color: var(--muted);
+      background: transparent;
+      cursor: pointer;
+    }
+    .audience-tab { min-height: 42px; padding: 8px 16px; }
+    .audience-tab[aria-selected="true"] { color: var(--paper); border-color: rgba(77,163,255,.55); background: var(--execution-soft); }
+    .hero { min-height: 650px; display: grid; grid-template-columns: 7fr 5fr; gap: clamp(38px, 6vw, 88px); align-items: center; padding-block: clamp(72px, 10vw, 140px) 72px; }
+    .eyebrow { margin: 0 0 16px; color: var(--execution); font: 500 12px/1.4 var(--utility); letter-spacing: .2em; text-transform: uppercase; }
+    h1, h2, h3, p { margin-top: 0; }
+    h1 { max-width: 780px; margin-bottom: 24px; font: 500 clamp(44px, 6vw, 82px)/1.08 var(--display); letter-spacing: -.035em; }
+    .hero-lead { max-width: 690px; color: #bfd0e3; font-size: clamp(18px, 2vw, 23px); line-height: 1.75; }
+    .hero-closing { margin-top: 36px; padding-left: 18px; border-left: 2px solid var(--trust); color: var(--muted); }
+    .hero-map { position: relative; min-height: 390px; display: grid; place-items: center; }
+    .orbit { position: absolute; border: 1px solid var(--line-strong); border-radius: 50%; }
+    .orbit-a { width: 360px; height: 360px; }
+    .orbit-b { width: 260px; height: 260px; transform: rotate(28deg); border-style: dashed; }
+    .orbit-c { width: 155px; height: 155px; border-color: rgba(77,163,255,.62); }
+    .hero-core { position: relative; z-index: 2; width: 142px; height: 142px; display: grid; place-content: center; text-align: center; background: rgba(8,20,38,.96); border: 1px solid var(--execution); clip-path: polygon(14px 0,100% 0,100% calc(100% - 14px),calc(100% - 14px) 100%,0 100%,0 14px); box-shadow: 0 0 70px rgba(77,163,255,.22); }
+    .hero-core strong { font-weight: 500; }
+    .hero-core span { color: var(--muted); font-size: 12px; }
+    .orbit-label { position: absolute; z-index: 3; padding: 7px 11px; color: var(--muted); background: var(--ocean-1); border: 1px solid var(--line-strong); font-size: 12px; }
+    .orbit-label:nth-of-type(4) { top: 5%; left: 50%; transform: translateX(-50%); }
+    .orbit-label:nth-of-type(5) { top: 43%; right: 0; }
+    .orbit-label:nth-of-type(6) { bottom: 3%; left: 50%; transform: translateX(-50%); }
+    .orbit-label:nth-of-type(7) { top: 43%; left: 0; }
+    .loop-band { padding: 24px 0 42px; border-block: 1px solid var(--line); background: rgba(8,20,38,.55); }
+    .loop-heading { display: flex; align-items: end; justify-content: space-between; gap: 24px; margin-bottom: 18px; }
+    .loop-heading h2 { margin: 0; font: 500 20px/1.3 var(--body); }
+    .legend { display: flex; flex-wrap: wrap; gap: 14px; color: var(--muted); font-size: 12px; }
+    .legend span::before { content: ""; display: inline-block; width: 14px; height: 2px; margin-right: 6px; vertical-align: middle; background: currentColor; }
+    .legend .lg-execution { color: var(--execution); }
+    .legend .lg-trust { color: var(--trust); }
+    .legend .lg-human { color: var(--human); }
+    .legend .lg-value { color: var(--value); }
+    .loop-svg { display: block; width: 100%; height: auto; overflow: visible; }
+    .loop-svg text { font-family: var(--body); fill: var(--paper); }
+    .loop-svg .small { fill: var(--muted); font-family: var(--utility); font-size: 11px; letter-spacing: .08em; }
+    .loop-svg .track { fill: none; stroke: var(--line-strong); stroke-width: 1.5; }
+    .loop-svg .return { fill: none; stroke: var(--value); stroke-width: 2; stroke-dasharray: 7 7; marker-end: url(#arrow-value); }
+    .loop-svg .node { fill: var(--ocean-1); stroke: var(--execution); stroke-width: 1; }
+    .loop-svg .node-trust { stroke: var(--trust); }
+    .loop-svg .node-human { stroke: var(--human); }
+    .loop-svg .node-value { stroke: var(--value); stroke-width: 2; }
+    .workspace-bar { position: sticky; top: 74px; z-index: 18; border-bottom: 1px solid var(--line); background: rgba(5,11,22,.94); backdrop-filter: blur(16px); }
+    .workspace-inner { display: grid; grid-template-columns: 1fr auto; gap: 24px; align-items: center; min-height: 70px; }
+    .chapter-nav { display: flex; gap: 3px; overflow-x: auto; scrollbar-width: none; }
+    .chapter-button { flex: 0 0 auto; padding: 10px 12px; font-size: 13px; border-bottom-color: transparent; }
+    .chapter-button[aria-current="step"] { color: var(--paper); border-bottom-color: var(--execution); }
+    .controls { display: flex; gap: 6px; align-items: center; }
+    .mode-button, .nav-button { min-height: 38px; padding: 7px 12px; border-color: var(--line); }
+    .mode-button[aria-pressed="true"] { color: var(--paper); border-color: var(--trust); background: var(--trust-soft); }
+    .nav-button:disabled { opacity: .35; cursor: not-allowed; }
+    main { padding-bottom: 88px; }
+    .chapter { min-height: 720px; display: grid; grid-template-columns: repeat(12, minmax(0,1fr)); gap: 24px; align-content: center; padding-block: clamp(76px, 9vw, 130px); border-bottom: 1px solid var(--line); animation: chapter-in .35s ease both; }
+    .chapter-copy { grid-column: 1 / span 4; align-self: center; }
+    .chapter-visual { grid-column: 5 / -1; min-width: 0; }
+    .chapter-index { color: var(--muted); font: 500 12px/1 var(--utility); letter-spacing: .16em; }
+    .chapter h2 { margin: 12px 0 20px; font: 500 clamp(32px, 4.4vw, 58px)/1.15 var(--display); letter-spacing: -.025em; }
+    .thesis { color: #bfd0e3; font-size: 18px; }
+    .value-list { display: grid; gap: 12px; margin: 30px 0; padding: 0; list-style: none; }
+    .value-list li { position: relative; padding: 11px 0 11px 28px; border-top: 1px solid var(--line); color: var(--muted); }
+    .value-list li::before { content: ""; position: absolute; left: 2px; top: 19px; width: 9px; height: 9px; transform: rotate(45deg); border: 1px solid var(--trust); }
+    .chapter-transition { margin-top: 28px; color: var(--execution); font-size: 14px; }
+    [data-transition]::after { content: "  →"; }
+    .diagram { position: relative; min-height: 460px; display: grid; place-items: center; padding: clamp(16px, 3vw, 42px); border: 1px solid var(--line); background: linear-gradient(145deg, rgba(13,32,57,.7), rgba(5,11,22,.3)); overflow: hidden; }
+    [class~="diagram"]::before { content: ""; position: absolute; inset: 14px; pointer-events: none; border: 1px solid rgba(154,185,218,.08); }
+    .diagram-label { position: absolute; top: 20px; left: 24px; color: var(--muted); font: 500 10px/1.2 var(--utility); letter-spacing: .18em; text-transform: uppercase; }
+    .diagram-grid { width: 100%; display: grid; gap: 12px; position: relative; z-index: 1; }
+    .node-box { position: relative; min-height: 78px; display: grid; place-content: center; padding: 14px; text-align: center; color: var(--paper); border: 1px solid var(--line-strong); background: rgba(8,20,38,.86); clip-path: polygon(10px 0,100% 0,100% calc(100% - 10px),calc(100% - 10px) 100%,0 100%,0 10px); }
+    .node-box small { color: var(--muted); }
+    .node-execution { border-color: var(--execution); background: var(--execution-soft); }
+    .node-trust { border-color: var(--trust); background: var(--trust-soft); }
+    .node-human { border-color: var(--human); background: var(--human-soft); }
+    .node-result { border: 3px double var(--value); background: var(--value-soft); }
+    .arrow { color: var(--execution); text-align: center; font-size: 24px; line-height: 1; }
+    .paradigm-grid { grid-template-columns: 1fr auto 1.25fr; align-items: center; }
+    .state-stack { display: grid; gap: 8px; }
+    .state-stack.muted { opacity: .65; }
+    .state-title { color: var(--muted); font: 500 11px/1.2 var(--utility); letter-spacing: .13em; text-transform: uppercase; text-align: center; }
+    .friction-grid { grid-template-columns: repeat(3, 1fr); align-items: center; }
+    .friction-target { grid-column: 2; grid-row: 1 / span 2; min-height: 180px; }
+    .converge { color: var(--execution); text-align: center; font: 500 12px/1.3 var(--utility); }
+    .architecture-grid { grid-template-columns: 88px 1fr 88px; align-items: stretch; }
+    .side-boundary { display: grid; place-items: center; writing-mode: vertical-rl; color: var(--muted); border-inline-start: 1px solid var(--line-strong); font-size: 12px; letter-spacing: .12em; }
+    .layer-stack { display: grid; gap: 9px; }
+    .layer { padding: 16px; border: 1px solid var(--line-strong); background: rgba(8,20,38,.76); }
+    .layer strong { display: block; font-weight: 500; }
+    .layer span { color: var(--muted); font-size: 13px; }
+    .layer-core { border-color: var(--execution); background: var(--execution-soft); }
+    .layer-foundation { border-color: var(--trust); background: var(--trust-soft); }
+    .cap-row { display: grid; grid-template-columns: repeat(4,1fr); gap: 7px; margin-top: 10px; }
+    .cap-row span { padding: 8px 5px; border: 1px solid var(--line); color: #bfd0e3; text-align: center; font-size: 12px; }
+    .execution-grid { grid-template-columns: repeat(5,1fr); align-items: center; }
+    .execution-grid .governance { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(4,1fr); gap: 8px; border-top: 2px solid var(--trust); padding-top: 12px; }
+    .gate { width: 54px; height: 54px; margin: 0 auto; display: grid; place-content: center; transform: rotate(45deg); border: 1px solid var(--human); background: var(--ocean-1); }
+    .gate span { transform: rotate(-45deg); font-size: 11px; color: var(--human); }
+    .flywheel { width: min(470px,100%); aspect-ratio: 1; position: relative; border: 2px solid var(--line-strong); border-radius: 50%; }
+    .flywheel::before { content: ""; position: absolute; inset: 15%; border: 1px dashed var(--value); border-radius: 50%; }
+    .flywheel-core { position: absolute; inset: 34%; display: grid; place-content: center; text-align: center; border: 1px solid var(--execution); background: var(--ocean-1); }
+    .wheel-node { position: absolute; width: 120px; min-height: 64px; display: grid; place-content: center; text-align: center; padding: 8px; background: var(--ocean-1); border: 1px solid var(--line-strong); font-size: 13px; }
+    .wheel-node:nth-child(2) { left: 50%; top: -3%; transform: translateX(-50%); }
+    .wheel-node:nth-child(3) { right: -8%; top: 28%; border-color: var(--execution); }
+    .wheel-node:nth-child(4) { right: 2%; bottom: 4%; border-color: var(--value); }
+    .wheel-node:nth-child(5) { left: 2%; bottom: 4%; border-color: var(--trust); }
+    .wheel-node:nth-child(6) { left: -8%; top: 28%; border-color: var(--human); }
+    .wheel-arrow { position: absolute; color: var(--value); font-size: 25px; }
+    .wa1 { top: 11%; right: 14%; transform: rotate(40deg); }
+    .wa2 { right: 4%; bottom: 27%; transform: rotate(90deg); }
+    .wa3 { bottom: 8%; left: 46%; transform: rotate(175deg); }
+    .wa4 { left: 4%; bottom: 27%; transform: rotate(245deg); }
+    .wa5 { top: 11%; left: 14%; transform: rotate(320deg); }
+    .value-grid { grid-template-columns: 1fr 1.25fr; align-items: stretch; }
+    .result-stack { display: grid; gap: 8px; }
+    .value-ladder { display: grid; gap: 0; align-content: end; }
+    .value-rung { margin-inline: auto; padding: 14px; text-align: center; border: 1px solid var(--value); background: var(--value-soft); }
+    .value-rung:nth-child(1) { width: 62%; }
+    .value-rung:nth-child(2) { width: 78%; }
+    .value-rung:nth-child(3) { width: 94%; }
+    .cta { margin: 80px 0 20px; display: grid; grid-template-columns: 1fr auto; gap: 30px; align-items: end; padding: clamp(28px,5vw,64px); border: 1px solid var(--value); background: linear-gradient(120deg, var(--value-soft), rgba(77,163,255,.08)); }
+    .cta h2 { margin-bottom: 10px; font: 500 clamp(30px,4vw,52px)/1.18 var(--display); }
+    .cta p { margin: 0; color: #bfd0e3; }
+    .cta-action { padding: 13px 20px; color: var(--paper); border: 1px solid var(--value); background: rgba(169,133,255,.16); white-space: nowrap; }
+    .edit-note { margin: 28px 0 0; padding: 16px 18px; border-left: 2px solid var(--human); color: var(--muted); background: rgba(241,184,75,.06); font-size: 13px; }
+    .edit-note code { color: var(--human); }
+    body[data-mode="present"] .chapter { display: none; min-height: calc(100vh - 144px); border-bottom: 0; }
+    body[data-mode="present"] .chapter.is-active { display: grid; }
+    body[data-mode="present"] .hero,
+    body[data-mode="present"] .loop-band { display: none; }
+    body[data-mode="present"] .cta { display: none; }
+    @keyframes chapter-in { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
+    @media (max-width: 980px) {
+      .topbar-inner { align-items: flex-start; padding-block: 12px; flex-direction: column; }
+      .audience-tabs { width: 100%; }
+      .audience-tab { flex: 1; }
+      .hero { grid-template-columns: 1fr; min-height: 0; }
+      .hero-map { min-height: 330px; }
+      .workspace-bar { top: 113px; }
+      .workspace-inner { grid-template-columns: 1fr; gap: 4px; padding-block: 8px; }
+      .controls { justify-content: flex-end; }
+      .chapter { grid-template-columns: 1fr; min-height: 0; }
+      .chapter-copy, .chapter-visual { grid-column: 1; }
+      .chapter-copy { max-width: 700px; }
+    }
+    @media (max-width: 820px) {
+      .loop-band { overflow: hidden; }
+      .loop-svg { min-width: 760px; transform-origin: left center; transform: scale(.86); margin-bottom: -48px; }
+      .paradigm-grid, .architecture-grid, .value-grid { grid-template-columns: 1fr; }
+      .paradigm-grid > .arrow { transform: rotate(90deg); }
+      .side-boundary { writing-mode: horizontal-tb; border-inline-start: 0; border-bottom: 1px solid var(--line-strong); padding: 8px; }
+      .execution-grid { grid-template-columns: 1fr; }
+      .execution-grid > .arrow { transform: rotate(90deg); }
+      .execution-grid .governance { grid-template-columns: repeat(2,1fr); }
+      .friction-grid { grid-template-columns: 1fr 1fr; }
+      .friction-target { grid-column: 1 / -1; grid-row: auto; order: -1; min-height: 120px; }
+      .cta { grid-template-columns: 1fr; }
+    }
+    @media (max-width: 520px) {
+      body { font-size: 15px; }
+      .shell { padding-inline: 18px; }
+      .brand small { display: none; }
+      .audience-tabs { display: grid; grid-template-columns: 1fr; }
+      .workspace-bar { position: static; }
+      .chapter-nav { width: 100%; }
+      .controls { justify-content: stretch; flex-wrap: wrap; }
+      .controls button { flex: 1; }
+      .hero { padding-top: 56px; }
+      .hero-map { transform: scale(.82); margin: -36px 0; }
+      .loop-heading { align-items: flex-start; flex-direction: column; }
+      .loop-svg { transform: scale(.6); margin-bottom: -120px; }
+      .chapter { padding-block: 68px; gap: 30px; }
+      .diagram { min-height: 390px; padding: 42px 14px 20px; }
+      .cap-row, .execution-grid .governance { grid-template-columns: 1fr 1fr; }
+      .friction-grid { grid-template-columns: 1fr; }
+      .flywheel { transform: scale(.72); }
+      .value-rung:nth-child(n) { width: 100%; }
+      .cta-action { white-space: normal; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
+    }
+  </style>
+</head>
+<body data-mode="browse">
+  <header class="topbar">
+    <div class="shell topbar-inner">
+      <div class="brand" aria-label="AI 原生业务操作系统">
+        <span class="brand-mark" aria-hidden="true"></span>
+        <span><strong>AI 原生业务操作系统</strong><small>Business Operating Intelligence</small></span>
+      </div>
+      <div class="audience-tabs" role="tablist" aria-label="选择演示受众">
+        <button type="button" class="audience-tab" role="tab" data-audience="investor" aria-selected="true" aria-controls="presentation">投资人愿景</button>
+        <button type="button" class="audience-tab" role="tab" data-audience="partner" aria-selected="false" aria-controls="presentation">生态合作伙伴</button>
+        <button type="button" class="audience-tab" role="tab" data-audience="customer" aria-selected="false" aria-controls="presentation">潜在客户</button>
+      </div>
+    </div>
+  </header>
+
+  <div id="presentation" aria-live="polite">
+    <section class="shell hero">
+      <div>
+        <p class="eyebrow" id="hero-eyebrow"></p>
+        <h1 id="hero-title"></h1>
+        <p class="hero-lead" id="hero-lead"></p>
+        <p class="hero-closing" id="hero-closing"></p>
+      </div>
+      <div class="hero-map" aria-label="业务目标连接智能执行、业务能力、可信治理和价值结果">
+        <span class="orbit orbit-a" aria-hidden="true"></span><span class="orbit orbit-b" aria-hidden="true"></span><span class="orbit orbit-c" aria-hidden="true"></span>
+        <div class="hero-core"><strong>业务目标</strong><span>组织工作的起点</span></div>
+        <span class="orbit-label">智能执行</span><span class="orbit-label">能力网络</span><span class="orbit-label">可信治理</span><span class="orbit-label">价值结果</span>
+      </div>
+    </section>
+
+    <section class="loop-band" aria-labelledby="loop-title">
+      <div class="shell">
+        <div class="loop-heading">
+          <h2 id="loop-title">目标—结果闭环轨道</h2>
+          <div class="legend" aria-label="图例"><span class="lg-execution">智能执行</span><span class="lg-trust">可信治理</span><span class="lg-human">人工决策</span><span class="lg-value">结果与进化</span></div>
+        </div>
+        <div id="loop-rail"></div>
+      </div>
+    </section>
+
+    <div class="workspace-bar">
+      <div class="shell workspace-inner">
+        <nav class="chapter-nav" id="chapter-nav" aria-label="章节导航"></nav>
+        <div class="controls">
+          <button type="button" class="mode-button" id="browse-mode" aria-pressed="true">完整浏览</button>
+          <button type="button" class="mode-button" id="present-mode" aria-pressed="false">演示模式</button>
+          <button type="button" class="nav-button" id="prev-chapter">上一章</button>
+          <button type="button" class="nav-button" id="next-chapter">下一章</button>
+        </div>
+      </div>
+    </div>
+
+    <main class="shell" id="chapter-stage"></main>
+    <footer class="shell">
+      <section class="cta" id="cta"><div><h2 id="cta-title"></h2><p id="cta-body"></p></div><div class="cta-action" id="cta-action"></div></section>
+      <p class="edit-note">修改文案：打开本文件，搜索 <code>const CONTENT</code>，只修改该对象中的文字即可。保持字段名和每版 6 个章节不变。</p>
+    </footer>
+  </div>
+
+  <script>
+    /*
+      文案编辑说明：
+      1. 普通文案只修改下方 CONTENT 对象，不需要修改 HTML、CSS 或渲染函数。
+      2. 每个版本固定包含 hero、loop、sections、cta；每个 sections 固定 6 章。
+      3. loop 固定保留 7 个阶段，最后一项必须能回到下一轮目标，确保逻辑闭环。
+      4. diagram 可使用 paradigm、friction、architecture、execution、flywheel、value。
+    */
+    const CONTENT = {
+      investor: {
+        label: '投资人愿景版', shortLabel: '投资人',
+        hero: { eyebrow: 'A NEW OPERATING CATEGORY', title: '企业软件正在从“提供功能”，进入“负责推进目标”的时代', lead: 'AI 原生业务操作系统把目标、能力、人员、数据与治理连接为一套持续运行的业务机制。', closing: '这不是功能数量的竞争，而是企业组织工作的维度发生改变。' },
+        loop: ['市场需求','业务目标','智能执行','可信交付','反馈资产','能力升级','更多客户与场景'],
+        sections: [
+          { eyebrow:'01 / 新范式', title:'从数字化工具，走向业务运行系统', thesis:'过去的软件帮助人完成操作；新的系统开始理解目标、组织工作并对过程负责。', diagram:'paradigm', values:['目标成为统一入口','执行成为系统内生能力','结果与反馈形成连续关系'], transition:'当系统开始负责推进，原有的软件边界就暴露出结构性问题。' },
+          { eyebrow:'02 / 结构性问题', title:'真正稀缺的不是功能，而是跨边界完成目标的能力', thesis:'人员、数据、服务和智能能力分别存在，却没有一个持续协调它们的运行中心。', diagram:'friction', values:['能力存在但无法主动协同','定制增加却难以形成复用','结果与责任散落在多个系统'], transition:'因此，新的系统需要同时拥有智能执行、能力网络和可信底座。' },
+          { eyebrow:'03 / 总体架构', title:'一个智能核心，组织一张业务能力网络', thesis:'体验入口连接智能执行内核，内核围绕目标组合能力，并由可信底座约束每一步。', diagram:'architecture', values:['同一内核复用到多个场景','领域能力可独立扩展升级','治理体系无需重复建设'], transition:'架构形成之后，每一次运行都不只是交付，也在产生下一轮增长的燃料。' },
+          { eyebrow:'04 / 增长飞轮', title:'运行越多，反馈越厚，能力越强', thesis:'业务反馈不会直接改变系统，而是经过评估、验证和批准形成更成熟的能力版本。', diagram:'flywheel', values:['真实运行形成反馈资产','版本升级沉淀组织能力','更强能力打开更多场景'], transition:'增长飞轮不仅扩展产品边界，也重构商业价值的形成方式。' },
+          { eyebrow:'05 / 商业价值', title:'价值从席位和模块，扩展到能力、运行与结果', thesis:'平台可以承载基础使用、业务运行、行业能力包和生态联合交付等多层价值关系。', diagram:'value', values:['基础平台形成稳定入口','业务运行反映真实使用价值','行业与生态能力扩大价值密度'], transition:'当平台、能力和生态共同积累，同一架构便能进入更广阔的行业空间。' },
+          { eyebrow:'06 / 扩展空间', title:'扩展行业，不重复建设底座', thesis:'新行业以能力包加入同一运行体系，共享目标执行、事实、证据、治理和价值计量。', diagram:'execution', values:['从首个场景验证通用内核','从能力复用获得扩张效率','从生态协作形成行业壁垒'], transition:'更多客户与场景产生新的市场需求，增长闭环重新开始。' }
+        ],
+        cta:{ title:'看见的不是一个功能集合，而是一种新的企业运行基础设施', body:'下一步可以围绕首个行业闭环、商业模型与生态扩展路径展开讨论。', action:'讨论：首个规模化行业闭环' }
+      },
+      partner: {
+        label:'生态合作伙伴版', shortLabel:'生态伙伴',
+        hero:{ eyebrow:'BUILD THE OUTCOME TOGETHER', title:'把伙伴能力从“被集成”，升级为“共同完成客户结果”', lead:'行业知识、业务服务、数据产品和执行资源进入同一能力网络，由客户目标触发联合执行。', closing:'合作不止连接接口，更要连接责任、证据、价值与下一次机会。' },
+        loop:['客户目标','能力接入','联合执行','可信交付','价值确认','方案沉淀','更多合作机会'],
+        sections:[
+          { eyebrow:'01 / 共同目标', title:'合作的终点不是接通，而是交付结果', thesis:'客户购买的是业务改善，不是接口数量；平台与伙伴需要围绕同一目标共同运行。', diagram:'paradigm', values:['从单点交付转向共同结果','从项目协作转向持续运行','从模糊贡献转向清晰价值'], transition:'要共同完成结果，伙伴能力首先需要找到清晰、可治理的接入位置。' },
+          { eyebrow:'02 / 合作入口', title:'每一种专业能力，都能成为业务网络的一部分', thesis:'行业知识、数据产品、专业服务、执行资源与客户系统，都可按明确边界进入能力网络。', diagram:'friction', values:['能力以清晰职责加入','保留伙伴专业自主性','不必复制平台公共底座'], transition:'能力接入以后，关键是如何围绕客户目标形成可靠协同。' },
+          { eyebrow:'03 / 能力协同', title:'由目标选择组合，而不是靠人反复拉群协调', thesis:'智能执行内核根据目标、权限和上下文组织平台能力与伙伴能力，持续推进跨域任务。', diagram:'architecture', values:['一个目标跨组织推进','状态和下一步保持一致','异常及时回到责任主体'], transition:'跨组织协同要进入关键业务，必须有共同认可的可信边界。' },
+          { eyebrow:'04 / 可信治理', title:'联合执行的每一步，都有边界、有证据、有责任', thesis:'身份、授权、审批、证据、用量和审计贯穿交付过程，让合作从信任个人转为信任机制。', diagram:'execution', values:['伙伴只访问获批范围','关键动作保留人工决定','贡献与过程能够核对'], transition:'可信过程最终要转化为双方都能确认的客户成果与价值。' },
+          { eyebrow:'05 / 联合成果', title:'结果、责任和价值贡献可以同时被看见', thesis:'联合交付形成结果包：业务结果、执行证据、改进进度、责任记录和价值贡献。', diagram:'value', values:['客户看到完整结果','伙伴看到真实贡献','平台看到协同效率'], transition:'每次联合交付还会沉淀为可复用、可验证的新方案。' },
+          { eyebrow:'06 / 生态反馈', title:'一次交付，沉淀下一次更强的联合方案', thesis:'交付反馈经过共同评估与版本管理，形成更成熟的能力组合，并打开新的客户和行业机会。', diagram:'flywheel', values:['成功模式形成方案资产','能力组合持续成熟','合作机会随交付质量增长'], transition:'更多合作机会带来新的客户目标，生态闭环继续运转。' }
+        ],
+        cta:{ title:'把专业能力接入一套真正会组织工作的系统', body:'下一步可以共同定义能力边界、联合方案与价值确认方式。', action:'共创：一个可验证的联合场景' }
+      },
+      customer: {
+        label:'潜在客户转化版', shortLabel:'潜在客户',
+        hero:{ eyebrow:'FROM GOAL TO VERIFIED OUTCOME', title:'把目标交给系统，把关键判断留给人', lead:'系统理解业务目标，组织人员、能力与数据，持续推进任务，并以事实和证据交付结果。', closing:'人不再搬运流程，而是专注目标、例外、决策与创新。' },
+        loop:['业务问题','提出目标','智能执行','人机决策','可验证结果','反馈优化','下一轮目标'],
+        sections:[
+          { eyebrow:'01 / 业务困境', title:'真正拖慢组织的，往往不是没有系统', thesis:'而是人每天在不同入口之间找功能、搬数据、催流程，再花时间解释结果从何而来。', diagram:'friction', values:['信息分散在不同环节','异常依赖人工追赶','结果难以追溯和复用'], transition:'新的体验不再从寻找功能开始，而是从直接提出业务目标开始。' },
+          { eyebrow:'02 / 新体验', title:'目标，就是新的工作入口', thesis:'你描述想解决的问题，系统结合业务上下文形成可解释、可调整的执行计划。', diagram:'paradigm', values:['减少学习菜单和流程的成本','计划与目标始终保持一致','执行前即可看到边界和下一步'], transition:'计划确认以后，系统开始主动组织跨领域能力与参与者。' },
+          { eyebrow:'03 / 主动执行', title:'系统持续推进，不把协调工作重新丢给人', thesis:'系统调用合适能力，观察任务状态，根据结果调整下一步，并在异常时明确升级处理。', diagram:'architecture', values:['跨环节工作自动衔接','状态变化持续可见','失败可以暂停、恢复和重试'], transition:'主动执行不意味着越权自动化，关键动作始终由人守门。' },
+          { eyebrow:'04 / 人机守门', title:'该自动的自动，该决定的由人决定', thesis:'权限、预算、证据和审批构成执行护栏；高风险动作必须由明确责任人批准。', diagram:'execution', values:['每一步都在授权范围内','关键决定保留人的判断','全过程形成可信证据链'], transition:'有了可信过程，系统才能交付可以直接用于经营的完整结果。' },
+          { eyebrow:'05 / 结果交付', title:'交付的不只是答案，而是一套可验证结果', thesis:'从问题清单到执行证据，从改进进度到经营洞察和可核对成本，结果天然连成一体。', diagram:'value', values:['结果可以直接行动','过程可以复盘问责','成本和价值可以核对'], transition:'每次结果都会成为下一轮业务改善更好的起点。' },
+          { eyebrow:'06 / 持续优化', title:'系统随着业务一起进化，但始终受控', thesis:'真实反馈经过评估、验证、批准和版本管理，转化为更成熟的能力与下一轮目标。', diagram:'flywheel', values:['减少同类问题重复发生','优秀经验沉淀为组织能力','每轮运行都提升下一轮起点'], transition:'反馈优化形成下一轮目标，业务改善闭环持续运行。' }
+        ],
+        cta:{ title:'从一个真实业务目标开始', body:'选择一个跨人员、跨数据、跨流程且结果难追踪的场景，验证完整闭环。', action:'开始：定义首个业务闭环' }
+      }
+    };
+
+    const state = { audience: 'investor', mode: 'browse', chapter: 0 };
+    const $ = (selector) => document.querySelector(selector);
+    const $$ = (selector) => Array.from(document.querySelectorAll(selector));
+    const escapeHtml = (value) => String(value).replace(/[&<>"]/g, (char) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[char]));
+
+    function loopSvg(labels) {
+      const xs = [74,230,386,542,698,854,1010];
+      const nodes = labels.map((label,index) => {
+        const cls = index === 3 ? 'node node-human' : index >= 4 ? 'node node-value' : index === 2 ? 'node node-trust' : 'node';
+        return `<g><rect class="${cls}" x="${xs[index]-58}" y="39" width="116" height="56" rx="0"></rect><text x="${xs[index]}" y="72" text-anchor="middle" font-size="13">${escapeHtml(label)}</text><text class="small" x="${xs[index]}" y="25" text-anchor="middle">${String(index+1).padStart(2,'0')}</text></g>`;
+      }).join('');
+      return `<svg class="loop-svg" viewBox="0 0 1084 170" role="img" aria-labelledby="loop-svg-title loop-svg-desc"><title id="loop-svg-title">目标到结果的七阶段闭环</title><desc id="loop-svg-desc">七个阶段从左向右推进，最后通过反馈回路返回下一轮目标。</desc><defs><marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#4da3ff"></path></marker><marker id="arrow-value" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#a985ff"></path></marker></defs><path class="track" d="M132 67 H952" marker-end="url(#arrow)"></path>${nodes}<path class="return" d="M1010 104 C1010 154 74 154 74 104"></path><text class="small" x="542" y="159" text-anchor="middle">反馈经评估与验证，进入下一轮目标</text></svg>`;
+    }
+
+    function renderDiagram(type, audience, index) {
+      const data = CONTENT[audience];
+      const section = data.sections[index];
+      const common = `<span class="diagram-label">${escapeHtml(data.shortLabel)} · ${escapeHtml(section.eyebrow)}</span>`;
+      if (type === 'paradigm') return `<div class="diagram" role="img" aria-label="从被流程牵引到围绕目标运行的范式变化">${common}<div class="diagram-grid paradigm-grid"><div class="state-stack muted"><div class="state-title">过去：人组织软件</div><div class="node-box">找入口与功能</div><div class="node-box">搬运数据和状态</div><div class="node-box">人工追赶流程</div></div><div class="arrow">→</div><div class="state-stack"><div class="state-title">现在：系统组织工作</div><div class="node-box node-execution">目标成为入口</div><div class="node-box node-trust">能力围绕目标协同</div><div class="node-box node-result">交付可验证结果</div></div></div></div>`;
+      if (type === 'friction') return `<div class="diagram" role="img" aria-label="分散的人、数据、系统和服务汇聚到一个业务目标">${common}<div class="diagram-grid friction-grid"><div class="node-box">人员与岗位</div><div class="node-box node-execution friction-target"><strong>同一个业务目标</strong><small>统一状态 · 统一下一步 · 统一结果</small></div><div class="node-box">业务数据</div><div class="node-box">专业能力</div><div class="node-box">客户系统</div><div class="converge">↗ 由智能执行持续协调 ↖</div></div></div>`;
+      if (type === 'architecture') return `<div class="diagram" role="img" aria-label="体验入口、智能执行内核、能力网络和可信业务底座构成四层总体架构">${common}<div class="diagram-grid architecture-grid"><div class="side-boundary">生态连接</div><div class="layer-stack"><div class="layer"><strong>多元体验入口</strong><span>目标 · 事件 · 任务 · 协作</span></div><div class="layer layer-core"><strong>智能执行与持续进化</strong><span>理解 · 规划 · 组织 · 执行 · 反馈</span></div><div class="layer"><strong>可组合业务能力网络</strong><div class="cap-row"><span>智能能力</span><span>业务服务</span><span>数据产品</span><span>行业扩展</span></div></div><div class="layer layer-foundation"><strong>可信业务底座</strong><span>身份 · 事实 · 证据 · 审批 · 价值 · 审计</span></div></div><div class="side-boundary">灵活部署与数据边界</div></div></div>`;
+      if (type === 'execution') return `<div class="diagram" role="img" aria-label="目标经过规划组织执行和人工守门形成结果，并由治理护栏全程支撑">${common}<div class="diagram-grid execution-grid"><div class="node-box">业务目标</div><div class="arrow">→</div><div class="node-box node-execution">规划与组织</div><div class="arrow">→</div><div class="gate"><span>人工守门</span></div><div class="node-box node-execution">持续执行</div><div class="arrow">→</div><div class="node-box node-result">价值结果</div><div class="arrow">↺</div><div class="node-box node-trust">反馈评估</div><div class="governance"><div class="node-box node-trust">权限边界</div><div class="node-box node-trust">业务事实</div><div class="node-box node-human">关键审批</div><div class="node-box node-trust">证据审计</div></div></div></div>`;
+      if (type === 'flywheel') return `<div class="diagram" role="img" aria-label="业务目标、运行交付、反馈评估、版本升级和新机会构成闭合飞轮">${common}<div class="flywheel"><div class="flywheel-core"><strong>${escapeHtml(data.shortLabel)}飞轮</strong><small>每轮都提高下一轮起点</small></div><div class="wheel-node">目标与需求</div><div class="wheel-node">运行与交付</div><div class="wheel-node">反馈与结果</div><div class="wheel-node">评估与新版本</div><div class="wheel-node">人工验证</div><span class="wheel-arrow wa1">↘</span><span class="wheel-arrow wa2">↓</span><span class="wheel-arrow wa3">←</span><span class="wheel-arrow wa4">↑</span><span class="wheel-arrow wa5">↗</span></div></div>`;
+      return `<div class="diagram" role="img" aria-label="可验证结果形成递进的业务价值并支持下一步扩展">${common}<div class="diagram-grid value-grid"><div class="result-stack"><div class="node-box node-result">可验证业务结果</div><div class="node-box">事实与证据</div><div class="node-box node-trust">责任与过程</div><div class="node-box node-human">成本与价值确认</div></div><div class="value-ladder"><div class="value-rung">单点结果</div><div class="value-rung">组织能力沉淀</div><div class="value-rung">更多场景与长期价值</div></div></div></div>`;
+    }
+
+    function renderSection(section, index) {
+      return `<section class="chapter${index===state.chapter?' is-active':''}" id="chapter-${index}" data-rendered-section data-index="${index}" aria-labelledby="chapter-title-${index}"><div class="chapter-copy"><span class="chapter-index">CHAPTER ${String(index+1).padStart(2,'0')} / 06</span><p class="eyebrow">${escapeHtml(section.eyebrow)}</p><h2 id="chapter-title-${index}">${escapeHtml(section.title)}</h2><p class="thesis">${escapeHtml(section.thesis)}</p><ul class="value-list">${section.values.map(value=>`<li>${escapeHtml(value)}</li>`).join('')}</ul><p class="chapter-transition" data-transition>${escapeHtml(section.transition)}</p></div><div class="chapter-visual">${renderDiagram(section.diagram,state.audience,index)}</div></section>`;
+    }
+
+    function renderAudience(key) {
+      if (!Object.prototype.hasOwnProperty.call(CONTENT,key)) return;
+      state.audience=key; state.chapter=0;
+      const data=CONTENT[key];
+      $('#hero-eyebrow').textContent=data.hero.eyebrow; $('#hero-title').textContent=data.hero.title; $('#hero-lead').textContent=data.hero.lead; $('#hero-closing').textContent=data.hero.closing;
+      $('#loop-rail').innerHTML=loopSvg(data.loop);
+      $('#chapter-stage').innerHTML=data.sections.map(renderSection).join('');
+      $('#chapter-nav').innerHTML=data.sections.map((section,index)=>`<button type="button" class="chapter-button" data-chapter="${index}" ${index===0?'aria-current="step"':''}>${String(index+1).padStart(2,'0')} ${escapeHtml(section.eyebrow.split('/').pop().trim())}</button>`).join('');
+      $('#cta-title').textContent=data.cta.title; $('#cta-body').textContent=data.cta.body; $('#cta-action').textContent=data.cta.action;
+      $$('.audience-tab').forEach(tab=>tab.setAttribute('aria-selected',String(tab.dataset.audience===key)));
+      bindChapterButtons(); updateChapterState();
+    }
+
+    function setChapter(index) {
+      const sections=CONTENT[state.audience].sections;
+      const safe=Math.max(0,Math.min(Number(index)||0,sections.length-1));
+      state.chapter=safe;
+      $$('.chapter').forEach((section,i)=>section.classList.toggle('is-active',i===safe));
+      $$('.chapter-button').forEach((button,i)=>i===safe?button.setAttribute('aria-current','step'):button.removeAttribute('aria-current'));
+      updateChapterState();
+      if(state.mode==='browse') document.querySelector(`#chapter-${safe}`)?.scrollIntoView({behavior:'smooth',block:'start'});
+    }
+
+    function setMode(mode) {
+      if(!['browse','present'].includes(mode)) return;
+      state.mode=mode; document.body.dataset.mode=mode;
+      $('#browse-mode').setAttribute('aria-pressed',String(mode==='browse')); $('#present-mode').setAttribute('aria-pressed',String(mode==='present'));
+      updateChapterState();
+      if(mode==='present') window.scrollTo({top:$('.workspace-bar').offsetTop,behavior:'smooth'});
+    }
+
+    function updateChapterState(){
+      $('#prev-chapter').disabled=state.chapter===0; $('#next-chapter').disabled=state.chapter===CONTENT[state.audience].sections.length-1;
+      $$('.chapter').forEach((section,i)=>section.classList.toggle('is-active',i===state.chapter));
+    }
+    function bindChapterButtons(){ $$('.chapter-button').forEach(button=>button.addEventListener('click',()=>setChapter(Number(button.dataset.chapter)))); }
+    $$('.audience-tab').forEach((tab,index,tabs)=>{
+      tab.addEventListener('click',()=>renderAudience(tab.dataset.audience));
+      tab.addEventListener('keydown',(event)=>{ if(!['ArrowLeft','ArrowRight'].includes(event.key)) return; event.preventDefault(); const direction=event.key==='ArrowRight'?1:-1; const next=tabs[(index+direction+tabs.length)%tabs.length]; next.focus(); renderAudience(next.dataset.audience); });
+    });
+    $('#browse-mode').addEventListener('click',()=>setMode('browse')); $('#present-mode').addEventListener('click',()=>setMode('present'));
+    $('#prev-chapter').addEventListener('click',()=>setChapter(state.chapter-1)); $('#next-chapter').addEventListener('click',()=>setChapter(state.chapter+1));
+    renderAudience('investor'); setMode('browse');
+  </script>
+</body>
+</html>

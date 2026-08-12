@@ -22,7 +22,7 @@
 **Files:**
 - Create: `tests/promotion/test_three_audience_html.py`
 
-- [ ] **Step 1: Write failing structural tests**
+- [x] **Step 1: Write failing structural tests**
 
 Create tests that load `docs/promotion/ai-native-business-os-three-audience.html` and assert:
 
@@ -47,7 +47,7 @@ required = {
 
 Add a disclosure test rejecting internal model, infrastructure, endpoint, prompt, threshold, and database terminology listed in the approved design.
 
-- [ ] **Step 2: Run the tests and verify RED**
+- [x] **Step 2: Run the tests and verify RED**
 
 Run:
 
@@ -62,11 +62,11 @@ Expected: FAIL because `docs/promotion/ai-native-business-os-three-audience.html
 **Files:**
 - Create: `docs/promotion/ai-native-business-os-three-audience.html`
 
-- [ ] **Step 1: Create the valid standalone document**
+- [x] **Step 1: Create the valid standalone document**
 
 Add `<!doctype html>`, Chinese language metadata, responsive viewport, descriptive title, inline styles, one application root, and inline script. Do not load fonts, scripts, images, analytics, or stylesheets from the network.
 
-- [ ] **Step 2: Define the complete `CONTENT` object**
+- [x] **Step 2: Define the complete `CONTENT` object**
 
 Define `investor`, `partner`, and `customer`. Each entry must contain:
 
@@ -85,11 +85,11 @@ Define `investor`, `partner`, and `customer`. Each entry must contain:
 
 Provide exactly six sections per audience. Use the approved narrative order and ensure each `transition` introduces the next chapter.
 
-- [ ] **Step 3: Add edit guidance inside the source**
+- [x] **Step 3: Add edit guidance inside the source**
 
 Immediately above `CONTENT`, add a clear Chinese comment explaining that ordinary copy changes should be made only inside `CONTENT`; document the stable fields and advise keeping `loop` at seven stages.
 
-- [ ] **Step 4: Implement deterministic rendering**
+- [x] **Step 4: Implement deterministic rendering**
 
 Implement `renderAudience(key)`, `renderSection(section, index)`, `renderDiagram(type, audience, index)`, `setChapter(index)`, and `setMode(mode)`. Validate the selected audience key and section index before rendering. Default to `investor`, browsing mode, chapter zero.
 
@@ -98,15 +98,15 @@ Implement `renderAudience(key)`, `renderSection(section, index)`, `renderDiagram
 **Files:**
 - Modify: `docs/promotion/ai-native-business-os-three-audience.html`
 
-- [ ] **Step 1: Implement the presentation token system**
+- [x] **Step 1: Implement the presentation token system**
 
 Use a deep-ocean canvas, restrained coordinate grid, electric-blue execution, teal governance, amber human decisions, violet results/evolution, and neutral external context. Define consistent spacing, twelve-column desktop layout, line weights, arrow markers, cut-corner nodes, diamond approval nodes, double-border result nodes, and continuous foundation bands.
 
-- [ ] **Step 2: Implement the signature closed-loop rail**
+- [x] **Step 2: Implement the signature closed-loop rail**
 
 Render all seven stages with directional connectors and a visible return path from feedback to the next goal. Use SVG marker arrows; keep labels outside paths; add an accessible `<title>` and `<desc>`. Change stage labels with the selected audience while preserving geometry.
 
-- [ ] **Step 3: Implement six diagram families**
+- [x] **Step 3: Implement six diagram families**
 
 Implement these `diagram` types:
 
@@ -121,7 +121,7 @@ value        — result/value stack and next-step expansion
 
 Every diagram must expose the same architecture truth but derive emphasis and labels from the current audience.
 
-- [ ] **Step 4: Make layout responsive**
+- [x] **Step 4: Make layout responsive**
 
 At widths below 820px, convert multi-column diagrams into vertical tracks. At widths below 520px, stack controls and value statements, simplify connector turns, and preserve at least 14px body text. Do not use horizontal scrolling or scaled-down fixed-width canvases.
 
@@ -130,19 +130,19 @@ At widths below 820px, convert multi-column diagrams into vertical tracks. At wi
 **Files:**
 - Modify: `docs/promotion/ai-native-business-os-three-audience.html`
 
-- [ ] **Step 1: Implement accessible audience tabs**
+- [x] **Step 1: Implement accessible audience tabs**
 
 Use three native buttons with `role="tab"`, `aria-selected`, and `aria-controls`. Support click, Enter/Space, and left/right arrow navigation. Switching audience resets to chapter zero and updates all hero, loop, chapter, diagram, values, transition, and CTA content.
 
-- [ ] **Step 2: Implement chapter navigation**
+- [x] **Step 2: Implement chapter navigation**
 
 Build six chapter buttons from current content. In browsing mode they scroll to the matching section; in presentation mode they replace the visible chapter. Keep `aria-current="step"` synchronized.
 
-- [ ] **Step 3: Implement browsing and presentation modes**
+- [x] **Step 3: Implement browsing and presentation modes**
 
 Add a mode switch and Previous/Next controls. Presentation mode shows one chapter at a time; browsing mode shows all six. Disable Previous at chapter zero and Next at chapter five. Preserve the active audience across mode changes.
 
-- [ ] **Step 4: Respect motion and keyboard use**
+- [x] **Step 4: Respect motion and keyboard use**
 
 Use one short section transition and one loop-path drawing transition. Disable both under `prefers-reduced-motion: reduce`. Maintain visible focus indicators and native tab order.
 
@@ -152,7 +152,7 @@ Use one short section transition and one loop-path drawing transition. Disable b
 - Modify: `docs/promotion/ai-native-business-os-three-audience.html`
 - Modify: `docs/promotion/ai-native-business-os-architecture-narrative.md`
 
-- [ ] **Step 1: Run static tests and reach GREEN**
+- [x] **Step 1: Run static tests and reach GREEN**
 
 Run:
 
@@ -162,7 +162,7 @@ pytest -q tests/promotion/test_three_audience_html.py
 
 Expected: all tests pass.
 
-- [ ] **Step 2: Run browser checks at four widths**
+- [x] **Step 2: Run browser checks at four widths**
 
 Use Playwright to open the local file at 1440×1000, 1024×900, 768×900, and 390×844. For each width assert:
 
@@ -174,11 +174,11 @@ document.querySelectorAll('[role="tab"]').length === 3
 
 Switch through all audiences, confirm the active label and CTA change, switch presentation mode, traverse all six chapters, and capture screenshots for visual inspection.
 
-- [ ] **Step 3: Inspect screenshots and correct geometry**
+- [x] **Step 3: Inspect screenshots and correct geometry**
 
 Check node alignment, arrow direction, return paths, label clipping, text contrast, chapter rhythm, and mobile stacking. Reject any diagram with floating nodes, unexplained lines, connector crossings through labels, uneven baseline alignment, or an open feedback loop.
 
-- [ ] **Step 4: Verify offline and disclosure constraints**
+- [x] **Step 4: Verify offline and disclosure constraints**
 
 Run:
 
@@ -189,11 +189,11 @@ rg -n 'Qwen|YOLO|SAM|DeepSeek|PostgreSQL|Redis|MinIO|Label Studio|FastAPI|React 
 
 Expected: no output.
 
-- [ ] **Step 5: Document usage**
+- [x] **Step 5: Document usage**
 
 Add a `三受众 HTML 使用说明` section to `docs/promotion/ai-native-business-os-architecture-narrative.md` with the relative file link, browser-opening instruction, audience-switch behavior, and exact guidance to edit only the `CONTENT` object for copy changes.
 
-- [ ] **Step 6: Run project-level verification**
+- [x] **Step 6: Run project-level verification**
 
 Run:
 
@@ -204,7 +204,7 @@ git diff --check -- docs/promotion/ai-native-business-os-three-audience.html doc
 
 Expected: tests pass and diff check produces no output.
 
-- [ ] **Step 7: Commit the finished package**
+- [x] **Step 7: Commit the finished package**
 
 ```bash
 git add docs/promotion/ai-native-business-os-three-audience.html docs/promotion/ai-native-business-os-architecture-narrative.md tests/promotion/test_three_audience_html.py docs/superpowers/plans/2026-08-12-ai-native-business-os-three-audience-html.md
