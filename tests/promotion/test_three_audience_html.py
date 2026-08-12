@@ -155,12 +155,49 @@ def test_token_flow_and_shared_loop_are_complete() -> None:
 
 def test_desktop_loop_stage_semantics_match_mobile_order() -> None:
     html = load_html()
-    assert "index === 4 ? 'node node-human'" in html
-    assert "index === 5 ? 'node node-result-svg'" in html
-    assert "index === 6 ? 'node node-value'" in html
+    shared_loop = re.search(r"const SHARED_LOOP = \[(.*?)\];", html, re.DOTALL)
+    assert shared_loop
+    labels = re.findall(r"'([^']+)'", shared_loop.group(1))
+    assert labels == [
+        "业务目标",
+        "可执行意图",
+        "词元驱动理解与决策",
+        "组织人员、数据与能力",
+        "持续执行与人工守门",
+        "可验证业务结果",
+        "反馈、评估与能力进化",
+    ]
+    class_mapping = (
+        "index === 4 ? 'node node-human' : index === 5 ? "
+        "'node node-result-svg' : index === 6 ? 'node node-value' : "
+        "index === 2 ? 'node node-trust' : 'node'"
+    )
+    assert class_mapping in html
     assert 'class="result-inner"' in html
     assert ".loop-svg .node-result-svg" in html
     assert ".loop-svg .result-inner" in html
+
+
+def test_friction_sources_converge_before_taas_target_on_mobile() -> None:
+    html = load_html()
+    friction_template = re.search(
+        r"if \(type === 'friction'\) return `(.*?)`;", html, re.DOTALL
+    )
+    assert friction_template
+    template = friction_template.group(1)
+    positions = [
+        template.find('class="friction-sources"'),
+        template.find('class="converge"'),
+        template.find('class="node-box node-execution friction-target"'),
+    ]
+    assert all(position >= 0 for position in positions)
+    assert positions == sorted(positions)
+    mobile_rules = extract_css_block(html, "@media (max-width: 820px)")
+    assert re.search(r"\.converge\s*\{[^{}]*grid-column\s*:\s*1\s*/\s*-1", mobile_rules)
+    assert re.search(r"\.converge::after\s*\{[^{}]*content\s*:\s*\"↓ 汇聚\"", mobile_rules)
+    target_rule = re.search(r"\.friction-target\s*\{([^{}]*)\}", mobile_rules)
+    assert target_rule
+    assert "order" not in target_rule.group(1)
 
 
 def test_cream_light_theme_contract() -> None:

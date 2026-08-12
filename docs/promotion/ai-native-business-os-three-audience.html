@@ -167,9 +167,10 @@
     .state-stack { display: grid; gap: 8px; }
     .state-stack.muted { opacity: .65; }
     .state-title { color: var(--muted); font: 500 11px/1.2 var(--utility); letter-spacing: .13em; text-transform: uppercase; text-align: center; }
-    .friction-grid { grid-template-columns: repeat(4, 1fr) 48px 1.35fr; align-items: center; }
+    .friction-grid { grid-template-columns: minmax(0, 4fr) 48px minmax(180px, 1.35fr); align-items: center; }
+    .friction-sources { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
     .friction-source { min-height: 96px; }
-    .friction-target { grid-column: 6; grid-row: 1; min-height: 132px; }
+    .friction-target { grid-column: 3; grid-row: 1; min-height: 132px; }
     .converge { color: var(--execution); text-align: center; font: 500 12px/1.3 var(--utility); }
     .architecture-grid { grid-template-columns: 1fr; align-items: stretch; }
     .architecture-boundaries { display: flex; justify-content: space-between; gap: 18px; padding-bottom: 10px; color: var(--muted); border-bottom: 1px solid var(--line); font-size: 12px; letter-spacing: .08em; }
@@ -252,7 +253,10 @@
       .execution-grid > .arrow { transform: rotate(90deg); }
       .execution-grid .governance { grid-template-columns: repeat(2,1fr); }
       .friction-grid { grid-template-columns: 1fr 1fr; }
-      .friction-target { grid-column: 1 / -1; grid-row: auto; order: -1; min-height: 120px; }
+      .friction-sources { grid-column: 1 / -1; grid-template-columns: 1fr 1fr; }
+      .converge { grid-column: 1 / -1; font-size: 0; }
+      .converge::after { content: "↓ 汇聚"; font-size: 12px; }
+      .friction-target { grid-column: 1 / -1; grid-row: auto; min-height: 120px; }
       .cta { grid-template-columns: 1fr; }
     }
     @media (max-width: 520px) {
@@ -272,6 +276,7 @@
       .diagram { min-height: 390px; padding: 42px 14px 20px; }
       .cap-row, .execution-grid .governance { grid-template-columns: 1fr 1fr; }
       .friction-grid { grid-template-columns: 1fr; }
+      .friction-sources { grid-template-columns: 1fr; }
       .flywheel { transform: scale(.72); }
       .value-rung:nth-child(n) { width: 100%; }
       .cta-action { white-space: normal; }
@@ -448,7 +453,7 @@
       const section = data.sections[index];
       const common = `<span class="diagram-label">${escapeHtml(data.shortLabel)} · ${escapeHtml(section.eyebrow)}</span>`;
       if (type === 'paradigm') return `<div class="diagram" role="img" aria-label="从寻找功能入口到围绕目标交付结果的完整闭环">${common}<div class="diagram-grid paradigm-grid"><div class="state-stack muted"><div class="state-title">过去：从功能入口开始</div><div class="node-box">找入口与功能</div><div class="node-box">搬运数据和状态</div><div class="node-box">人工追赶流程</div></div><div class="arrow">→</div><div class="state-stack"><div class="state-title">现在：从业务目标开始</div><div class="node-box node-execution">目标成为统一入口</div><div class="node-box node-trust">组织人、数据与能力</div><div class="node-box node-result">可验证结果 · 反馈回到目标</div></div></div></div>`;
-      if (type === 'friction') return `<div class="diagram" role="img" aria-label="分散的功能入口和业务痛点沿细线汇聚到 TaaS 业务目标">${common}<div class="diagram-grid friction-grid"><div class="node-box friction-source">人员与岗位</div><div class="node-box friction-source">业务数据</div><div class="node-box friction-source">专业能力</div><div class="node-box friction-source">客户系统</div><div class="converge">────→</div><div class="node-box node-execution friction-target"><strong>TaaS 业务目标</strong><small>统一上下文 · 统一状态 · 统一下一步 · 结果回流</small></div></div></div>`;
+      if (type === 'friction') return `<div class="diagram" role="img" aria-label="分散的功能入口和业务痛点沿细线汇聚到 TaaS 业务目标">${common}<div class="diagram-grid friction-grid"><div class="friction-sources"><div class="node-box friction-source">人员与岗位</div><div class="node-box friction-source">业务数据</div><div class="node-box friction-source">专业能力</div><div class="node-box friction-source">客户系统</div></div><div class="converge">────→</div><div class="node-box node-execution friction-target"><strong>TaaS 业务目标</strong><small>统一上下文 · 统一状态 · 统一下一步 · 结果回流</small></div></div></div>`;
       if (type === 'architecture') return `<div class="diagram" role="img" aria-label="体验入口、TaaS 智能执行层、能力网络和可信业务底座构成垂直四层架构">${common}<div class="diagram-grid architecture-grid"><div class="architecture-boundaries"><span>生态连接</span><span>灵活部署与数据边界</span></div><div class="layer-stack"><div class="layer"><strong>多元体验入口</strong><span>目标 · 事件 · 任务 · 协作</span></div><div class="layer layer-core"><strong>TaaS 智能执行层</strong><span>理解 · 规划 · 组织 · 执行 · 反馈</span></div><div class="layer"><strong>可组合业务能力网络</strong><div class="cap-row"><span>智能能力</span><span>业务服务</span><span>数据产品</span><span>行业扩展</span></div></div><div class="layer layer-foundation"><strong>可信业务底座</strong><span>身份 · 事实 · 证据 · 审批 · 价值 · 审计</span></div></div></div></div>`;
       if (type === 'execution') return `<div class="diagram" role="img" aria-label="目标沿单向流程经过关键人工守门形成结果，可信治理作为全程底轨">${common}<div class="diagram-grid execution-grid"><div class="node-box">可执行意图</div><div class="arrow">→</div><div class="node-box node-execution">理解与决策</div><div class="arrow">→</div><div class="gate human-gate"><span>关键人工守门</span></div><div class="arrow">→</div><div class="node-box node-execution">组织能力执行</div><div class="arrow">→</div><div class="node-box node-result verified-result">可验证结果</div><div class="governance"><div class="node-box node-trust">权限边界</div><div class="node-box node-trust">业务事实</div><div class="node-box node-human">关键审批</div><div class="node-box node-trust">证据审计</div></div></div></div>`;
       if (type === 'flywheel') return `<div class="diagram" role="img" aria-label="业务目标、运行交付、反馈评估、版本升级和新机会构成闭合飞轮">${common}<div class="flywheel"><div class="flywheel-core"><strong>${escapeHtml(data.shortLabel)}飞轮</strong><small>每轮都提高下一轮起点</small></div><div class="wheel-node">目标与需求</div><div class="wheel-node">运行与交付</div><div class="wheel-node">反馈与结果</div><div class="wheel-node">评估与新版本</div><div class="wheel-node">人工验证</div><span class="wheel-arrow wa1">↘</span><span class="wheel-arrow wa2">↓</span><span class="wheel-arrow wa3">←</span><span class="wheel-arrow wa4">↑</span><span class="wheel-arrow wa5">↗</span></div></div>`;
