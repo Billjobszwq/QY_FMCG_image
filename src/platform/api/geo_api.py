@@ -79,6 +79,7 @@ class FenceBody(BaseModel):
     lat: float
     lng: float
     radius_m: float
+    test_run_id: str = ""
 
 
 class ArriveBody(BaseModel):
@@ -310,9 +311,14 @@ def create_geo_router(store: Any, svc: FieldOpsService, iam: IAMService,
     def fence(body: FenceBody, request: Request) -> dict:
         p = require_principal(auth, request, csrf=True)
         _guard(iam, p["actor"], p["role"], body.customer_id)
-        return {"fence": _wrap(svc.create_fence)(
+        _assert_test_run(store, body.test_run_id)
+        fen = _wrap(svc.create_fence)(
             customer_id=body.customer_id, name=body.name, lat=body.lat,
-            lng=body.lng, radius_m=body.radius_m)}
+            lng=body.lng, radius_m=body.radius_m)
+        if body.test_run_id:
+            bind_fixture_scope(store, "geofence_v1",
+                               fen["fence_id"], body.test_run_id)
+        return {"fence": fen}
 
     @router.get("/api/v1/geo/fences")
     def fences(request: Request, customer_id: str) -> dict:

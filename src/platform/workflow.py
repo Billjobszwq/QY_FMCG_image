@@ -1562,12 +1562,17 @@ class WorkflowService:
         if t == "human_approval":
             if simulate:
                 return {"decision": "[simulate] auto-approved"}, None
+            # SI3：approval 子待办继承主 Run scope（指令四.13）。
+            _run = self.store.get_business_run(run_id) or {}
             approval_work = self.store.insert_work_item_v2({
                 "work_id": _new_id("work"), "run_id": run_id,
                 "status": "approval", "owner_type": "human",
                 "owner_id": cfg.get("owner", "admin"),
                 "title": cfg.get("title", "人工批准"),
                 "business_summary": f"workflow run {run_id}",
+                "customer_id": _run.get("customer_id") or "",
+                "project_id": _run.get("project_id") or "",
+                "data_scope": _run.get("data_scope") or "operational",
                 "subject_type": "workflow_run", "subject_id": run_id})
             self.store.upsert_node_execution(
                 run_id, node["id"], node_type="human_approval",

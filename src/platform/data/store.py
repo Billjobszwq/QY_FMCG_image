@@ -2188,6 +2188,12 @@ ALTER TABLE fin_adjustment_v1 ADD COLUMN data_scope TEXT NOT NULL DEFAULT 'opera
 ALTER TABLE fin_adjustment_v1 ADD COLUMN test_run_id TEXT NOT NULL DEFAULT '';
 """
 
+# SI3 T8：围栏为可变业务对象，补结构化 scope 列（迁移 052 遗漏）。
+_M056 = """
+ALTER TABLE geofence_v1 ADD COLUMN data_scope TEXT NOT NULL DEFAULT 'operational';
+ALTER TABLE geofence_v1 ADD COLUMN test_run_id TEXT NOT NULL DEFAULT '';
+"""
+
 MIGRATIONS: tuple[tuple[str, str], ...] = (
     ("001_platform_init", _M001),
     ("002_labeling_inbox", _M002),
@@ -2244,6 +2250,7 @@ MIGRATIONS: tuple[tuple[str, str], ...] = (
     ("053_execution_scope_customer_v1", _M053),
     ("054_scope_attribution_ledger_v1", _M054),
     ("055_finance_scope_v1", _M055),
+    ("056_geofence_scope_v1", _M056),
 )
 
 

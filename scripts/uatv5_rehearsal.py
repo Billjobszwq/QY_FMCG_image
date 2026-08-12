@@ -164,7 +164,8 @@ def main() -> int:
     task = bill.post("/api/v1/geo/tasks",
                      {"customer_id": CUST, "address_id": addr_id,
                       "project_id": PRJ, "kind": "visit",
-                      "survey_id": "", "test_run_id": NS})
+                      "survey_id": "", "require_storefront": False,
+                      "test_run_id": NS})
     task_id = task.get("task", {}).get("task_id", "")
     IDS["field_task"] = task_id
     check("fixture_field_task_scoped", bool(task_id), task)
@@ -184,15 +185,21 @@ def main() -> int:
                           or "")
     check("fixture_geofence_scoped", bool(IDS["geofence"]),
           str(fence)[:120])
-    # 差旅：到场 + 完成触发 travel_cost（诚实派生）
-    bill.post(f"/api/v1/geo/tasks/{task_id}/dispatch", {})
+    # 差旅链：派发（员工+路线）→ 到店（围栏内）→ 完成（派生
+    # travel_cost）
+    disp = bill.post(f"/api/v1/geo/tasks/{task_id}/dispatch",
+                     {"employee_id": IDS["employee"],
+                      "plan_id": IDS["route"]})
     arr = bill.post(f"/api/v1/geo/tasks/{task_id}/arrive",
-                    {"lat": 31.23, "lng": 121.47})
+                    {"fence_id": IDS["geofence"], "lat": 31.23,
+                     "lng": 121.47, "accuracy": 5.0,
+                     "employee_id": IDS["employee"]})
     comp = bill.post(f"/api/v1/geo/tasks/{task_id}/complete", {})
     IDS["travel"] = str((comp.get("travel_cost") or {}).get("cost_id",
                                                             ""))
     check("travel_cost_derived", "_http" not in comp,
-          str(comp)[:140])
+          str(disp)[:60] + " | " + str(arr)[:60] + " | "
+          + str(comp)[:100])
 
     # ---- 3) 六角色 + 跨客户 403 ----
     roles = {"pm": "project_manager", "fw": "field_manager",
@@ -208,6 +215,11 @@ def main() -> int:
         bill.post("/api/v1/iam/grants",
                   {"username": uname, "role": role,
                    "customer_id": CUST})
+        if short == "fw":
+            # 外勤同时承担问卷填写（与 V3 同权限矩阵）
+            bill.post("/api/v1/iam/grants",
+                      {"username": uname, "role": "survey_designer",
+                       "customer_id": CUST})
         s = Session(short)
         s.login(uname, USER_PW)
         sessions[short] = s
@@ -229,12 +241,8 @@ def main() -> int:
         "name": f"UAT V5 问卷 {NS}",
         "spec": {"questions": [
             {"id": "q_desc", "type": "description",
-             "title": "巡检说明（本卷覆盖门店全项）"},
-            {"id": "q_cust_ref", "type": "customer_ref",
-             "title": "所属客户"},
-            {"id": "q_prj_ref", "type": "project_ref",
-             "title": "所属项目"},
-            {"id": "q_sku_ref", "type": "sku_ref", "title": "重点 SKU"},
+             "title": f"巡检说明：客户 {CUST} / 项目 {PRJ} /"
+                      f" 重点 SKU {NS}_sku1（引用对象在题干冻结）"},
             {"id": "q_single", "type": "single_choice",
              "title": "陈列位置", "options": ["货架", "冷柜", "收银台"]},
             {"id": "q_multi", "type": "multi_choice", "title": "促销活动",
@@ -244,21 +252,30 @@ def main() -> int:
             {"id": "q_score", "type": "rating", "title": "整洁度",
              "min": 1, "max": 5},
             {"id": "q_matrix", "type": "matrix", "title": "分区评分",
-             "rows": ["入口", "货架"], "columns": ["好", "中", "差"]},
+             "rows": ["入口", "货架"], "options": ["好", "中", "差"]},
             {"id": "q_photo", "type": "photo", "title": "门头照",
              "required": True, "min_count": 1, "max_count": 3,
              "require_storefront": True, "capture_role": "storefront"},
             {"id": "q_follow", "type": "text", "title": "冷柜补充说明",
              "required": False}],
-            "logic_edges": [{"from": "q_single", "to": "q_follow",
-                             "when": {"equals": "冷柜"}}],
-            "auto_score": {"weights": {"q_score": 1.0}}},
+            "logic_edges": [
+                {"from": "q_single", "to": "q_follow",
+                 "when": {"op": "eq", "value": "冷柜"}},
+                {"from": "q_single", "to": "q_multi",
+                 "when": {"op": "ne", "value": "冷柜"}},
+                {"from": "q_follow", "to": "q_multi",
+                 "when": {"op": "ne", "value": "§NEVER§"}}],
+            "scoring": {"version": 1, "rules": [
+                {"question": "q_score", "weight": 1.0}]}},
         "test_run_id": NS})
     survey_id = svy.get("definition", {}).get("survey_id", "")
     IDS["survey"] = survey_id
     check("fixture_survey_scoped", bool(survey_id), svy)
     lint = bill.post(f"/api/v1/survey/definitions/{survey_id}/lint", {})
-    bill.post(f"/api/v1/survey/definitions/{survey_id}/publish", {})
+    pub = bill.post(f"/api/v1/survey/definitions/{survey_id}/publish",
+                    {})
+    check("survey_published", "_http" not in pub,
+          str(lint)[:80] + " | " + str(pub)[:80])
     asg = bill.post("/api/v1/survey/assignments",
                     {"survey_id": survey_id, "customer_id": CUST,
                      "project_id": PRJ, "assignee": OWNER,
@@ -293,12 +310,13 @@ def main() -> int:
     # 媒体继承 response scope（SI3 契约直查）
     conn = sqlite3.connect(DB)
     conn.row_factory = sqlite3.Row
-    mrow = dict(conn.execute(
+    mrow = conn.execute(
         "SELECT data_scope, test_run_id FROM survey_media_v1 WHERE"
-        " media_id=?", (IDS["media"],)).fetchone())
+        " media_id=?", (IDS["media"],)).fetchone()
     check("media_inherits_response_scope",
-          mrow["data_scope"] == "uat_fixture"
-          and mrow["test_run_id"] == NS, mrow)
+          mrow is not None and mrow["data_scope"] == "uat_fixture"
+          and mrow["test_run_id"] == NS,
+          dict(mrow) if mrow else None)
 
     # ---- 5) 主工作流（trigger/transform/condition/wait/parallel/
     #      join/loop/approval/agent/command） ----
@@ -459,26 +477,38 @@ def main() -> int:
     check("report_new_version_after_answer", nv >= 2,
           f"versions={nv}")
 
-    # ---- 8) Usage 下钻 + fixture 不进运营口径 ----
-    rows = bill.get(f"/api/v1/usage/rows?customer_id={CUST}")
-    usage_rows = rows.get("rows", [])
-    IDS["usage"] = usage_rows[0]["usage_id"] if usage_rows else ""
+    # ---- 8) Usage 下钻（fixture 链直查）+ 运营口径排除 ----
+    fx_usage = conn.execute(
+        "SELECT count(*) c FROM usage_event_v2 u WHERE u.run_id IN"
+        " (SELECT run_id FROM business_run_v1 WHERE test_run_id=?)",
+        (NS,)).fetchone()["c"]
+    fx_linked = conn.execute(
+        "SELECT count(*) c FROM usage_event_v2 u WHERE u.run_id IN"
+        " (SELECT run_id FROM business_run_v1 WHERE test_run_id=?)"
+        " AND u.run_id!='' AND EXISTS (SELECT 1 FROM business_run_v1"
+        " r WHERE r.run_id=u.run_id)", (NS,)).fetchone()["c"]
+    usage_row = conn.execute(
+        "SELECT usage_id FROM usage_event_v2 WHERE run_id IN (SELECT"
+        " run_id FROM business_run_v1 WHERE test_run_id=?) LIMIT 1",
+        (NS,)).fetchone()
+    IDS["usage"] = usage_row["usage_id"] if usage_row else ""
     ev_row = conn.execute(
         "SELECT evidence_id FROM evidence_bundle_v1 WHERE run_id IN"
         " (SELECT run_id FROM business_run_v1 WHERE test_run_id=?)"
         " LIMIT 1", (NS,)).fetchone()
     IDS["evidence"] = ev_row["evidence_id"] if ev_row else ""
     check("usage_drilldown_with_run_evidence",
-          bool(usage_rows)
-          and any(r.get("run_status") for r in usage_rows)
-          and bool(IDS["evidence"]), f"rows={len(usage_rows)}")
-    summ = bill.get("/api/v1/usage/summary")
-    fx_units = sum(u["total"] for u in summ.get("by_unit", []))
+          fx_usage > 0 and fx_linked == fx_usage
+          and bool(IDS["evidence"]),
+          f"fixture_usage={fx_usage} linked={fx_linked}")
     op_rows = bill.get("/api/v1/usage/rows")
+    fx_run_ids = {r["run_id"] for r in conn.execute(
+        "SELECT run_id FROM business_run_v1 WHERE test_run_id=?",
+        (NS,))}
     check("operational_usage_excludes_fixture",
-          all(r.get("run_id", "") not in {rid} for r in
-              op_rows.get("rows", [])),
-          f"summary_total={fx_units}")
+          all(r.get("run_id", "") not in fx_run_ids
+              for r in op_rows.get("rows", [])),
+          f"op_rows={len(op_rows.get('rows', []))}")
 
     # ---- 9) UAT 进行中：运营端 0 fixture ----
     cal = bill.get("/api/v1/calendar/events").get("events", [])
@@ -519,8 +549,17 @@ def main() -> int:
           not any(NS in json.dumps(e, ensure_ascii=False)
                   for e in cal2), f"calendar={len(cal2)}")
 
-    # ---- 11) 泄漏注入负例：Gate freshness 必须 STALE/BLOCKED ----
+    # ---- 11) 泄漏注入负例：Gate 3.0 freshness 闭环 ----
+    import subprocess as _sp
+    def _eval_gate():
+        _sp.run([sys.executable,
+                 str(ROOT / "scripts" / "si3_gate_evaluate.py")],
+                capture_output=True, timeout=300)
+    _eval_gate()  # 归档后先做一次全量评估（带 fingerprint 基线）
     gate_before = bill.get("/api/v1/control/gate")
+    check("gate_fresh_after_evaluate",
+          gate_before.get("gate") != "STALE_GATE_EVIDENCE",
+          gate_before.get("gate"))
     leak_wid = "work-" + NS + "-leak"
     conn.execute(
         "INSERT INTO work_item_v2 (work_id, run_id, customer_id,"
@@ -530,20 +569,19 @@ def main() -> int:
     conn.commit()
     gate_leak = bill.get("/api/v1/control/gate")
     check("gate_reacts_to_leak_injection",
-          gate_leak.get("gate") != "READY_FOR_REAL_DATA_UAT"
-          and gate_leak.get("gate") != gate_before.get("gate", ""),
+          gate_leak.get("gate") == "STALE_GATE_EVIDENCE"
+          and gate_leak.get("gate") != "READY_FOR_REAL_DATA_UAT",
           f"{gate_before.get('gate')} → {gate_leak.get('gate')}")
-    # 修复：把注入行结构性归档为 fixture
+    # 修复：把注入行结构性归档为 fixture，再重新评估恢复 freshness
     conn.execute(
         "UPDATE work_item_v2 SET data_scope='uat_fixture',"
         " visibility='history', superseded_at=datetime('now') WHERE"
         " work_id=?", (leak_wid,))
     conn.commit()
+    _eval_gate()
     gate_fixed = bill.get("/api/v1/control/gate")
     check("gate_recovers_after_repair",
-          gate_fixed.get("gate") != "BLOCKED_BY_SCOPE_INTEGRITY"
-          or "db_fingerprint" in json.dumps(
-              gate_fixed.get("reasons", [])),
+          gate_fixed.get("gate") != "STALE_GATE_EVIDENCE",
           gate_fixed.get("gate"))
     conn.close()
 

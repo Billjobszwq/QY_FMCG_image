@@ -12,6 +12,7 @@
 from __future__ import annotations
 
 import json as _json
+import uuid
 from datetime import datetime, timezone
 from typing import Any
 
@@ -24,12 +25,15 @@ LEGACY_PREFIXES = ("uatv2_", "uat_fixture_v3", "uat-cust")
 _SCOPED_DOMAIN_TABLES = (
     "md_project_v1", "md_sku_v1",
     "field_task_v1", "route_plan_v1", "geofence_event_v1",
+    "geofence_v1",
     "user_calendar_v1",
     "survey_definition_v1", "survey_assignment_v1", "survey_response_v1",
     "survey_media_v1",
     "workflow_definition_v1",
     "agent_run_v1", "recognition_task",
-    "usage_event_v2", "evidence_bundle_v1",
+    # SI3：usage_event_v2 / evidence_bundle_v1 为不可变账本（DB
+    # 触发器禁止 UPDATE）——归档不得改原行，改经
+    # scope_attribution_ledger_v1 追加式绑定（下方 _archive_ledgers）。
     "bi_report_spec_v1", "bi_anomaly_v1",
 )
 
@@ -169,6 +173,42 @@ class FixtureTestDataService:
             conn.execute(
                 f"UPDATE {table} SET data_scope='uat_fixture' WHERE"
                 " test_run_id=?", (namespace,))
+        # 2b) SI3：不可变账本（Usage/Evidence）追加式 attribution，
+        # 不改原行（红线三.3；DEC-SI3-003）。
+        for ledger_table, id_col in (("usage_event_v2", "usage_id"),
+                                     ("evidence_bundle_v1",
+                                      "evidence_id")):
+            rows = conn.execute(
+                f"SELECT u.{id_col} sid FROM {ledger_table} u WHERE"
+                " u.run_id IN (SELECT run_id FROM business_run_v1"
+                " WHERE test_run_id=?) AND NOT EXISTS (SELECT 1 FROM"
+                " scope_attribution_ledger_v1 a WHERE"
+                f" a.subject_table='{ledger_table}' AND"
+                " a.subject_id=" + f"u.{id_col})",
+                (namespace,)).fetchall()
+            for r in rows:
+                conn.execute(
+                    "INSERT INTO scope_attribution_ledger_v1"
+                    " (attribution_id, subject_table, subject_id,"
+                    " effective_scope, test_run_id, parent_ref, rule,"
+                    " created_by, created_at, commit_ref)"
+                    " VALUES (?,?,?,?,?,?,?,?,?,?)",
+                    ("attr-" + uuid.uuid4().hex[:12], ledger_table,
+                     r["sid"], "uat_fixture", namespace,
+                     "run 父链（归档）", "archive_namespace", "system",
+                     now, ""))
+        # 2c) SI3：父链上的子对象（approval 子待办/失败账本等，
+        # 自身 scope 列可能未写入）随 run 父链统一归档。
+        conn.execute(
+            "UPDATE work_item_v2 SET data_scope='uat_fixture',"
+            " visibility='history', superseded_at=? WHERE run_id IN"
+            " (SELECT run_id FROM business_run_v1 WHERE test_run_id=?)",
+            (now, namespace))
+        conn.execute(
+            "UPDATE agent_run_v1 SET data_scope='uat_fixture',"
+            " test_run_id=? WHERE business_run_id IN"
+            " (SELECT run_id FROM business_run_v1 WHERE test_run_id=?)",
+            (namespace, namespace))
         # node/timer/branch 随 run 归档（审计可见）
         for table in ("workflow_node_execution_v1", "workflow_timer_v1",
                       "workflow_branch_v1"):

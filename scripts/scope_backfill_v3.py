@@ -450,6 +450,57 @@ class Backfill:
                     " visibility='history', superseded_at=? WHERE"
                     " work_id=?", (_now(), wid))
 
+    def r14_parent_chain_children(self) -> None:
+        """历史行：父 run 已 fixture 但子对象（work/agent_run/node/
+        timer/branch）自身仍 operational → 沿父链结构性修正。"""
+        rows = self.conn.execute(
+            "SELECT w.work_id iid, r.test_run_id tr FROM work_item_v2 w"
+            " JOIN business_run_v1 r ON r.run_id=w.run_id WHERE"
+            " COALESCE(w.data_scope,'operational')='operational' AND"
+            " (r.data_scope IN ('uat_fixture','demo_fixture') OR"
+            " COALESCE(r.test_run_id,'')!='')").fetchall()
+        for r in rows:
+            if self.apply:
+                self.conn.execute(
+                    "UPDATE work_item_v2 SET data_scope='uat_fixture',"
+                    " visibility='history', superseded_at=? WHERE"
+                    " work_id=?", (_now(), r["iid"]))
+        self.audit("work_item_v2", "r14_parent_chain_children",
+                   [r["iid"] for r in rows], "uat_fixture", "per-row",
+                   "business_run_v1.run_id")
+        rows = self.conn.execute(
+            "SELECT a.run_id iid, r.test_run_id tr FROM agent_run_v1 a"
+            " JOIN business_run_v1 r ON r.run_id=a.business_run_id"
+            " WHERE COALESCE(a.data_scope,'operational')='operational'"
+            " AND (r.data_scope IN ('uat_fixture','demo_fixture') OR"
+            " COALESCE(r.test_run_id,'')!='')").fetchall()
+        for r in rows:
+            if self.apply:
+                self.conn.execute(
+                    "UPDATE agent_run_v1 SET data_scope='uat_fixture',"
+                    " test_run_id=? WHERE run_id=?",
+                    (r["tr"], r["iid"]))
+        self.audit("agent_run_v1", "r14_parent_chain_children",
+                   [r["iid"] for r in rows], "uat_fixture", "per-row",
+                   "business_run_v1.run_id(business_run_id)")
+        for table in ("workflow_node_execution_v1", "workflow_timer_v1",
+                      "workflow_branch_v1"):
+            rows = self.conn.execute(
+                f"SELECT t.rowid rid, r.test_run_id tr FROM {table} t"
+                " JOIN business_run_v1 r ON r.run_id=t.run_id WHERE"
+                " COALESCE(t.data_scope,'operational')='operational'"
+                " AND (r.data_scope IN ('uat_fixture','demo_fixture')"
+                " OR COALESCE(r.test_run_id,'')!='')").fetchall()
+            for r in rows:
+                if self.apply:
+                    self.conn.execute(
+                        f"UPDATE {table} SET data_scope='uat_fixture',"
+                        f" test_run_id=? WHERE rowid=?",
+                        (r["tr"], r["rid"]))
+            self.audit(table, "r14_parent_chain_children",
+                       [str(r["rid"]) for r in rows], "uat_fixture",
+                       "per-row", "business_run_v1.run_id")
+
     def r12_finance_under_fixture_customer(self) -> None:
         for table, id_col in (("fin_invoice_v1", "invoice_id"),
                               ("fin_invoice_line_v1", "invoice_id"),
@@ -505,6 +556,7 @@ def main() -> None:
                bf.r9_immutable_attribution,
                bf.r10_terminal_node_convergence,
                bf.r11_survey_def_by_fixture_lineage,
+               bf.r14_parent_chain_children,
                bf.r12_finance_under_fixture_customer):
         fn()
     if args.apply:

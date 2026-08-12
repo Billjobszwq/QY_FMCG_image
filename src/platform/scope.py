@@ -302,6 +302,7 @@ _BINDABLE_TABLES = {
     "geo_address_v1": "address_id",
     "field_task_v1": "task_id",
     "route_plan_v1": "plan_id",
+    "geofence_v1": "fence_id",
     "user_calendar_v1": "event_id",
     "survey_definition_v1": "survey_id",
     "survey_assignment_v1": "assignment_id",
@@ -423,10 +424,17 @@ class ScopedQuery:
 
     def fixture_missing_test_run(self) -> int:
         """全部 fixture 行缺 test_run_id 的数量（Gate lineage 依据；
-        SI3：fail-fast，异常上抛）。"""
+        SI3：fail-fast，异常上抛；无 test_run_id 列的表按登记的
+        推导路径（父链）判定，不属于 schema 异常）。"""
         conn = self.store._conn
         n = 0
         for t in _SCOPED_TABLES:
+            cols = {r[1] for r in conn.execute(
+                f"PRAGMA table_info({t})")}
+            if "data_scope" not in cols:
+                raise ScopeViolation("SCOPE_SCAN_SCHEMA_MISSING", t)
+            if "test_run_id" not in cols:
+                continue  # 经父链推导（如 work_item_v2）
             n += conn.execute(
                 f"SELECT count(*) c FROM {t} WHERE data_scope IN"
                 " ('uat_fixture','demo_fixture') AND"

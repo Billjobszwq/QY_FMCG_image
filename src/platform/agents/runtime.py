@@ -753,7 +753,9 @@ class AgentRuntime:
             "owner_type": "agent", "owner_id": agent_id,
             "title": f"Agent {agent_id} 调用（定义缺失）",
             "business_summary": text[:120],
-            "subject_type": "agent_run", "subject_id": arun})
+            "subject_type": "agent_run", "subject_id": arun,
+            # SI3：失败账本的 Work 同样继承 scope（指令四.10）。
+            "data_scope": fscope.data_scope})
         self.store.emit_event(
             event_id=_new_id("evt"), event_type="command.accepted",
             run_id=biz_run_id, work_id=work_id, correlation_id=corr,

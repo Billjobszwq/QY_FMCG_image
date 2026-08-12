@@ -163,9 +163,16 @@ def scan_terminal_drift(store) -> list[dict]:
 def db_fingerprint(store) -> dict:
     """数据库实时绑定：scope graph 聚合 + 事件/outbox 水位 +
     work 投影 hash + 关键表计数。任一变化 → 旧 Gate STALE。
-    计算必须便宜（<200ms）；异常 fail-fast。"""
+    计算必须便宜（<200ms）；异常 fail-fast。
+    注意：投影重建会顺带投递 outbox（副作用），必须先重建再取
+    计数，否则两次复评会因投递差异产生假 STALE。"""
     from .scope import _SCOPED_TABLES
     conn = store._conn
+    try:
+        proj = store.rebuild_work_projection()
+        proj_hash = proj.get("hash", "")
+    except Exception as e:  # noqa: BLE001
+        proj_hash = f"ERR:{e}"
     agg: list[str] = []
     for t in _SCOPED_TABLES:
         rows = conn.execute(
@@ -180,11 +187,6 @@ def db_fingerprint(store) -> dict:
     outbox_pending = conn.execute(
         "SELECT count(*) c FROM outbox_v1 WHERE status='pending'"
     ).fetchone()["c"]
-    try:
-        proj = store.rebuild_work_projection()
-        proj_hash = proj.get("hash", "")
-    except Exception as e:  # noqa: BLE001
-        proj_hash = f"ERR:{e}"
     counts = {}
     for t in ("business_run_v1", "work_item_v2", "usage_event_v2",
               "recognition_task", "survey_media_v1"):
