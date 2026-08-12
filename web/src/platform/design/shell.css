@@ -327,6 +327,16 @@ button:focus-visible, a:focus-visible, [tabindex]:focus-visible {
 .agent-head { padding: 10px 14px; font-weight: 600; font-size: 13px;
   border-bottom: 1px solid var(--border); }
 .agent-msgs-scroll { overflow-y: auto; padding: 10px; flex: 1; }
+/* SI4（P2-001）：窄屏浮层缩小 + 安全边距，不遮挡表格/分页/底部
+   最后一条数据；保持键盘可聚焦与 aria-label（由组件提供）。 */
+@media (max-width: 1024px) {
+  .agent-fab { width: 34px; height: 34px; font-size: 14px;
+    right: 10px; bottom: 10px; opacity: .88; }
+  .agent-panel { bottom: 52px; max-height: 55vh; } }
+@media (max-width: 768px) {
+  .agent-fab { width: 30px; height: 30px; font-size: 13px;
+    right: 8px; bottom: 8px; opacity: .8; }
+  .agent-panel { bottom: 46px; max-height: 50vh; } }
 .muted { color: var(--text-muted); }
 .note { background: var(--info-soft); color: var(--info);
   padding: 8px 12px; border-radius: 8px; font-size: 12.5px; }

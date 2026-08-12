@@ -699,6 +699,61 @@ class Backfill:
                    "uat_fixture+archived", "per-row",
                    "registry/legacy 上下文（一次性）")
 
+    def r23_bi_dashboard_report_legacy(self) -> None:
+        """存量 UAT/demo 看板与报表：名称含已登记 namespace 或
+        uat/demo 前缀客户 → 回绑并归档（一次性，审计）。"""
+        namespaces = [r["test_run_id"] for r in self.conn.execute(
+            "SELECT test_run_id FROM uat_test_run_v1").fetchall()]
+        legacy_ns = "legacy_uat_v2v3_backfill"
+        rows = self.conn.execute(
+            "SELECT dashboard_id, name, customer_id FROM bi_dashboard_v1"
+            " WHERE COALESCE(data_scope,'operational')='operational'"
+        ).fetchall()
+        hit: list[tuple[str, str]] = []
+        for r in rows:
+            blob = ((r["name"] or "") + "|"
+                    + (r["customer_id"] or "")).lower()
+            ns = next((n for n in namespaces if n.lower() in blob), "")
+            if not ns and ("uat" in blob or "预演" in blob
+                           or "dbg-" in blob):
+                ns = legacy_ns
+            if ns:
+                hit.append((r["dashboard_id"], ns))
+        for did, ns in hit:
+            if self.apply:
+                self.conn.execute(
+                    "UPDATE bi_dashboard_v1 SET data_scope="
+                    "'uat_fixture', test_run_id=? WHERE dashboard_id=?",
+                    (ns, did))
+        self.audit("bi_dashboard_v1",
+                   "r23_bi_dashboard_report_legacy",
+                   [f"{d}:{ns}" for d, ns in hit], "uat_fixture",
+                   "per-row", "registry/legacy（一次性）")
+        rows = self.conn.execute(
+            "SELECT spec_id, version, name, customer_id FROM"
+            " bi_report_spec_v1 WHERE COALESCE(data_scope,'operational')"
+            "='operational'").fetchall()
+        hit2: list[tuple[str, str]] = []
+        for r in rows:
+            blob = ((r["name"] or "") + "|"
+                    + (r["customer_id"] or "")).lower()
+            ns = next((n for n in namespaces if n.lower() in blob), "")
+            if not ns and ("uat" in blob or "dbg-" in blob):
+                ns = legacy_ns
+            if ns:
+                hit2.append((f"{r['spec_id']}@{r['version']}", ns))
+        for key, ns in hit2:
+            sid, ver = key.split("@")
+            if self.apply:
+                self.conn.execute(
+                    "UPDATE bi_report_spec_v1 SET data_scope="
+                    "'uat_fixture', test_run_id=? WHERE spec_id=? AND"
+                    " version=?", (ns, sid, ver))
+        self.audit("bi_report_spec_v1",
+                   "r23_bi_dashboard_report_legacy",
+                   [f"{k}:{ns}" for k, ns in hit2], "uat_fixture",
+                   "per-row", "registry/legacy（一次性）")
+
     def r12_finance_under_fixture_customer(self) -> None:
         for table, id_col in (("fin_invoice_v1", "invoice_id"),
                               ("fin_invoice_line_v1", "invoice_id"),
@@ -762,6 +817,7 @@ def main() -> None:
                bf.r20_iam_identity_provenance,
                bf.r21_iam_identity_archive_convergence,
                bf.r22_bi_metric_legacy_archive,
+               bf.r23_bi_dashboard_report_legacy,
                bf.r12_finance_under_fixture_customer):
         fn()
     if args.apply:

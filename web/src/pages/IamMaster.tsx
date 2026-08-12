@@ -23,6 +23,10 @@ function useLoad<T>(path: string | null): {
 export function IamAccounts() {
   const me = useLoad<any>("/iam/whoami");
   const principals = useLoad<any>("/iam/principals");
+  // SI4（P2-002）：身份列表搜索/状态筛选/分页状态
+  const [pq, setPq] = useState("");
+  const [pStatus, setPStatus] = useState("");
+  const [pPage, setPPage] = useState(0);
   const rolesApi = useLoad<any>("/iam/roles");
   const scopesApi = useLoad<any>("/iam/scopes");
   const [form, setForm] = useState({ kind: "user", username: "",
@@ -204,24 +208,57 @@ export function IamAccounts() {
         {principals.err && <ErrorState message={principals.err}
           onRetry={principals.reload} />}
         {!principals.data && !principals.err && <Loading />}
-        {principals.data && (principals.data.principals.length === 0
-          ? <EmptyState title="尚无 IAM 身份" />
-          : (
-            <table className="table">
-              <thead><tr><th>username</th><th>类型</th><th>显示名</th>
-                <th>状态</th></tr></thead>
-              <tbody>
-                {principals.data.principals.map((p: any) => (
-                  <tr key={p.principal_id}>
-                    <td data-label="username">{p.username}</td>
-                    <td data-label="类型">{p.kind}</td>
-                    <td data-label="显示名">{p.display_name}</td>
-                    <td data-label="状态">{p.status}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          ))}
+        {principals.data && (() => {
+          const all: any[] = principals.data.principals ?? [];
+          const hit = all.filter((p: any) =>
+            (!pq || (p.username || "").includes(pq)
+              || (p.display_name || "").includes(pq))
+            && (!pStatus || p.status === pStatus));
+          const pages = Math.max(1, Math.ceil(hit.length / 20));
+          const cur = Math.min(pPage, pages - 1);
+          const shown = hit.slice(cur * 20, cur * 20 + 20);
+          return (<>
+            {/* SI4（P2-002）：搜索/状态筛选/分页 */}
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap",
+              alignItems: "center", marginBottom: 8 }}>
+              <input placeholder="搜索用户名/显示名" aria-label="搜索身份"
+                value={pq} onChange={(e) => { setPq(e.target.value);
+                  setPPage(0); }} style={{ maxWidth: 220 }} />
+              <select aria-label="状态筛选" value={pStatus}
+                onChange={(e) => { setPStatus(e.target.value);
+                  setPPage(0); }}>
+                <option value="">全部状态</option>
+                <option value="active">active</option>
+                <option value="disabled">disabled</option>
+              </select>
+              <span className="muted" style={{ fontSize: 12 }}>
+                共 {hit.length} 条 · 第 {cur + 1}/{pages} 页（默认仅
+                运营身份；测试身份见测试与证据中心）</span>
+              <button className="btn small" disabled={cur === 0}
+                onClick={() => setPPage(cur - 1)}>上一页</button>
+              <button className="btn small" disabled={cur >= pages - 1}
+                onClick={() => setPPage(cur + 1)}>下一页</button>
+            </div>
+            {hit.length === 0
+              ? <EmptyState title="尚无匹配的 IAM 身份" />
+              : (
+                <table className="table">
+                  <thead><tr><th>username</th><th>类型</th>
+                    <th>显示名</th><th>状态</th></tr></thead>
+                  <tbody>
+                    {shown.map((p: any) => (
+                      <tr key={p.principal_id}>
+                        <td data-label="username">{p.username}</td>
+                        <td data-label="类型">{p.kind}</td>
+                        <td data-label="显示名">{p.display_name}</td>
+                        <td data-label="状态">{p.status}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+          </>);
+        })()}
       </div>
     </>
   );
