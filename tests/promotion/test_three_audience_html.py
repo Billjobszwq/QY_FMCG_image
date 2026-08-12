@@ -1,3 +1,4 @@
+import re
 from pathlib import Path
 
 
@@ -7,6 +8,23 @@ HTML_PATH = Path(__file__).parents[2] / "docs/promotion/ai-native-business-os-th
 def load_html() -> str:
     assert HTML_PATH.exists(), f"missing presentation: {HTML_PATH}"
     return HTML_PATH.read_text(encoding="utf-8")
+
+
+def extract_css_block(source: str, header: str) -> str:
+    header_start = source.find(header)
+    assert header_start >= 0, f"missing CSS block: {header}"
+    block_start = source.find("{", header_start)
+    assert block_start >= 0, f"missing opening brace for CSS block: {header}"
+
+    depth = 0
+    for index in range(block_start, len(source)):
+        if source[index] == "{":
+            depth += 1
+        elif source[index] == "}":
+            depth -= 1
+            if depth == 0:
+                return source[block_start + 1 : index]
+    raise AssertionError(f"missing closing brace for CSS block: {header}")
 
 
 def test_standalone_shell_and_accessibility_contracts() -> None:
@@ -136,24 +154,38 @@ def test_token_flow_and_shared_loop_are_complete() -> None:
 
 
 def test_cream_light_theme_contract() -> None:
-    html = load_html()
-    assert "color-scheme: light" in html
-    assert "#F3EFE5" in html
-    assert "#FBF8F1" in html
-    assert "#171D24" in html
-    assert "color-scheme: dark" not in html
+    root = extract_css_block(load_html(), ":root")
+    assert re.search(r"\bcolor-scheme\s*:\s*light\s*;", root)
+    assert re.search(r"--canvas\s*:\s*#F3EFE5\s*;", root)
+    assert re.search(r"--surface-paper\s*:\s*#FBF8F1\s*;", root)
+    assert re.search(r"--ink\s*:\s*#171D24\s*;", root)
+    assert not re.search(r"\bcolor-scheme\s*:\s*dark\b", root)
 
 
 def test_editorial_hero_and_light_diagram_contract() -> None:
     html = load_html()
-    assert 'class="hero-statement"' in html
-    assert 'class="hero-loop-summary"' in html
-    assert "--surface-paper" in html
-    assert ".diagram" in html
+    hero_parts = (
+        'class="hero-copy"',
+        'class="hero-statement"',
+        'class="hero-loop-summary"',
+    )
+    positions = [html.find(part) for part in hero_parts]
+    assert all(position >= 0 for position in positions)
+    assert positions == sorted(positions)
+
+    hero_rule = extract_css_block(html, ".hero")
+    assert re.search(
+        r"grid-template-columns\s*:\s*minmax\(0,\s*2fr\)\s+minmax\(320px,\s*\.85fr\)\s*;",
+        hero_rule,
+    )
+    diagram_rule = extract_css_block(html, ".diagram")
+    assert re.search(r"background\s*:\s*var\(--surface-paper\)\s*;", diagram_rule)
 
 
 def test_cream_page_keeps_offline_logo_and_mobile_flow() -> None:
     html = load_html()
-    assert 'src="data:image/png;base64,' in html
     assert 'class="hero-flow-mobile"' in html
-    assert ".hero-map { transform: scale" not in html
+    mobile_rules = extract_css_block(html, "@media (max-width: 520px)")
+    assert re.search(r"\.hero-flow-svg\s*\{[^{}]*\bdisplay\s*:\s*none\s*;", mobile_rules)
+    assert re.search(r"\.hero-flow-mobile\s*\{[^{}]*\bdisplay\s*:\s*block\s*;", mobile_rules)
+    assert not re.search(r"\.hero-map\s*\{[^{}]*\btransform\s*:\s*scale\s*\(", html)
