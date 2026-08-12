@@ -133,3 +133,27 @@ def test_token_flow_and_shared_loop_are_complete() -> None:
         "反馈、评估与能力进化",
     ):
         assert stage in html
+
+
+def test_cream_light_theme_contract() -> None:
+    html = load_html()
+    assert "color-scheme: light" in html
+    assert "#F3EFE5" in html
+    assert "#FBF8F1" in html
+    assert "#171D24" in html
+    assert "color-scheme: dark" not in html
+
+
+def test_editorial_hero_and_light_diagram_contract() -> None:
+    html = load_html()
+    assert 'class="hero-statement"' in html
+    assert 'class="hero-loop-summary"' in html
+    assert "--surface-paper" in html
+    assert ".diagram" in html
+
+
+def test_cream_page_keeps_offline_logo_and_mobile_flow() -> None:
+    html = load_html()
+    assert 'src="data:image/png;base64,' in html
+    assert 'class="hero-flow-mobile"' in html
+    assert ".hero-map { transform: scale" not in html
