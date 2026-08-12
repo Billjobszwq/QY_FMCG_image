@@ -272,7 +272,8 @@ class AgentRuntime:
         return out
 
     def _exec_tool(self, tool_id: str, params: dict, *,
-                   actor: str, customer_id: str) -> dict:
+                   actor: str, customer_id: str,
+                   scope: Any = None) -> dict:
         conn = self.store._conn
         if tool_id == "work.progress.query":
             proj = self.store.rebuild_work_projection()
@@ -405,7 +406,13 @@ class AgentRuntime:
                     "edges": [{"from": "start", "to": "end"}],
                     "policy": {"approval_required_for_publish": True}}
             d = self.workflow.create_draft(name=name, spec=spec,
-                                           actor=actor)
+                                           actor=actor,
+                                           data_scope=(
+                                               scope.data_scope
+                                               if scope else "operational"),
+                                           test_run_id=(
+                                               scope.test_run_id
+                                               if scope else ""))
             return {"draft_definition_id": d["definition_id"],
                     "status": d["status"],
                     "note": "仅 draft；发布必须人工批准",
@@ -415,11 +422,16 @@ class AgentRuntime:
             if self.analytics is None:
                 raise AgentRuntimeError("Analytics 服务未装配")
             metrics = params.get("metrics") or ["recognition.tasks"]
+            # SI3：Agent 工具创建对象必须继承 Agent Run scope
+            # （指令四.11）。
             draft = self.analytics.create_report_spec(
                 name=str(params.get("name") or "Agent 草稿报表")[:40],
                 metrics=metrics,
                 customer_id=customer_id or "local", actor=actor,
-                note="Agent 生成 draft；发布必须人工批准")
+                note="Agent 生成 draft；发布必须人工批准",
+                data_scope=(scope.data_scope if scope
+                            else "operational"),
+                test_run_id=(scope.test_run_id if scope else ""))
             return {"draft_spec_id": draft["spec_id"],
                     "status": draft["status"],
                     "ui_intent": {"kind": "navigate",
@@ -548,7 +560,8 @@ class AgentRuntime:
                     out = self._exec_tool(tool_id, params, actor=actor,
                                           customer_id=attr_customer
                                           if attr_customer != "unattributed"
-                                          else "")
+                                          else "",
+                                          scope=scope)
                     trace.append({"tool": tool_id, "status": "ok",
                                   "elapsed_ms": round(
                                       (time.time() - t0) * 1000, 1)})

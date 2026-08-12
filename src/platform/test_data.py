@@ -53,12 +53,31 @@ class FixtureTestDataService:
                                 customer_ids: list[str],
                                 actor: str = "system") -> dict:
         """创建一次 UAT 的结构化作用域上下文：所有后续对象必须
-        携带 test_run_id=namespace 或从父对象继承（禁止后补标）。"""
+        携带 test_run_id=namespace 或从父对象继承（禁止后补标）。
+
+        SI3：namespace 不可覆盖（禁止 INSERT OR REPLACE，指令四.9）：
+        重复请求仅当内容完全一致时幂等返回，否则 409 冲突。"""
         if not namespace:
             raise ValueError("namespace 不得为空")
         conn = self.store._conn
+        existing = conn.execute(
+            "SELECT customer_ids_json, status, created_by FROM"
+            " uat_test_run_v1 WHERE test_run_id=?",
+            (namespace,)).fetchone()
+        want = sorted(customer_ids or [])
+        if existing is not None:
+            have = sorted(_json.loads(
+                existing["customer_ids_json"] or "[]"))
+            if have != want:
+                raise ValueError(
+                    "409 test_run 已存在且内容不一致（namespace 不可"
+                    f"覆盖）: {namespace} customers={have} → 请求"
+                    f" {want}")
+            return {"test_run_id": namespace, "namespace": namespace,
+                    "customers": have,
+                    "status": existing["status"]}
         conn.execute(
-            "INSERT OR REPLACE INTO uat_test_run_v1 (test_run_id,"
+            "INSERT INTO uat_test_run_v1 (test_run_id,"
             " namespace, status, customer_ids_json, created_by,"
             " created_at) VALUES (?,?,?,?,?,?)",
             (namespace, namespace, "current",
@@ -67,8 +86,9 @@ class FixtureTestDataService:
             qm = ",".join("?" * len(customer_ids))
             conn.execute(
                 f"UPDATE md_customer_v1 SET data_scope='uat_fixture',"
-                f" updated_at=? WHERE customer_id IN ({qm})",
-                (_now(), *customer_ids))
+                f" test_run_id=?, updated_at=? WHERE customer_id IN"
+                f" ({qm})",
+                (namespace, _now(), *customer_ids))
         conn.commit()
         self._audit(actor, "test_data.context_created", namespace,
                     {"customers": customer_ids})
@@ -144,22 +164,17 @@ class FixtureTestDataService:
                 " data_scope='uat_fixture'", (namespace, *cids))
         # 2) 全 Domain 结构化归档：带 test_run_id 的行结构性地属于
         # fixture（不得 operational；运行时不依赖名称）。
+        # SI3：fail-fast——归档异常不得吞（指令九.5）。
         for table in _SCOPED_DOMAIN_TABLES:
-            try:
-                conn.execute(
-                    f"UPDATE {table} SET data_scope='uat_fixture' WHERE"
-                    " test_run_id=?", (namespace,))
-            except Exception:
-                continue
+            conn.execute(
+                f"UPDATE {table} SET data_scope='uat_fixture' WHERE"
+                " test_run_id=?", (namespace,))
         # node/timer/branch 随 run 归档（审计可见）
         for table in ("workflow_node_execution_v1", "workflow_timer_v1",
                       "workflow_branch_v1"):
-            try:
-                conn.execute(
-                    f"UPDATE {table} SET data_scope='uat_fixture' WHERE"
-                    " test_run_id=?", (namespace,))
-            except Exception:
-                continue
+            conn.execute(
+                f"UPDATE {table} SET data_scope='uat_fixture' WHERE"
+                " test_run_id=?", (namespace,))
         # 3) Test Run 上下文收尾
         conn.execute(
             "UPDATE uat_test_run_v1 SET status='archived', archived_at=?"

@@ -2159,6 +2159,25 @@ _M053 = """
 ALTER TABLE md_customer_v1 ADD COLUMN test_run_id TEXT NOT NULL DEFAULT '';
 """
 
+# SI3 T1：不可变账本（Usage/Evidence）的追加式 scope 绑定账本。
+# 不篡改原行；运营查询/计费/Gate 消费 effective_scope 口径。
+_M054 = """
+CREATE TABLE IF NOT EXISTS scope_attribution_ledger_v1 (
+  attribution_id TEXT PRIMARY KEY,
+  subject_table TEXT NOT NULL,
+  subject_id TEXT NOT NULL,
+  effective_scope TEXT NOT NULL,
+  test_run_id TEXT NOT NULL DEFAULT '',
+  parent_ref TEXT NOT NULL DEFAULT '',
+  rule TEXT NOT NULL,
+  created_by TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  commit_ref TEXT NOT NULL DEFAULT ''
+);
+CREATE INDEX IF NOT EXISTS idx_scope_attr_subject
+  ON scope_attribution_ledger_v1 (subject_table, subject_id);
+"""
+
 MIGRATIONS: tuple[tuple[str, str], ...] = (
     ("001_platform_init", _M001),
     ("002_labeling_inbox", _M002),
@@ -2213,6 +2232,7 @@ MIGRATIONS: tuple[tuple[str, str], ...] = (
     ("051_execution_scope_v1", _M051),
     ("052_execution_scope_geo_v1", _M052),
     ("053_execution_scope_customer_v1", _M053),
+    ("054_scope_attribution_ledger_v1", _M054),
 )
 
 
@@ -3128,20 +3148,22 @@ class PlatformStore:
         service_tier: str = "", source: str = "",
         project_id: str = "", trace_id: str = "",
         run_id: str = "", work_id: str = "", correlation_id: str = "",
+        data_scope: str = "operational", test_run_id: str = "",
     ) -> dict[str, Any]:
+        # SI3：识别任务与 Run scope 同事务写入（指令四.11）。
         self._conn.execute(
             """INSERT INTO recognition_task
                (task_id, entry, status, file_count, sku_count,
                 created_by, created_at, result_json, error,
                 idempotency_key, recognition_profile_id, service_tier,
                 source, project_id, trace_id, run_id, work_id,
-                correlation_id)
-               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                correlation_id, data_scope, test_run_id)
+               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
             (task_id, entry, status, file_count, sku_count,
              created_by, _utcnow(), result_json, error,
              idempotency_key, recognition_profile_id, service_tier,
              source, project_id, trace_id, run_id, work_id,
-             correlation_id),
+             correlation_id, data_scope, test_run_id),
         )
         self._conn.commit()
         return self.get_recognition_task(task_id)
@@ -4035,12 +4057,20 @@ class PlatformStore:
         events = self.list_events()
         self.dispatch_outbox()  # 至少一次投递：重建时统一消费 pending
         state: dict[str, dict[str, Any]] = {}
+        # SI3：effective fixture 集合（行自身列 + 父 Run 链）——
+        # fixture Run 的 Work 结构性地不进运营投影（指令四.2）。
+        _fx_runs = {r["run_id"] for r in self._conn.execute(
+            "SELECT run_id FROM business_run_v1 WHERE data_scope IN"
+            " ('uat_fixture','demo_fixture') OR COALESCE(test_run_id,"
+            "'')!=''").fetchall()}
         # 投影基线 = work_item_v2 全部行（含无事件的 approval/追问等
         # 人工工作）；事件流只覆盖其可推导的状态，不得丢失无事件工作。
         # UFC T4：uat_fixture 结构性隔离——不进运营投影（行保留可审计）。
         for row in self.list_work_items_v2():
             if row.get("data_scope") == "uat_fixture":
                 continue
+            if (row.get("run_id") or "") in _fx_runs:
+                continue  # SI3：父链 effective fixture
             state[row["work_id"]] = {
                 "work_id": row["work_id"], "status": row["status"],
                 "subject_type": row.get("subject_type", ""),
@@ -4075,12 +4105,23 @@ class PlatformStore:
                 st["status"] = "waiting"
             elif t in ("workflow.timer_fired",):
                 st["status"] = "running"
-        # UFC T4：事件重建出的 fixture work 同样排除（双保险）
+        # UFC T4：事件重建出的 fixture work 同样排除（双保险）；
+        # SI3：叠加父链 effective fixture（事件 work 可能无表行）。
         _fx = {r["work_id"] for r in self._conn.execute(
             "SELECT work_id FROM work_item_v2 WHERE data_scope="
             "'uat_fixture'").fetchall()}
+        _fx |= {r["work_id"] for r in self._conn.execute(
+            "SELECT work_id FROM work_item_v2 WHERE run_id IN"
+            " (SELECT run_id FROM business_run_v1 WHERE data_scope IN"
+            " ('uat_fixture','demo_fixture') OR COALESCE(test_run_id,"
+            "'')!='')").fetchall()}
+        _fx |= {r["work_id"] for r in self._conn.execute(
+            "SELECT work_id FROM business_run_v1 WHERE data_scope IN"
+            " ('uat_fixture','demo_fixture') OR COALESCE(test_run_id,"
+            "'')!=''").fetchall()}
         items = sorted((it for it in state.values()
-                        if it["work_id"] not in _fx),
+                        if it["work_id"] not in _fx
+                        and it.get("run_id", "") not in _fx_runs),
                        key=lambda x: x["work_id"])
         # UFC T1：终态保护——run 终态决定 work 终态；终态 work 不得
         # 被事件派生的活动态回退（投影重建不回退终态）。
@@ -4139,17 +4180,19 @@ class PlatformStore:
     def insert_workflow_definition(self, *, definition_id: str,
                                    version: int, name: str,
                                    spec: dict[str, Any], created_by: str,
-                                   owner: str = "") -> dict[str, Any]:
+                                   owner: str = "",
+                                   data_scope: str = "operational",
+                                   test_run_id: str = "") -> dict[str, Any]:
         now = _utcnow()
         spec_json = json.dumps(spec, sort_keys=True, ensure_ascii=False)
         self._conn.execute(
             "INSERT INTO workflow_definition_v1 (definition_id, version,"
             " name, status, owner, spec_json, spec_hash, created_by,"
-            " created_at, updated_at)"
-            " VALUES (?,?,?,?,?,?,?,?,?,?)",
+            " created_at, updated_at, data_scope, test_run_id)"
+            " VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
             (definition_id, version, name, "draft", owner, spec_json,
              _workflow_hash(spec),
-             created_by, now, now))
+             created_by, now, now, data_scope, test_run_id))
         self._conn.commit()
         return self.get_workflow_definition(definition_id, version)
 

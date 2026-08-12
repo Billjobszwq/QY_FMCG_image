@@ -297,20 +297,23 @@ class AnalyticsService:
                            customer_id: str, actor: str,
                            dimensions: list | None = None,
                            nl_query: str = "",
-                           note: str = "") -> dict:
+                           note: str = "",
+                           data_scope: str = "operational",
+                           test_run_id: str = "") -> dict:
         for m in metrics:
             if not any(d["metric_id"] == m for d in self.list_metrics()):
                 raise AnalyticsError(f"指标未注册: {m}（fail-closed）")
         spec_id = _new_id("rep")
         now = _now()
+        # SI3：BI 对象与调用方 scope 同事务写入（指令四.11）。
         self.store._conn.execute(
             "INSERT INTO bi_report_spec_v1 (spec_id, version, name, status,"
             " customer_id, metrics_json, dimensions_json, nl_query, note,"
-            " created_by, created_at, updated_at)"
-            " VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+            " created_by, created_at, updated_at, data_scope, test_run_id)"
+            " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
             (spec_id, 1, name, "draft", customer_id,
              json.dumps(metrics), json.dumps(dimensions or []),
-             nl_query, note, actor, now, now))
+             nl_query, note, actor, now, now, data_scope, test_run_id))
         self.store._conn.commit()
         return self.get_report_spec(spec_id)
 

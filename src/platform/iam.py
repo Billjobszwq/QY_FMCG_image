@@ -415,14 +415,29 @@ class MasterDataService:
     def create_customer(self, *, customer_id: str, name: str,
                         is_test_fixture: bool = False,
                         retention_policy: str = "",
-                        created_by: str) -> dict:
+                        created_by: str,
+                        test_run_id: str = "") -> dict:
+        # SI3：测试客户必须结构性 fixture + 有效 test_run（指令三.7）；
+        # 创建与 scope 同一事务，fail-closed。
+        if is_test_fixture and not test_run_id:
+            from .scope import ScopeViolation
+            raise ScopeViolation(
+                "SCOPE_MISSING_TEST_RUN_ID",
+                "测试客户只能经测试中心创建（必须绑定 test_run）")
+        ds, tr = "operational", ""
+        if test_run_id:
+            from .scope import ScopeResolver
+            ScopeResolver(self.store).assert_test_run_current(
+                test_run_id)
+            ds, tr = "uat_fixture", test_run_id
         try:
             self.store._conn.execute(
                 "INSERT INTO md_customer_v1 (customer_id, name,"
                 " is_test_fixture, retention_policy, created_by,"
-                " created_at, updated_at) VALUES (?,?,?,?,?,?,?)",
-                (customer_id, name, 1 if is_test_fixture else 0,
-                 retention_policy, created_by, _now(), _now()))
+                " created_at, updated_at, data_scope, test_run_id)"
+                " VALUES (?,?,?,?,?,?,?,?,?)",
+                (customer_id, name, 1 if is_test_fixture or tr else 0,
+                 retention_policy, created_by, _now(), _now(), ds, tr))
             self.store._conn.commit()
         except Exception:
             raise MasterDataError(f"customer 已存在: {customer_id}")
@@ -441,9 +456,17 @@ class MasterDataService:
             d["is_test_fixture"] = bool(d["is_test_fixture"])
         return d
 
-    def list_customers(self, *, viewer: str | None = None) -> list[dict]:
-        rows = self.store._conn.execute(
-            "SELECT * FROM md_customer_v1 ORDER BY created_at").fetchall()
+    def list_customers(self, *, viewer: str | None = None,
+                       include_fixture: bool = False) -> list[dict]:
+        # SI3：运营列表默认只看 effective operational（指令三.11）；
+        # fixture 历史只在显式 include_fixture（测试与证据中心）可见。
+        if include_fixture:
+            sql = ("SELECT * FROM md_customer_v1 ORDER BY created_at")
+        else:
+            sql = ("SELECT * FROM md_customer_v1 WHERE"
+                   " COALESCE(data_scope,'operational')='operational'"
+                   " AND is_test_fixture=0 ORDER BY created_at")
+        rows = self.store._conn.execute(sql).fetchall()
         out = []
         limit_to = self.iam.visible_customers(viewer) if viewer else None
         for r in rows:

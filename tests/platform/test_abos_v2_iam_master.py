@@ -144,9 +144,13 @@ class TestMasterData:
         m.create_sku(sku_id="SKU-NEW", canonical_name="罐装魔爪330ml",
                      brand="魔爪", package_version="v2",
                      valid_from="2026-07-01", created_by="admin")
-        # 客户显示名与别名
+        # 客户显示名与别名（SI3：测试客户必须绑定有效 test_run）
+        from src.platform.test_data import FixtureTestDataService
+        FixtureTestDataService(env["store"]).create_test_run_context(
+            "uatv5_iam_sku_fx", customer_ids=[])
         m.create_customer(customer_id="cust-a", name="测试客户A",
-                          is_test_fixture=True, created_by="admin")
+                          is_test_fixture=True, created_by="admin",
+                          test_run_id="uatv5_iam_sku_fx")
         m.add_alias(sku_id="SKU-NEW", alias="魔爪新包装", kind="alias",
                     actor="admin")
         m.add_alias(sku_id="SKU-NEW", alias="客户A叫法-魔爪",
@@ -183,11 +187,16 @@ class TestCustomerIsolationG4:
 
     def _setup_two_customers(self, env):
         c, h = env["client"], env["h"]
+        # SI3：先建 Test Run 上下文，fixture 客户必须绑定 test_run
+        from src.platform.test_data import FixtureTestDataService
+        FixtureTestDataService(env["store"]).create_test_run_context(
+            "uatv5_iam_g4_fx", customer_ids=[])
         # 客户 A/B（显式 test fixture 标记）
         for cid, name in (("cust-a", "测试客户A"), ("cust-b", "测试客户B")):
             r = c.post("/api/v1/master/customers", headers=h, json={
                 "customer_id": cid, "name": name,
-                "is_test_fixture": True})
+                "is_test_fixture": True,
+                "test_run_id": "uatv5_iam_g4_fx"})
             assert r.status_code == 200, r.text
         # 各建一个项目
         for pid, cid in (("pj-a", "cust-a"), ("pj-b", "cust-b")):
@@ -224,8 +233,10 @@ class TestCustomerIsolationG4:
         c = env["client"]
         ha = _login(c, "alice", "pw-alice-123")
 
-        # 1) 数据：alice 只见 cust-a（客户列表被作用域过滤）
-        custs = c.get("/api/v1/master/customers").json()["customers"]
+        # 1) 数据：alice 只见 cust-a（客户列表被作用域过滤）；
+        # SI3：fixture 客户默认不进运营列表，需显式 include_fixture
+        custs = c.get("/api/v1/master/customers?include_fixture=true"
+                      ).json()["customers"]
         assert {x["customer_id"] for x in custs} == {"cust-a"}
         assert all(x["is_test_fixture"] for x in custs), \
             "测试数据必须显式标记 test fixture"
@@ -256,8 +267,10 @@ class TestCustomerIsolationG4:
         # 5) admin（平台角色）可见全部并含 fixture 标记
         r = c.get("/api/v1/master/customers").json()
         pass  # alice 视图已在 1) 断言；admin 视图另行：
-        admin_all = env["master"].list_customers()
+        admin_all = env["master"].list_customers(include_fixture=True)
         assert {x["customer_id"] for x in admin_all} == {"cust-a", "cust-b"}
+        # SI3：运营默认口径不得返回 fixture 客户（指令三.11）
+        assert env["master"].list_customers() == []
 
     def test_usage_lines_scoped_by_customer(self, env):
         self._setup_two_customers(env)

@@ -105,6 +105,7 @@ def run_recognition_batch(
     project_id: str = "",
     profiles_service: Any | None = None,
     run_id: str = "", work_id: str = "", correlation_id: str = "",
+    data_scope: str = "operational", test_run_id: str = "",
 ) -> dict[str, Any]:
     """四入口共用服务层：profile resolve → 逐图识别 → 落任务行。"""
     if idempotency_key:
@@ -154,7 +155,8 @@ def run_recognition_batch(
         recognition_profile_id=profile["profile_id"],
         service_tier=service_tier, source=source,
         project_id=project_id, trace_id=trace_id,
-        run_id=run_id, work_id=work_id, correlation_id=correlation_id)
+        run_id=run_id, work_id=work_id, correlation_id=correlation_id,
+        data_scope=data_scope, test_run_id=test_run_id)
     return {
         "task": task,
         "results": results,

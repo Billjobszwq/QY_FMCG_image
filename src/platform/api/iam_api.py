@@ -13,7 +13,7 @@ from pydantic import BaseModel
 
 from ..auth import AuthService, require_principal
 from ..iam import IAMError, IAMService, MasterDataError, MasterDataService
-from ..scope import bind_fixture_scope
+from ..scope import ScopeViolation, bind_fixture_scope
 
 
 class PrincipalBody(BaseModel):
@@ -198,26 +198,30 @@ def create_iam_router(store: Any, auth: AuthService | None) -> APIRouter:
         p = require_principal(auth, request, csrf=True)
         _guard(iam, p["actor"], p["role"], "master.manage")
         try:
+            # SI3：创建与 scope 同一事务（禁止先 commit 再 bind，
+            # 指令四.8）；测试客户必须绑定有效 test_run（指令三.7）。
             out = master.create_customer(
                 customer_id=body.customer_id, name=body.name,
                 is_test_fixture=body.is_test_fixture
                 or bool(body.test_run_id),
                 retention_policy=body.retention_policy,
-                created_by=p["actor"])
-            if body.test_run_id:
-                bind_fixture_scope(store, "md_customer_v1",
-                                   body.customer_id, body.test_run_id)
+                created_by=p["actor"],
+                test_run_id=body.test_run_id or "")
             return {"customer": out}
         except MasterDataError as e:
             raise HTTPException(409, str(e))
+        except ScopeViolation as e:
+            raise HTTPException(409, str(e))
 
     @router.get("/api/v1/master/customers")
-    def list_customers(request: Request) -> dict:
+    def list_customers(request: Request,
+                       include_fixture: bool = False) -> dict:
         p = require_principal(auth, request, csrf=False)
         _guard(iam, p["actor"], p["role"], "master.read")
         rows = master.list_customers(
             viewer=None if _platform_actor(iam, p["actor"], p["role"])
-            else p["actor"])
+            else p["actor"],
+            include_fixture=include_fixture)
         return {"count": len(rows), "customers": rows}
 
     @router.get("/api/v1/master/customers/{customer_id}/overview")

@@ -288,7 +288,9 @@ class WorkflowService:
 
     def create_draft(self, *, name: str, spec: dict, actor: str,
                      definition_id: str | None = None,
-                     from_template: str | None = None) -> dict:
+                     from_template: str | None = None,
+                     data_scope: str = "operational",
+                     test_run_id: str = "") -> dict:
         if from_template:
             tpl = next((t for t in TEMPLATES
                         if t["template_id"] == from_template), None)
@@ -303,7 +305,8 @@ class WorkflowService:
             raise WorkflowError(f"definition 已存在: {def_id}（请用新版本）")
         return self.store.insert_workflow_definition(
             definition_id=def_id, version=1, name=name, spec=spec,
-            created_by=actor)
+            created_by=actor, data_scope=data_scope,
+            test_run_id=test_run_id)
 
     def update_draft(self, definition_id: str, *, spec: dict | None = None,
                      name: str | None = None, actor: str = "") -> dict:
@@ -731,6 +734,18 @@ class WorkflowService:
             " ended_at=?, error=CASE WHEN error='' THEN 'run 终态收敛'"
             " ELSE error END WHERE run_id=? AND status IN"
             " ('pending','running')", (_now_iso(), run_id))
+        # SI3：节点执行行同样必须收敛（指令八）：
+        # succeeded→skipped；failed→failed；cancelled→cancelled。
+        node_target = {"succeeded": "skipped", "failed": "failed",
+                       "cancelled": "cancelled"}[status]
+        conn.execute(
+            "UPDATE workflow_node_execution_v1 SET status=?, ended_at=?,"
+            " error=CASE WHEN COALESCE(error,'')='' THEN"
+            " 'run 终态收敛' ELSE error END WHERE run_id=? AND status"
+            " IN ('running','pending','queued','waiting','paused',"
+            "'started','in_progress','scheduled','waiting_timer',"
+            "'waiting_approval','waiting_human')",
+            (node_target, _now_iso(), run_id))
         conn.commit()
         # 终态事件（投影可推导，不再依赖调用方补发）
         etype = {"succeeded": "workflow.succeeded",
@@ -783,6 +798,18 @@ class WorkflowService:
             actor_type="human", actor_id=actor,
             payload={"nodes": [f["node_id"] for f in failed]})
         self.store.set_business_run_status(run_id, "running", error="")
+        # SI3：retry 不得遗留旧 running 节点（指令八）：旧尝试的
+        # 活动态节点先收敛为 cancelled，再由本次重跑写入新行。
+        conn = self.store._conn
+        conn.execute(
+            "UPDATE workflow_node_execution_v1 SET status='cancelled',"
+            " ended_at=?, error=CASE WHEN COALESCE(error,'')='' THEN"
+            " 'retry 旧尝试收敛' ELSE error END WHERE run_id=? AND"
+            " status IN ('running','pending','queued','waiting',"
+            "'paused','started','in_progress','scheduled',"
+            "'waiting_timer','waiting_approval','waiting_human')",
+            (_now_iso(), run_id))
+        conn.commit()
         ctx = self._restore_ctx(run_id, d, extra_inputs=inputs)
         self._run_nodes(d, [f["node_id"] for f in failed], ctx,
                         run_id=run_id, work_id=run["work_id"],

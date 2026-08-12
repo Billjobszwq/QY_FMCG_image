@@ -19,6 +19,26 @@ from ..auth import AuthService, require_principal
 from ..iam import IAMService
 
 
+# SI3：Usage effective-operational 口径（指令六）：
+# 1) 自身列 operational；2) 未被 attribution 绑定为 fixture；
+# 3) 父 Run 非 fixture（不可变账本不改原行，靠父链推导）。
+_EFFECTIVE_OP = (
+    "COALESCE(u.data_scope,'operational')='operational'"
+    " AND NOT EXISTS (SELECT 1 FROM scope_attribution_ledger_v1 a"
+    " WHERE a.subject_table='usage_event_v2' AND a.subject_id="
+    "u.usage_id AND a.effective_scope IN ('uat_fixture',"
+    "'demo_fixture'))"
+    " AND NOT EXISTS (SELECT 1 FROM business_run_v1 r WHERE"
+    " r.run_id=u.run_id AND u.run_id!='' AND"
+    " (COALESCE(r.data_scope,'operational') IN ('uat_fixture',"
+    "'demo_fixture') OR COALESCE(r.test_run_id,'')!=''))"
+    " AND NOT EXISTS (SELECT 1 FROM md_customer_v1 c WHERE"
+    " c.customer_id=u.customer_id AND u.customer_id!='' AND"
+    " (COALESCE(c.data_scope,'operational') IN ('uat_fixture',"
+    "'demo_fixture') OR c.is_test_fixture=1))"
+)
+
+
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
@@ -47,20 +67,20 @@ def create_usage_router(store: Any, iam: IAMService,
                 project_id: str = "") -> dict:
         p = require_principal(auth, request, csrf=False)
         _check(p, customer_id)
-        where, params = [], []
+        where, params = [_EFFECTIVE_OP], []
         if customer_id:
             where.append("customer_id=?"); params.append(customer_id)
         if project_id:
             where.append("project_id=?"); params.append(project_id)
-        w = (" WHERE " + " AND ".join(where)) if where else ""
+        w = " WHERE " + " AND ".join(where)
         conn = store._conn
         by_unit = [dict(r) for r in conn.execute(
             f"SELECT unit, sum(quantity) total, count(*) n FROM"
-            f" usage_event_v2{w} GROUP BY unit ORDER BY unit",
+            f" usage_event_v2 u{w} GROUP BY unit ORDER BY unit",
             params).fetchall()]
         by_date = [dict(r) for r in conn.execute(
             f"SELECT substr(occurred_at,1,10) day, count(*) n,"
-            f" sum(quantity) total FROM usage_event_v2{w}"
+            f" sum(quantity) total FROM usage_event_v2 u{w}"
             " GROUP BY day ORDER BY day DESC LIMIT 30",
             params).fetchall()]
         # 异常：单日事件数 > 3× 均值（诚实简单规则，标注口径）
@@ -87,16 +107,16 @@ def create_usage_router(store: Any, iam: IAMService,
              unit: str = "", limit: int = 50) -> dict:
         p = require_principal(auth, request, csrf=False)
         _check(p, customer_id)
-        where, params = [], []
+        where, params = [_EFFECTIVE_OP], []
         if customer_id:
             where.append("customer_id=?"); params.append(customer_id)
         if unit:
             where.append("unit=?"); params.append(unit)
-        w = (" WHERE " + " AND ".join(where)) if where else ""
+        w = " WHERE " + " AND ".join(where)
         rs = [dict(r) for r in store._conn.execute(
             f"SELECT usage_id, unit, quantity, run_id, work_id, node,"
             f" capability, model, profile_id, tier, project_id,"
-            f" source_evidence, occurred_at FROM usage_event_v2{w}"
+            f" source_evidence, occurred_at FROM usage_event_v2 u{w}"
             " ORDER BY occurred_at DESC LIMIT ?",
             params + [min(limit, 500)]).fetchall()]
         # 下钻：每行关联 run 状态与证据 bundle
@@ -123,13 +143,14 @@ def create_usage_router(store: Any, iam: IAMService,
     def export_csv(request: Request, customer_id: str = "") -> Response:
         p = require_principal(auth, request, csrf=False)
         _check(p, customer_id)
-        where, params = "", []
+        where, params = "WHERE " + _EFFECTIVE_OP, []
         if customer_id:
-            where, params = "WHERE customer_id=?", [customer_id]
+            where += " AND customer_id=?"
+            params.append(customer_id)
         rs = store._conn.execute(
             f"SELECT usage_id, occurred_at, customer_id, project_id,"
             f" unit, quantity, run_id, work_id, node, capability,"
-            f" profile_id, tier, source_evidence FROM usage_event_v2"
+            f" profile_id, tier, source_evidence FROM usage_event_v2 u"
             f" {where} ORDER BY occurred_at DESC LIMIT 5000",
             params).fetchall()
         buf = io.StringIO()
@@ -166,8 +187,9 @@ def create_usage_router(store: Any, iam: IAMService,
         for r in rows:
             b = _json.loads(r["budget_json"] or "{}")
             spent = store._conn.execute(
-                "SELECT count(*) c FROM usage_event_v2 WHERE"
-                " project_id=?", (r["project_id"],)).fetchone()["c"]
+                "SELECT count(*) c FROM usage_event_v2 u WHERE"
+                " project_id=? AND " + _EFFECTIVE_OP,
+                (r["project_id"],)).fetchone()["c"]
             out.append({"project_id": r["project_id"],
                         "customer_id": r["customer_id"],
                         "name": r["name"],

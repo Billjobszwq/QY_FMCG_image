@@ -35,6 +35,12 @@ class _OkRecognition:
         return {"count": 0, "products": []}
 
 
+class _FakeProfiles:
+    def list_profiles(self):
+        return [{"profile_id": "production_legacy", "status": "enabled",
+                 "blockers": [], "components": []}]
+
+
 @pytest.fixture()
 def env(tmp_path: Path, monkeypatch):
     monkeypatch.setenv("PLATFORM_ADMIN_PASSWORD", "si3-pw")
@@ -89,8 +95,10 @@ class TestMediaInheritance:
             "INSERT INTO survey_definition_v1 (survey_id, name,"
             " status, version, spec_json, created_by, data_scope,"
             " test_run_id, created_at, updated_at)"
-            " VALUES ('sv-fx','fx','published',1,'{}','t',?,?,"
-            "datetime('now'),datetime('now'))", ("uat_fixture", NS))
+            " VALUES ('sv-fx','fx','published',1,?,'t',?,?,"
+            "datetime('now'),datetime('now'))",
+            (json.dumps({"questions": [{"id": "q1", "type": "photo"}]}),
+             "uat_fixture", NS))
         store._conn.execute(
             "INSERT INTO survey_assignment_v1 (assignment_id,"
             " survey_id, survey_version, status, customer_id,"
@@ -102,8 +110,7 @@ class TestMediaInheritance:
         resp = svc.start_response(assignment_id="sa-fx",
                                   respondent="tester")
         m = svc.attach_media(response_id=resp["response_id"],
-                             question_id="q1", kind="photo",
-                             evidence_ref="cas:t", actor="tester")
+                             question_id="q1", actor="tester")
         row = store._conn.execute(
             "SELECT data_scope, test_run_id FROM survey_media_v1"
             " WHERE media_id=?", (m["media_id"],)).fetchone()
@@ -149,7 +156,7 @@ class TestRecognitionInheritance:
         cid = _mk_fixture_customer(store)
         _mk_fixture_run(store, run_id="run-fx-rec",
                         work_id="work-fx-rec")
-        gw = CommandGateway(store, None,
+        gw = CommandGateway(store, _FakeProfiles(),
                             recognition_adapter=_OkRecognition())
         out = gw.submit(
             command_kind="vision.recognition.create",
@@ -275,7 +282,8 @@ class TestCustomerFixtureFlag:
         md = MasterDataService(store, iam=iam)
         md.create_customer(customer_id="si3-flag-cust",
                            name="带测试标记客户",
-                           is_test_fixture=True, created_by="admin")
+                           is_test_fixture=True, created_by="admin",
+                           test_run_id=NS)
         row = store._conn.execute(
             "SELECT COALESCE(data_scope,'operational') ds FROM"
             " md_customer_v1 WHERE customer_id='si3-flag-cust'"
@@ -295,7 +303,7 @@ class TestCustomerFixtureFlag:
 class TestTerminalConvergence:
     def test_r08_cancel_run_converges_nodes(self, env):
         store, bundle = env["store"], env["bundle"]
-        from src.platform.workflow import WorkflowRuntime
+        from src.platform.workflow import WorkflowService
         store._conn.execute(
             "INSERT INTO workflow_definition_v1 (definition_id, name,"
             " status, version, spec_json, spec_hash, created_by,"
@@ -305,18 +313,17 @@ class TestTerminalConvergence:
             (json.dumps({"trigger": {"type": "manual"},
                          "variables": {},
                          "nodes": [{"id": "start", "type": "trigger"},
-                                   {"id": "w1", "type": "wait",
-                                    "seconds": 300},
+                                   {"id": "ap1", "type": "human_approval"},
                                    {"id": "end", "type": "end"}],
-                         "edges": [{"from": "start", "to": "w1"},
-                                   {"from": "w1", "to": "end"}]}),))
+                         "edges": [{"from": "start", "to": "ap1"},
+                                   {"from": "ap1", "to": "end"}]}),))
         store._conn.commit()
-        wf = WorkflowRuntime(store)
-        run = wf.start_run("wf-si3", actor="tester")
+        wf = WorkflowService(store, bundle.capabilities, None)
+        run = wf.start_run("wf-si3", inputs={}, actor="tester")["run"]
+        # 制造残留 running 节点（真实泄漏形态：终态前未收敛）
         store._conn.execute(
-            "INSERT INTO workflow_node_execution_v1 (run_id, node_id,"
-            " node_type, status, started_at) VALUES (?,'w1','wait',"
-            "'running',datetime('now'))", (run["run_id"],))
+            "UPDATE workflow_node_execution_v1 SET status='running'"
+            " WHERE run_id=? AND node_id='ap1'", (run["run_id"],))
         store._conn.commit()
         wf.cancel_run(run["run_id"], actor="tester")
         n = store._conn.execute(

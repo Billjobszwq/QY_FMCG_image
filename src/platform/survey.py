@@ -155,8 +155,11 @@ class SurveyService:
         return d
 
     def list_surveys(self) -> list[dict]:
+        # SI3：运营问卷列表默认排除 fixture（指令三.10）。
+        from .scope import OPERATIONAL_FILTER
         rows = self.store._conn.execute(
-            "SELECT * FROM survey_definition_v1"
+            "SELECT * FROM survey_definition_v1 WHERE "
+            + OPERATIONAL_FILTER +
             " ORDER BY survey_id, version").fetchall()
         out = []
         for r in rows:
@@ -420,12 +423,16 @@ class SurveyService:
         a = self.get_assignment(assignment_id)
         rid = _new_id("rsp")
         now = _now()
+        # SI3：response 继承 assignment scope（同事务；指令四.12 父链）
         self.store._conn.execute(
             "INSERT INTO survey_response_v1 (response_id, assignment_id,"
             " survey_id, survey_version, customer_id, respondent, status,"
-            " created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?)",
+            " created_at, updated_at, data_scope, test_run_id)"
+            " VALUES (?,?,?,?,?,?,?,?,?,?,?)",
             (rid, assignment_id, a["survey_id"], a["survey_version"],
-             a["customer_id"], respondent, "draft", now, now))
+             a["customer_id"], respondent, "draft", now, now,
+             a.get("data_scope") or "operational",
+             a.get("test_run_id") or ""))
         self.store._conn.commit()
         return self.get_response(rid)
 
@@ -636,6 +643,10 @@ class SurveyService:
         run_id = ""
         suggestion: dict = {}
         suggestion_status = "none"
+        # SI3：媒体必须继承 response scope（指令四.12）——服务端
+        # 解析，客户端不得自证。
+        from .scope import ScopeResolver
+        mscope = ScopeResolver(self.store).scope_of_response(response_id)
         if image_b64 and self.gateway is not None and q.get("recognition"):
             # 识别只是 suggestion：进统一 gateway 链（事件/证据/用量）；
             # profile 取题目配置（UATCC T1），缺省 standard 生产链。
@@ -647,7 +658,8 @@ class SurveyService:
                             or "production_legacy",
                         "service_tier": "standard"},
                 actor=actor, source="internal",
-                customer_id=r["customer_id"])
+                customer_id=r["customer_id"],
+                test_run_id=mscope.test_run_id)
             run_id = out.get("run_id", "")
             result = (out.get("result") or {})
             suggestion = {"status": out.get("status"),
@@ -662,13 +674,15 @@ class SurveyService:
             "INSERT INTO survey_media_v1 (media_id, response_id,"
             " question_id, evidence_ref, location_json, taken_at, device,"
             " quality_json, recognition_run_id, suggestion_json,"
-            " suggestion_status, capture_role, status, created_at)"
-            " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            " suggestion_status, capture_role, status, created_at,"
+            " data_scope, test_run_id)"
+            " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
             (mid, response_id, question_id, evidence_ref,
              json.dumps(location or {}, ensure_ascii=False), taken_at,
              device, json.dumps(quality or {}, ensure_ascii=False),
              run_id, json.dumps(suggestion, ensure_ascii=False),
-             suggestion_status, role, "active", _now()))
+             suggestion_status, role, "active", _now(),
+             mscope.data_scope, mscope.test_run_id))
         self.store._conn.commit()
         return self.get_media(mid)
 

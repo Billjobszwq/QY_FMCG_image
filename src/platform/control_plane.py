@@ -194,7 +194,8 @@ class CommandGateway:
                 service_tier=params.get("service_tier", "standard"),
                 source=source, project_id=params.get("project_id", ""),
                 profiles_service=self.profiles_service,
-                run_id=run_id, work_id=work_id, correlation_id=corr)
+                run_id=run_id, work_id=work_id, correlation_id=corr,
+                data_scope=scope[0], test_run_id=scope[1])
         except Exception as e:  # 失败留在同一 run：错误可见、可重试
             detail = getattr(e, "detail", None)
             msg = json.dumps(detail, ensure_ascii=False) \
