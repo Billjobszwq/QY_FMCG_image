@@ -179,10 +179,12 @@ export default function App() {
               to="/vision/models" replace />} />
             <Route path="/packaging" element={<Navigate
               to="/vision/datasets" replace />} />
-            <Route path="/biz" element={<Navigate to="/analytics/bi"
+            <Route path="/biz" element={<Navigate to="/analytics/reports"
               replace />} />
-            <Route path="/biz/*" element={<Navigate to="/analytics/bi"
-              replace />} />
+            <Route path="/biz/*" element={<Navigate
+              to="/analytics/reports" replace />} />
+            <Route path="/analytics/bi" element={<Navigate
+              to="/analytics/reports" replace />} />
             <Route path="/taskboard" element={<Navigate to="/home"
               replace />} />
             <Route path="/runs" element={<Navigate to="/workflow/runs"

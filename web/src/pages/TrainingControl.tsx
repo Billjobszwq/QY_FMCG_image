@@ -7,6 +7,7 @@ import {
   fetchLegacyModels,
   fetchTrainingLanes,
   fetchTrainingOverview,
+  iamGet,
 } from "../api";
 
 // GLTC Task 9：NextGen 四训练通道统一控制台。
@@ -37,6 +38,13 @@ export default function TrainingControlPanel() {
   const [overview, setOverview] = useState<TrainingOverviewBody | null>(null);
   const [legacy, setLegacy] = useState<LegacyModelRow[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [stdCurrent, setStdCurrent] = useState<any | null>(null);
+
+  useEffect(() => {
+    // UATCC T5：平台当前 standard bundle 与诚实状态口径
+    iamGet("recognition/standard")
+      .then((d) => setStdCurrent(d.current)).catch(() => {});
+  }, []);
 
   const reload = useCallback(async () => {
     try {
@@ -106,6 +114,15 @@ export default function TrainingControlPanel() {
   return (
     <section>
       <h2>训练控制台（NextGen 四通道 · fmcg_nextgen_v1）</h2>
+      {stdCurrent?.bundle_id === "prod_v4_best_r1" && (
+        <p style={{ margin: "6px 0", padding: "6px 10px", borderRadius: 6,
+          border: "1px solid #b45309", color: "#b45309",
+          fontSize: "0.9em" }}>
+          当前本机识别模型：<strong>prod_v4_best_r1</strong>（
+          USER_SELECTED_UAT_MODEL）——用户选定的 UAT 模型，尚未完成
+          独立人工真值准确率晋级，不写 PRODUCTION_APPROVED；一键回滚
+          路径保留（CURRENT.previous.json）。
+        </p>)}
       {error && <p style={{ color: "#b00020" }}>加载失败：{error}</p>}
 
       {lanes && (
