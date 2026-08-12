@@ -139,7 +139,7 @@ def test_real_qiyun_logo_is_embedded_for_offline_delivery() -> None:
 
 def test_token_flow_and_shared_loop_are_complete() -> None:
     html = load_html()
-    for semantic in ("token-flow", "token-pulse", "human-gate", "verified-result", "feedback-return"):
+    for semantic in ("token-flow", "human-gate", "verified-result", "feedback-return"):
         assert semantic in html
     for stage in (
         "业务目标",
@@ -175,7 +175,7 @@ def test_editorial_hero_and_light_diagram_contract() -> None:
 
     hero_rule = extract_css_block(html, ".hero")
     assert re.search(
-        r"grid-template-columns\s*:\s*minmax\(0,\s*2fr\)\s+minmax\(320px,\s*\.85fr\)\s*;",
+        r"grid-template-columns\s*:\s*minmax\(0,\s*2fr\)\s+minmax\(260px,\s*\.85fr\)\s*;",
         hero_rule,
     )
     diagram_rule = extract_css_block(html, ".diagram")

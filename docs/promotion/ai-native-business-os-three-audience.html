@@ -79,7 +79,7 @@
     }
     .audience-tab { min-height: 42px; padding: 8px 16px; }
     .audience-tab[aria-selected="true"] { color: var(--ink); border-color: var(--token-violet); background: linear-gradient(90deg, rgba(217,43,85,.10), rgba(114,0,255,.12), rgba(7,156,148,.09)); }
-    .hero { min-height: 650px; display: grid; grid-template-columns: minmax(0, 2fr) minmax(320px, .85fr); grid-template-columns: minmax(0, 2fr) minmax(260px, .85fr); gap: clamp(38px, 6vw, 88px); align-items: center; padding-block: clamp(72px, 10vw, 140px) 72px; }
+    .hero { min-height: 650px; display: grid; grid-template-columns: minmax(0, 2fr) minmax(260px, .85fr); gap: clamp(38px, 6vw, 88px); align-items: center; padding-block: clamp(72px, 10vw, 140px) 72px; }
     .hero-copy { align-self: end; }
     .hero-statement { align-self: end; padding: 28px 0 4px 26px; border-left: 2px solid var(--trust); }
     .hero-loop-summary { grid-column: 1 / -1; align-self: start; }
@@ -105,7 +105,6 @@
     .hero-flow-svg text { fill: var(--paper); font-family: var(--body); font-size: 13px; }
     .hero-flow-svg .muted-svg { fill: var(--muted); font-size: 11px; }
     .token-flow { fill: none; stroke: url(#qiyun-gradient); stroke-width: 3; marker-end: url(#hero-arrow); }
-    .token-pulse { fill: var(--drive-cyan); }
     .feedback-return { fill: none; stroke: var(--token-violet); stroke-width: 2; stroke-dasharray: 7 7; marker-end: url(#hero-return-arrow); }
     .human-gate { fill: var(--human-soft); stroke: var(--value-gold); }
     .verified-result { fill: rgba(114,0,255,.12); stroke: var(--token-violet); stroke-width: 3; }
@@ -318,7 +317,6 @@
             <marker id="hero-return-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path class="marker-value" d="M0 0 10 5 0 10z"></path></marker>
           </defs>
           <path class="token-flow" d="M154 90 H930"></path>
-          <circle class="token-pulse" cx="260" cy="90" r="4"></circle>
           <rect x="26" y="52" width="190" height="76" fill="#FBF8F1" stroke="#D92B55"></rect><text x="121" y="84" text-anchor="middle">业务目标</text><text class="muted-svg" x="121" y="106" text-anchor="middle">目标与约束输入</text>
           <rect x="300" y="45" width="210" height="90" fill="#FBF8F1" stroke="#7200FF"></rect><text x="405" y="80" text-anchor="middle">词元驱动</text><text class="muted-svg" x="405" y="104" text-anchor="middle">理解语境 · 组织能力</text>
           <polygon class="human-gate" points="650,42 698,90 650,138 602,90"></polygon><text x="650" y="86" text-anchor="middle">人工</text><text x="650" y="107" text-anchor="middle">守门</text>
