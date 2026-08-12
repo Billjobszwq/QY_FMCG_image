@@ -746,3 +746,46 @@ Agent 不是万能管理员。Graph 节点必须声明 capability、数据域、
 - 本轮任务书授权本机 `best/sku_v4_best.pt` 经 shadow/回归/回滚后成为默认
   standard profile；不授权新增长时间训练、远程部署、merge/push 或把弱实验模型
   伪装成商业 production。
+
+## 2026-08-13 · Scope Integrity V3：假阳性 Gate 收口与方法论（当前接续入口）
+
+- 入口：`docs/implementation/agentic-business-os-scope-integrity-v3/`
+  （STATUS/FINAL-REPORT 为准）。开工基线 HEAD `eb19425f`。
+- **假阳性 Gate 教训**：SI2 的 READY_FOR_REAL_DATA_UAT 被独立审计
+  证伪（media=24/work=8/recognition=5/BI=5/失败 Agent=5/Usage=89/
+  节点漂移=39 全部漏检）。三个根因必须永久记取：
+  1. **隔离只看行自身列**（COALESCE(data_scope)=operational）看不
+     见父链泄漏 → 必须用 effective scope（自身列 ⊕ 父链 ⊕
+     attribution）；
+  2. **scanner except/continue 吞异常** → 扫描必须 fail-fast，异常
+     即 BLOCKED；
+  3. **静态 gate.json 无 freshness** → Gate 必须绑定 DB
+     fingerprint（scope-graph 聚合/事件水位/投影 hash/关键表计数）
+     并在读取时实时复评，数据变化即 STALE_GATE_EVIDENCE。
+- **作用域传播方法**：唯一 ExecutionContext（tenant/customer/project/
+  data_scope/test_run/correlation/parent_run/actor/source/定义版本）；
+  解析顺序 Test Run registry（存在/current/客户匹配，fail-closed）
+  → 父 Run → response/assignment 父链 → Customer → operational；
+  六维父子校验；对象创建与 scope 写入同一事务（禁止先 commit 再
+  bind）；namespace 不可覆盖（幂等仅内容一致否则 409）；失败路径
+  先解析 scope 再查定义；客户端不得自证 operational。
+- **不可变账本 effective_scope**：Usage/Evidence 绝不 UPDATE（DB
+  触发器强制）；纠偏一律经 `scope_attribution_ledger_v1` 追加式
+  绑定，运营查询/计费消费 effective 口径；每轮回填写
+  `scope_backfill_audit_v1`（规则/父对象/数量/hash/actor/时间）。
+- **全表 Scope Registry**：`src/platform/scope_registry.py` 登记全部
+  123 表（七类），覆盖率 100% 是 Gate 前提；任何新业务表必须先
+  登记再使用（否则 BLOCKED_BY_SCOPE_REGISTRY）。
+- **防复发机制**：17 项契约红测试（test_si3_scope_integrity.py）+ 14
+  项 Gate 负例（gate_negative_tests.json）+ UAT V5 内联泄漏注入
+  负例（注入→STALE→修复→恢复）+ 浏览器真实文本断言（不再相信
+  页面自报计数器）。任何新 Domain/表/创建路径接入时必须先过这四道。
+- 当前机器 Gate：`.eval/scope_v3/gate.json`（Gate 3.0 全量评估）；
+  production `prod_v4_best_r1` 未切换；未启动训练；真实数据 UAT
+  与人工验收由用户执行，此前不得写 ACCEPTED/PRODUCTION_READY。
+
+## 14. 手册变更记录（追加）
+
+| 日期 | HEAD | 变更 |
+|---|---|---|
+| 2026-08-13 | si3 收尾提交 | Scope Integrity V3 收口：假阳性 Gate 降级并修复；Scope Graph V3/effective scope/attribution ledger/全表 Registry/Gate 3.0 freshness/UAT V5 48 项；hermetic 1425 passed，host MPS 6 passed |
