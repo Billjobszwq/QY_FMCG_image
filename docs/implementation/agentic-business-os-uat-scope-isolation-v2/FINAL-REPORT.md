@@ -5,10 +5,12 @@
 1. HEAD/branch/worktree：开始 `9f3554e7` / `feat/nextgen-training-cycle-v2` /
    tracked 干净；结束 HEAD 见 `git log -1`（本轮提交链见第 3 项），
    tracked worktree 在终评前提交干净（Gate `tracked_worktree_clean`）。
-2. 开始和结束 commit：`9f3554e7` → `（终评 HEAD，见 gate.json source_commit）`。
+2. 开始和结束 commit：`9f3554e7` → `ea6ea086`（gate.json
+    source_commit 与终评 HEAD 一致）。
 3. 本轮 commit 链：`18ac09d0`(T0) → `5183cd83`(T1 红) → `013efe3a`(T2-T4/T6)
    → `9548cc30`(T3 backfill) → `52b9069b`(T5/T8-prep) → `fbeac0f3`(T8)
-   → `b38d9421`(T9) → `（T6/T7/T10 收尾提交）`。
+   → `b38d9421`(T9) → `ea6ea086`(T6/T7/T10 收尾；其后仅治理文档
+   小步提交与 Gate 终评)。
 4. 完整阅读文件清单：READING-LIST.md（23 项；其中 AGENTS.md 与
    docs/implementation/agentic-business-os-v3/ 现场不存在，如实记录）。
 5. 初始服务/DB/模型/训练进程：00-LIVE-AUDIT §2-§4（四服务 UP、
