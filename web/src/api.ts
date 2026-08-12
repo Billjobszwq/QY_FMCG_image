@@ -1033,6 +1033,8 @@ export interface RecognitionRequestOpts {
 
 export interface RecognitionProfileRow {
   profile_id: string;
+  display_name?: string;
+  frozen_mapping?: string;
   status: "enabled" | "disabled";
   blockers: string[];
   tags: string[];

@@ -170,8 +170,10 @@ export default function Home({ health, modules, identity }: {
                   {w.owner_id ? ` · ${w.owner_id}` : ""}
                   {w.due_at ? ` · 截止 ${fmtWhen(w.due_at).slice(0, 10)}`
                     : ""}
+                  {/* SI3（指令七.4）：技术错误不霸占首页，错误码进
+                      详情（悬停可见摘要） */}
                   {w.blockers?.length
-                    ? ` · ${String(w.blockers[0]).slice(0, 40)}` : ""}
+                    ? " · 有阻断（点开看详情）" : ""}
                 </div>
               </Link>))}
         </div>
@@ -252,8 +254,9 @@ export default function Home({ health, modules, identity }: {
                     {String(a.subject_id).slice(0, 14)}…</span> : null}
                 </div>
                 <div className="meta">{fmtWhen(a.at)} · {a.actor || "system"}
-                  {a.error ? <span style={{ color: "var(--err)" }}>
-                    {" "}· {a.error.slice(0, 60)}</span> : null}</div>
+                  {a.error ? <span style={{ color: "var(--err)" }}
+                    title={a.error}>
+                    {" "}· 运行失败（错误码见运行详情）</span> : null}</div>
               </div>))}
         </div>
 
@@ -290,7 +293,7 @@ export default function Home({ health, modules, identity }: {
                   {a.kind === "needs_decision" ? "需要决定"
                     : a.kind === "blocked" ? "被阻断" : "指标异常"}
                   {a.blockers?.length
-                    ? ` · ${String(a.blockers[0]).slice(0, 50)}` : ""}
+                    ? " · 阻断原因见详情" : ""}
                 </div>
               </Link>))}
         </div>

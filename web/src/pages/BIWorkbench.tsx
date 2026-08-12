@@ -1,7 +1,15 @@
 // ABOSV3 T9：BI 工作台 —— 数据产品/受限公式指标/下钻/ECharts
 // Dashboard 画布（真实 API 求值，禁静态假图）。
 import { useCallback, useEffect, useRef, useState } from "react";
-import * as echarts from "echarts";
+// SI3 T10（指令 11.2）：echarts 模块化按需引入（只用 bar/line/pie），
+// 不再整包引入全量 echarts。
+import * as echarts from "echarts/core";
+import { BarChart, LineChart, PieChart } from "echarts/charts";
+import { GridComponent, TooltipComponent, LegendComponent,
+  TitleComponent } from "echarts/components";
+import { CanvasRenderer } from "echarts/renderers";
+echarts.use([BarChart, LineChart, PieChart, GridComponent,
+  TooltipComponent, LegendComponent, TitleComponent, CanvasRenderer]);
 import { csrfToken, iamGet, iamPost } from "../api";
 import { EmptyState, ErrorState, Loading, PageHeader } from
   "../platform/components";

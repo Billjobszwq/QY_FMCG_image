@@ -35,6 +35,11 @@ function useLoad<T>(path: string | null): {
 export function SurveyDesign() {
   const defs = useLoad<any>("survey/definitions");
   const [msg, setMsg] = useState<string | null>(null);
+  // SI3（指令七.2）：搜索/分页；后端默认只返回 operational，
+  // fixture 问卷仅在测试与证据中心可见。
+  const [q, setQ] = useState("");
+  const [page, setPage] = useState(0);
+  const PAGE = 10;
   const act = async (name: string, fn: () => Promise<any>) => {
     setMsg(null);
     try { const out = await fn(); setMsg(`${name}成功`); defs.reload();
@@ -55,9 +60,36 @@ export function SurveyDesign() {
       </div>
       {defs.err && <ErrorState message={defs.err} onRetry={defs.reload} />}
       {!defs.data && !defs.err && <Loading />}
-      {defs.data && (defs.data.definitions.length === 0
-        ? <EmptyState title="暂无问卷定义" />
-        : defs.data.definitions.map((d: any) => (
+      {defs.data && (() => {
+        const hit = (defs.data.definitions ?? []).filter((d: any) =>
+          !q || d.name?.includes(q) || d.survey_id?.includes(q));
+        const pages = Math.max(1, Math.ceil(hit.length / PAGE));
+        const cur = Math.min(page, pages - 1);
+        return (
+          <div className="card">
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap",
+              alignItems: "center" }}>
+              <input placeholder="搜索问卷名称 / ID" aria-label="搜索问卷"
+                value={q} onChange={(e) => { setQ(e.target.value);
+                  setPage(0); }} style={{ maxWidth: 240 }} />
+              <span className="muted" style={{ fontSize: 12 }}>
+                共 {hit.length} 条 · 第 {cur + 1}/{pages} 页（测试问卷
+                请在“测试与证据中心”查看）</span>
+              <button className="btn small" disabled={cur === 0}
+                onClick={() => setPage(cur - 1)}>上一页</button>
+              <button className="btn small" disabled={cur >= pages - 1}
+                onClick={() => setPage(cur + 1)}>下一页</button>
+            </div>
+          </div>);
+      })()}
+      {defs.data && (() => {
+        const hit = (defs.data.definitions ?? []).filter((d: any) =>
+          !q || d.name?.includes(q) || d.survey_id?.includes(q));
+        if (hit.length === 0) return <EmptyState title="暂无问卷定义" />;
+        const cur = Math.min(page, Math.max(0,
+          Math.ceil(hit.length / PAGE) - 1));
+        const shown = hit.slice(cur * PAGE, cur * PAGE + PAGE);
+        return shown.map((d: any) => (
           <div className="card" key={`${d.survey_id}@${d.version}`}>
             <h3>{d.name} <span className="v">{d.survey_id} ·
               v{d.version} · {d.status}</span></h3>
@@ -88,7 +120,8 @@ export function SurveyDesign() {
                 新版本</button>
             </div>
           </div>
-        )))}
+        ));
+      })()}
     </>
   );
 }

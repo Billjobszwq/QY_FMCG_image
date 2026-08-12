@@ -81,35 +81,53 @@ export function ProfilePicker({ value, onChange }:
       fetchRecognitionProfiles().then((d) => setPs(d.profiles))
         .catch((e) => setErr(String(e))); }} />;
   if (!ps) return <Loading text="加载识别 Profile…" />;
+  // SI3 UI（指令七.7）：可用/实验（禁用）分组；disabled 不得主导页面
+  const enabled = ps.filter((p) => p.status === "enabled");
+  const disabled = ps.filter((p) => p.status !== "enabled");
+  const tile = (p: RecognitionProfileRow) => {
+    const on = p.status === "enabled";
+    const active = value === p.profile_id;
+    return (
+      <div key={p.profile_id} role="radio" aria-checked={active}
+        aria-disabled={!on} tabIndex={on ? 0 : -1}
+        aria-pressed={active} className="tile"
+        style={{ cursor: on ? "pointer" : "not-allowed" }}
+        onClick={() => on && onChange(p.profile_id)}
+        onKeyDown={(e) => {
+          if (on && (e.key === "Enter" || e.key === " ")) {
+            e.preventDefault(); onChange(p.profile_id);
+          }
+        }}>
+        <span className="k">{p.display_name || p.profile_id}</span>
+        <span className={`badge ${on ? "ok" : "muted"}`}>
+          {on ? "可用" : "禁用"}</span>
+        <span className="v">
+          {(p.blockers ?? []).join("；")
+            || (p.tags ?? []).join("，")
+            || (p.components ?? []).join(" + ")}</span>
+        {p.frozen_mapping && (
+          <span className="muted" style={{ fontSize: 12 }}>
+            {p.frozen_mapping}</span>
+        )}
+      </div>
+    );
+  };
   return (
     <div className="card">
       <h3>识别 Profile（服务端校验，禁用项无法提交）</h3>
       <div className="grid" role="radiogroup" aria-label="识别 Profile">
-        {ps.map((p) => {
-          const on = p.status === "enabled";
-          const active = value === p.profile_id;
-          return (
-            <div key={p.profile_id} role="radio" aria-checked={active}
-              aria-disabled={!on} tabIndex={on ? 0 : -1}
-              aria-pressed={active} className="tile"
-              style={{ cursor: on ? "pointer" : "not-allowed" }}
-              onClick={() => on && onChange(p.profile_id)}
-              onKeyDown={(e) => {
-                if (on && (e.key === "Enter" || e.key === " ")) {
-                  e.preventDefault(); onChange(p.profile_id);
-                }
-              }}>
-              <span className="k">{p.profile_id}</span>
-              <span className={`badge ${on ? "ok" : "muted"}`}>
-                {on ? "可用" : "禁用"}</span>
-              <span className="v">
-                {(p.blockers ?? []).join("；")
-                  || (p.tags ?? []).join("，")
-                  || (p.components ?? []).join(" + ")}</span>
-            </div>
-          );
-        })}
+        {enabled.map(tile)}
       </div>
+      {disabled.length > 0 && (
+        <details style={{ marginTop: 10 }}>
+          <summary className="muted" style={{ cursor: "pointer" }}>
+            实验 / 已归档模型（{disabled.length}，禁用，仅供审计）
+          </summary>
+          <div className="grid" style={{ marginTop: 8 }}>
+            {disabled.map(tile)}
+          </div>
+        </details>
+      )}
       <p className="v" style={{ marginTop: 10 }}>
         当前请求将使用：<b>{value}</b>（随单图/批量/URL 请求提交，
         服务端只接受已注册且启用的 Profile）
@@ -152,6 +170,10 @@ export function RecognizeNow({ health }: { health: HealthBody | null }) {
     <>
       <PageHeader title="即时识别"
         desc="单图 / 批量 / URL 共用同一识别服务与统一任务历史" />
+      <div className="banner" role="status">
+        当前生产：<b>V4 Best</b>（prod_v4_best_r1，冻结映射
+        production_legacy → V4 Best；识别默认使用生产模型）
+      </div>
       {degraded && (
         <div className="banner banner-warn">
           识别服务当前降级（{health?.services?.map((s) =>

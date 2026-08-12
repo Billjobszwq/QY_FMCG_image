@@ -287,12 +287,17 @@ export function IamAudit() {
 
 // ---- 客户库 ----
 export function MasterCustomers() {
-  const custs = useLoad<any>("/master/customers");
+  const custs = useLoad<any>("/master/customers?include_fixture=true");
   const dups = useLoad<any>("/master/duplicates");
   const [form, setForm] = useState({ customer_id: "", name: "",
-    is_test_fixture: true, retention_policy: "" });
+    is_test_fixture: false, test_run_id: "", retention_policy: "" });
   const [ov, setOv] = useState<any | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
+  // SI3（指令七.2）：搜索/分页/scope 筛选；默认只看 operational
+  const [q, setQ] = useState("");
+  const [page, setPage] = useState(0);
+  const [showFixture, setShowFixture] = useState(false);
+  const PAGE = 10;
   const setStatus = async (id: string, status: string) => {
     try {
       await iamPost(`master/customer/${id}/status`, { status });
@@ -327,6 +332,13 @@ export function MasterCustomers() {
                 is_test_fixture: e.target.checked })} />
             test fixture
           </label>
+          {form.is_test_fixture && (
+            <input placeholder="test_run_id（测试中心上下文，必填）"
+              aria-label="Test Run ID" value={form.test_run_id}
+              style={{ minWidth: 220 }}
+              onChange={(e) => setForm({ ...form,
+                test_run_id: e.target.value })} />
+          )}
           <button className="btn small primary" onClick={async () => {
             try {
               await iamPost("master/customers", form);
@@ -336,17 +348,64 @@ export function MasterCustomers() {
           }}>创建</button>
         </div>
         {msg && <p className="v" style={{ marginTop: 8 }}>{msg}</p>}
+        <p className="muted" style={{ fontSize: 12, marginTop: 8 }}>
+          运营客户默认不勾选测试标记；测试客户必须先在建“测试与证据
+          中心”创建 Test Run 上下文并绑定 test_run_id（服务端
+          fail-closed，无 test_run 的测试客户会被 409 拒绝）。
+        </p>
       </div>
       {custs.err && <ErrorState message={custs.err}
         onRetry={custs.reload} />}
       {!custs.data && !custs.err && <Loading />}
-      {custs.data && (custs.data.customers.length === 0
-        ? <EmptyState title="暂无客户" />
-        : custs.data.customers.map((cu: any) => (
+      {custs.data && (() => {
+        const all = (custs.data.customers ?? []).filter((cu: any) =>
+          showFixture || (!cu.is_test_fixture
+            && (cu.data_scope ?? "operational") === "operational"));
+        const hit = all.filter((cu: any) => !q
+          || cu.name?.includes(q) || cu.customer_id?.includes(q));
+        const pages = Math.max(1, Math.ceil(hit.length / PAGE));
+        const cur = Math.min(page, pages - 1);
+        return (
+          <div className="card">
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap",
+              alignItems: "center" }}>
+              <input placeholder="搜索客户名称 / ID" aria-label="搜索客户"
+                value={q} onChange={(e) => { setQ(e.target.value);
+                  setPage(0); }} style={{ maxWidth: 240 }} />
+              <label style={{ fontSize: 12, display: "flex",
+                alignItems: "center", gap: 4 }}>
+                <input type="checkbox" checked={showFixture}
+                  onChange={(e) => { setShowFixture(e.target.checked);
+                    setPage(0); }} />
+                显示测试数据（fixture）
+              </label>
+              <span className="muted" style={{ fontSize: 12 }}>
+                共 {hit.length} 条 · 第 {cur + 1}/{pages} 页</span>
+              <button className="btn small" disabled={cur === 0}
+                onClick={() => setPage(cur - 1)}>上一页</button>
+              <button className="btn small" disabled={cur >= pages - 1}
+                onClick={() => setPage(cur + 1)}>下一页</button>
+            </div>
+          </div>);
+      })()}
+      {custs.data && (() => {
+        const all = (custs.data.customers ?? []).filter((cu: any) =>
+          showFixture || (!cu.is_test_fixture
+            && (cu.data_scope ?? "operational") === "operational"));
+        const hit = all.filter((cu: any) => !q
+          || cu.name?.includes(q) || cu.customer_id?.includes(q));
+        const cur = Math.min(page, Math.max(0,
+          Math.ceil(hit.length / PAGE) - 1));
+        const shown = hit.slice(cur * PAGE, cur * PAGE + PAGE);
+        if (hit.length === 0) return <EmptyState title="暂无客户" />;
+        return shown.map((cu: any) => (
           <div className="card" key={cu.customer_id}>
             <h3>{cu.name} <span className="v">{cu.customer_id}</span>
               {cu.is_test_fixture && <span className="badge warn"
-                style={{ marginLeft: 8 }}>test fixture</span>}</h3>
+                style={{ marginLeft: 8 }}>test fixture</span>}
+              {cu.test_run_id ? <span className="badge muted"
+                style={{ marginLeft: 8 }}>{cu.test_run_id}</span>
+                : null}</h3>
             <p className="v">保留策略：{cu.retention_policy || "—"} ·
               状态 {cu.status}</p>
             <button className="btn small" onClick={async () => {
@@ -377,7 +436,8 @@ export function MasterCustomers() {
                 )
             )}
           </div>
-        )))}
+        ));
+      })()}
       {dups.data && (dups.data.customers?.length > 0
         || dups.data.skus?.length > 0) && (
         <div className="card">

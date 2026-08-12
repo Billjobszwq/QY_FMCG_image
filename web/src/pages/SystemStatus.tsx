@@ -34,6 +34,51 @@ export default function SystemStatus({ health }: { health: HealthBody | null }) 
   return (
     <section>
       <h2>系统状态</h2>
+      {/* SI3（指令七.10）：可信 Gate 与阻断原因首屏展示；检查明细
+          默认折叠。Gate 为实时 freshness 复评结果，非静态文件。 */}
+      <div className="card">
+        <h3>机器 Gate（evidence-driven，实时复评，只读）</h3>
+        {!gate && <p className="muted">尚未生成 gate.json（运行 UAT
+          --gate）</p>}
+        {gate && (
+          <>
+            <p>
+              <span className={`pill ${gate.gate ===
+                "READY_FOR_REAL_DATA_UAT" ? "pill-healthy" : "pill-down"}`}>
+                {gate.gate ?? "无"}</span>
+              {" "}<span className="v" style={{ fontSize: 12 }}>
+                evaluator {gate.evaluator_version} · commit
+                {" "}{String(gate.source_commit ?? "").slice(0, 8)} ·
+                {" "}{gate.evaluated_at}
+                {gate.freshness_verified_at ? ` · freshness 复评于
+                  ${gate.freshness_verified_at}` : ""}</span>
+            </p>
+            {(gate.reasons ?? []).length > 0 && (
+              <ul style={{ paddingLeft: 18 }}>
+                {(gate.reasons ?? []).map((r: string) => (
+                  <li key={r} className="v" style={{ fontSize: 12,
+                    color: "var(--err)" }}>{r}</li>))}
+              </ul>)}
+            <details>
+              <summary className="v" style={{ fontSize: 12 }}>
+                展开证据检查项（{gate.checks?.length ?? 0}）</summary>
+              <table>
+                <thead><tr><th>check</th><th>ok</th><th>evidence</th></tr>
+                </thead>
+                <tbody>
+                  {(gate.checks ?? []).map((c: any) => (
+                    <tr key={c.check}>
+                      <td className="v">{c.check}</td>
+                      <td style={{ color: c.ok ? undefined : "var(--err)" }}>
+                        {c.ok ? "✓" : "✗"}</td>
+                      <td className="v" style={{ fontSize: 11 }}>
+                        {String(c.evidence ?? "").slice(0, 90)}</td>
+                    </tr>))}
+                </tbody>
+              </table>
+            </details>
+          </>)}
+      </div>
       <table>
         <tbody>
           <tr>
@@ -234,46 +279,6 @@ export default function SystemStatus({ health }: { health: HealthBody | null }) 
                 </tbody>
               </table>
             </details>)}
-        </>)}
-
-      <h3>机器 Gate（evidence-driven，只读）</h3>
-      {!gate && <p className="muted">尚未生成 gate.json（运行 UAT V3
-        --gate）</p>}
-      {gate && (
-        <>
-          <p>
-            <span className={`pill ${gate.gate ===
-              "READY_FOR_REAL_DATA_UAT" ? "pill-healthy" : "pill-down"}`}>
-              {gate.gate ?? "无"}</span>
-            {" "}<span className="v" style={{ fontSize: 12 }}>
-              evaluator {gate.evaluator_version} · commit
-              {" "}{String(gate.source_commit ?? "").slice(0, 8)} ·
-              {" "}{gate.evaluated_at}</span>
-          </p>
-          {(gate.reasons ?? []).length > 0 && (
-            <ul style={{ paddingLeft: 18 }}>
-              {(gate.reasons ?? []).map((r: string) => (
-                <li key={r} className="v" style={{ fontSize: 12,
-                  color: "var(--err)" }}>{r}</li>))}
-            </ul>)}
-          <details>
-            <summary className="v" style={{ fontSize: 12 }}>
-              展开证据检查项（{gate.checks?.length ?? 0}）</summary>
-            <table>
-              <thead><tr><th>check</th><th>ok</th><th>evidence</th></tr>
-              </thead>
-              <tbody>
-                {(gate.checks ?? []).map((c: any) => (
-                  <tr key={c.check}>
-                    <td className="v">{c.check}</td>
-                    <td style={{ color: c.ok ? undefined : "var(--err)" }}>
-                      {c.ok ? "✓" : "✗"}</td>
-                    <td className="v" style={{ fontSize: 11 }}>
-                      {String(c.evidence ?? "").slice(0, 90)}</td>
-                  </tr>))}
-              </tbody>
-            </table>
-          </details>
         </>)}
     </section>
   );
