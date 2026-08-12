@@ -173,4 +173,17 @@ def create_control_plane_router(store: Any, gateway: CommandGateway,
                 "event_count": len(events),
                 "outbox": outbox}
 
+    @router.get("/api/v1/control/gate")
+    def gate_current() -> dict:
+        """UFC：机器 Gate（只读，读最近一次 evidence-driven 评估结果）。"""
+        import json as _json
+        from pathlib import Path as _Path
+        root = _Path(__file__).resolve().parents[3]
+        candidates = sorted(root.glob(".eval/*/gate.json"),
+                            key=lambda p: p.stat().st_mtime)
+        if not candidates:
+            return {"gate": None,
+                    "note": "尚未生成 gate.json（运行 UAT V3 --gate）"}
+        return _json.loads(candidates[-1].read_text(encoding="utf-8"))
+
     return router

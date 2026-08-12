@@ -7,6 +7,8 @@ export default function SystemStatus({ health }: { health: HealthBody | null }) 
   const [caps, setCaps] = useState<CapabilityInfo[] | null>(null);
   const [rlRules, setRlRules] = useState<any[] | null>(null);
   const [rlErr, setRlErr] = useState<string | null>(null);
+  const [testNs, setTestNs] = useState<any | null>(null);
+  const [gate, setGate] = useState<any | null>(null);
 
   useEffect(() => {
     fetchVersion().then(setVersion).catch(() => setVersion(null));
@@ -18,6 +20,11 @@ export default function SystemStatus({ health }: { health: HealthBody | null }) 
       .then((d) => setRlRules(d.rules))
       .catch((e) => { setRlRules([]);
         setRlErr(e instanceof Error ? e.message : String(e)); });
+    // UFC T4/T5：测试与证据 + 机器 Gate
+    iamGet("test-data/namespaces")
+      .then(setTestNs).catch(() => setTestNs(null));
+    fetch("/api/v1/control/gate").then((r) => r.json())
+      .then(setGate).catch(() => setGate(null));
   }, []);
 
   return (
@@ -131,6 +138,75 @@ export default function SystemStatus({ health }: { health: HealthBody | null }) 
             ))}
           </tbody>
         </table>)}
+
+      <h3>测试与证据（UAT fixture 隔离）</h3>
+      {testNs ? (
+        <>
+          <p className="v" style={{ fontSize: 12 }}>operational 残留：
+            <strong>{testNs.operational_residue}</strong>（归档后应为
+            0）；fixture 不进运营首页，仅供审计查询。</p>
+          {(testNs.namespaces ?? []).length === 0
+            ? <p className="v">暂无 UAT namespace</p>
+            : (
+              <table>
+                <thead><tr><th>namespace</th><th>runs</th><th>works</th>
+                  <th>可见性</th><th>最近</th></tr></thead>
+                <tbody>
+                  {(testNs.namespaces ?? []).slice(0, 12).map((n: any) => (
+                    <tr key={n.namespace}>
+                      <td className="v">{n.namespace}</td>
+                      <td>{n.runs}</td>
+                      <td>{n.works}</td>
+                      <td style={{ color: n.visibility === "current"
+                        ? "var(--accent-violet)" : undefined }}>
+                        {n.visibility}</td>
+                      <td className="v">
+                        {String(n.last_at ?? "").slice(0, 16)}</td>
+                    </tr>))}
+                </tbody>
+              </table>)}
+        </>)
+        : <p className="muted">test-data 接口不可用</p>}
+
+      <h3>机器 Gate（evidence-driven，只读）</h3>
+      {!gate && <p className="muted">尚未生成 gate.json（运行 UAT V3
+        --gate）</p>}
+      {gate && (
+        <>
+          <p>
+            <span className={`pill ${gate.gate ===
+              "READY_FOR_REAL_DATA_UAT" ? "pill-healthy" : "pill-down"}`}>
+              {gate.gate ?? "无"}</span>
+            {" "}<span className="v" style={{ fontSize: 12 }}>
+              evaluator {gate.evaluator_version} · commit
+              {" "}{String(gate.source_commit ?? "").slice(0, 8)} ·
+              {" "}{gate.evaluated_at}</span>
+          </p>
+          {(gate.reasons ?? []).length > 0 && (
+            <ul style={{ paddingLeft: 18 }}>
+              {(gate.reasons ?? []).map((r: string) => (
+                <li key={r} className="v" style={{ fontSize: 12,
+                  color: "var(--err)" }}>{r}</li>))}
+            </ul>)}
+          <details>
+            <summary className="v" style={{ fontSize: 12 }}>
+              展开证据检查项（{gate.checks?.length ?? 0}）</summary>
+            <table>
+              <thead><tr><th>check</th><th>ok</th><th>evidence</th></tr>
+              </thead>
+              <tbody>
+                {(gate.checks ?? []).map((c: any) => (
+                  <tr key={c.check}>
+                    <td className="v">{c.check}</td>
+                    <td style={{ color: c.ok ? undefined : "var(--err)" }}>
+                      {c.ok ? "✓" : "✗"}</td>
+                    <td className="v" style={{ fontSize: 11 }}>
+                      {String(c.evidence ?? "").slice(0, 90)}</td>
+                  </tr>))}
+              </tbody>
+            </table>
+          </details>
+        </>)}
     </section>
   );
 }

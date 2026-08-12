@@ -208,6 +208,26 @@ def create_agent_runtime_router(store: Any,
         except Exception as e:
             raise HTTPException(409, str(e))
 
+    @router.get("/api/v1/agents/runs")
+    def agent_runs(request: Request, status: str = "",
+                   limit: int = 50) -> dict:
+        """UFC T9：Agent 运行列表（含失败详情：failed run/evidence/
+        error），供失败详情抽屉与人工补救入口。"""
+        require_principal(auth, request, csrf=False)
+        where, params = "", []
+        if status:
+            where = " WHERE ar.status=?"
+            params.append(status)
+        rows = store._conn.execute(
+            "SELECT ar.run_id, ar.agent_id, ar.status, ar.actor,"
+            " ar.customer_id, ar.created_at, ar.business_run_id,"
+            " ar.evidence_bundle_id, br.status AS business_status,"
+            " br.error, br.work_id FROM agent_run_v1 ar LEFT JOIN"
+            " business_run_v1 br ON br.run_id=ar.business_run_id"
+            + where + " ORDER BY ar.created_at DESC LIMIT ?",
+            (*params, min(limit, 200))).fetchall()
+        return {"count": len(rows), "runs": [dict(r) for r in rows]}
+
     @router.get("/api/v1/agents/{agent_id}/health")
     def agent_health(agent_id: str) -> dict:
         """ABOSV3：有界探针（定义已发布 + 事实查询可执行 +

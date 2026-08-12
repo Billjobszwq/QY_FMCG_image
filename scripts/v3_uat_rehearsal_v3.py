@@ -684,9 +684,28 @@ def phase5_lifecycle(bill: Session) -> None:
                   for e in evs),
           f"run={rd['run']['status']} main={main_w['status']}")
     # 5.2 取消并行 run：分支收敛且不被后台线程回写
+    # （同步引擎：start_run 阻塞到执行完，故后台线程启动后再取消）
+    import threading
     did2 = _publish(bill, f"UAT3 取消并行 {NS}", PAR_CANCEL_SPEC)
-    run2 = bill.post(f"/api/v1/workflows/{did2}/runs", {"inputs": {}})
-    rid2 = run2["run"]["run_id"]
+    holder: dict = {}
+
+    def _start_par():
+        holder["out"] = bill.post(f"/api/v1/workflows/{did2}/runs",
+                                  {"inputs": {}})
+
+    th = threading.Thread(target=_start_par, daemon=True)
+    th.start()
+    rid2 = ""
+    deadline = time.time() + 20
+    while time.time() < deadline and not rid2:
+        row = conn.execute(
+            "SELECT run_id FROM business_run_v1 WHERE"
+            " workflow_definition_id=? ORDER BY created_at DESC"
+            " LIMIT 1", (did2,)).fetchone()
+        if row:
+            rid2 = row["run_id"]
+            break
+        time.sleep(0.05)
     deadline = time.time() + 20
     while time.time() < deadline:
         st = bill.get(f"/api/v1/workflows/runs/{rid2}")["run"]["status"]
@@ -694,7 +713,8 @@ def phase5_lifecycle(bill: Session) -> None:
             break
         time.sleep(0.2)
     bill.post(f"/api/v1/workflows/runs/{rid2}/cancel", {})
-    time.sleep(6)  # 等分支内联 wait 自然结束，验证不回写
+    th.join(timeout=30)
+    time.sleep(1)
     rd2 = bill.get(f"/api/v1/workflows/runs/{rid2}")
     brs = rd2.get("branches", [])
     wrows2 = [dict(r) for r in conn.execute(

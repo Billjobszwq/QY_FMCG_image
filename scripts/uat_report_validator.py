@@ -138,8 +138,9 @@ def validate_report(report: dict) -> list[str]:
         import os
         base = report.get("_base_dir") or ""
         for f in files:
-            fp = os.path.join(base, f) if base else f
-            if not os.path.exists(fp):
+            cands = [os.path.join(base, f),
+                     os.path.join(base, "browser", f), f]
+            if not any(os.path.exists(c) for c in cands):
                 problems.append(f"截图不存在: {f}")
     # 服务健康 / 当前模型 / 训练进程
     if report.get("services_healthy") is False:

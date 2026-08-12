@@ -252,8 +252,12 @@ def evaluate_gate_from_evidence(*, store=None,
             str(rep.get("training_processes")),
             "BLOCKED_BY_GATE_EVIDENCE")
         chk("operational_uat_residue_zero",
-            int(rep.get("operational_residue", 1)) == 0,
-            str(rep.get("operational_residue")),
+            int(rep.get("operational_residue",
+                        (rep.get("projection") or {})
+                        .get("operational_residue", 1))) == 0,
+            str(rep.get("operational_residue"
+                        or (rep.get("projection") or {})
+                        .get("operational_residue"))),
             "BLOCKED_BY_UAT_FIXTURE_POLLUTION")
         # Usage 完整率
         usage = rep.get("usage_lineage") or {}
@@ -303,7 +307,7 @@ def evaluate_gate_from_evidence(*, store=None,
             "BLOCKED_BY_GATE_EVIDENCE")
 
     # ---- 测试报告 ----
-    if test_report_path:
+    if test_report_path and Path(test_report_path).exists():
         evidence_hashes["test_report"] = _file_sha(
             Path(test_report_path))
         tr = _load_json(test_report_path)

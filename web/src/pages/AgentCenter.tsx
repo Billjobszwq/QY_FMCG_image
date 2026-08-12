@@ -37,6 +37,7 @@ export default function AgentCenter() {
   const [testText, setTestText] = useState("");
   const [testOut, setTestOut] = useState<any | null>(null);
   const [busy, setBusy] = useState(false);
+  const [failedRuns, setFailedRuns] = useState<any[] | null>(null);
 
   const load = useCallback(() => {
     api("/agents/definitions").then(async (d) => {
@@ -49,6 +50,9 @@ export default function AgentCenter() {
       }
       setHealth(hs);
     }).catch((e) => setErr(String(e.message ?? e)));
+    // UFC T9：失败账本（failed run/evidence/error）
+    api("/agents/runs?status=failed&limit=20").then(
+      (d) => setFailedRuns(d.runs)).catch(() => setFailedRuns([]));
   }, []);
   useEffect(() => { load(); }, [load]);
 
@@ -305,6 +309,41 @@ export default function AgentCenter() {
                   </tr>))}
               </tbody>
             </table>)}
+      </div>
+
+      <div className="card">
+        <h3>失败账本（Agent failed runs）</h3>
+        <p className="v" style={{ fontSize: 12 }}>定义缺失/工具失败也进
+          统一调用链：failed BusinessRun + blocked WorkItem + Evidence
+          + Usage；失败状态不用成功色。</p>
+        {failedRuns && failedRuns.length === 0 && (
+          <p className="v">暂无失败 Agent 运行</p>)}
+        {failedRuns && failedRuns.length > 0 && (
+          <table className="table">
+            <thead><tr><th>run</th><th>agent</th><th>状态</th>
+              <th>error</th><th>evidence</th><th>时间</th></tr></thead>
+            <tbody>
+              {failedRuns.map((r) => (
+                <tr key={r.run_id}>
+                  <td data-label="run" className="v">
+                    {String(r.business_run_id || r.run_id)
+                      .slice(0, 16)}…</td>
+                  <td data-label="agent">{r.agent_id}</td>
+                  <td data-label="状态"
+                    style={{ color: "var(--err)" }}>
+                    {r.business_status || r.status}</td>
+                  <td data-label="error" className="v"
+                    style={{ fontSize: 11 }}>
+                    {(r.error || "").slice(0, 60) || "—"}</td>
+                  <td data-label="evidence" className="v"
+                    style={{ fontSize: 11 }}>
+                    {String(r.evidence_bundle_id || "—").slice(0, 16)}
+                  </td>
+                  <td data-label="时间" className="v">
+                    {String(r.created_at).slice(0, 16)}</td>
+                </tr>))}
+            </tbody>
+          </table>)}
       </div>
     </>
   );
