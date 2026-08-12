@@ -2153,6 +2153,12 @@ ALTER TABLE geo_employee_v1 ADD COLUMN data_scope TEXT NOT NULL DEFAULT 'operati
 ALTER TABLE geo_employee_v1 ADD COLUMN test_run_id TEXT NOT NULL DEFAULT '';
 """
 
+# SI2 T8：客户主数据补 test_run_id（049 已有 data_scope；UAT 上下文
+# 结构化绑定需要）。
+_M053 = """
+ALTER TABLE md_customer_v1 ADD COLUMN test_run_id TEXT NOT NULL DEFAULT '';
+"""
+
 MIGRATIONS: tuple[tuple[str, str], ...] = (
     ("001_platform_init", _M001),
     ("002_labeling_inbox", _M002),
@@ -2206,6 +2212,7 @@ MIGRATIONS: tuple[tuple[str, str], ...] = (
     ("050_anomaly_followup", _M050),
     ("051_execution_scope_v1", _M051),
     ("052_execution_scope_geo_v1", _M052),
+    ("053_execution_scope_customer_v1", _M053),
 )
 
 

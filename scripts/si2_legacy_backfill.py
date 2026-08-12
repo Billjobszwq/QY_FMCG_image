@@ -78,6 +78,20 @@ def main() -> int:
             (FIXTURE,))}
     print(f"fixture customers: {len(fixture_customers)}")
 
+    # fixture 客户自身补 test_run_id（按客户 ID 结构推导；053 后适用）
+    cust_cols = {r[1] for r in conn.execute(
+        "PRAGMA table_info(md_customer_v1)")}
+    if "test_run_id" in cust_cols:
+        cur = 0
+        for cid, ns in fixture_customers.items():
+            r = conn.execute(
+                "UPDATE md_customer_v1 SET test_run_id=? WHERE"
+                " customer_id=? AND COALESCE(test_run_id,'')=''",
+                (ns, cid))
+            cur += r.rowcount
+        log("md_customer_v1", "fixture 客户按 ID 推导 namespace",
+            cur, FIXTURE)
+
     # ---------- 2) business_run：补 test_run_id ----------
     runs = conn.execute(
         "SELECT run_id, customer_id FROM business_run_v1 WHERE"

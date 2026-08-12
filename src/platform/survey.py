@@ -599,7 +599,10 @@ class SurveyService:
         return {"total": total,
                 "formula": scoring.get("formula", "sum"),
                 "scoring_version": scoring.get("version", 1),
-                "inputs": {k: v.get("value") for k, v in answers.items()},
+                # SI2-010：兼容非 dict 包裹的答案（不得 500）
+                "inputs": {k: (v.get("value") if isinstance(v, dict)
+                               else v)
+                           for k, v in answers.items()},
                 "detail": detail}
 
     # ---------- 拍照题：证据 + 识别 suggestion + 人工终审 ----------
