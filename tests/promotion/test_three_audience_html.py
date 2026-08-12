@@ -185,7 +185,7 @@ def test_editorial_hero_and_light_diagram_contract() -> None:
 def test_cream_page_keeps_offline_logo_and_mobile_flow() -> None:
     html = load_html()
     assert 'class="hero-flow-mobile"' in html
-    mobile_rules = extract_css_block(html, "@media (max-width: 820px)")
+    mobile_rules = extract_css_block(html, "@media (max-width: 980px)")
     assert re.search(r"\.hero-flow-svg\s*\{[^{}]*\bdisplay\s*:\s*none\s*;", mobile_rules)
     assert re.search(r"\.hero-flow-mobile\s*\{[^{}]*\bdisplay\s*:\s*block\s*;", mobile_rules)
     assert not re.search(r"\.hero-map\s*\{[^{}]*\btransform\s*:\s*scale\s*\(", html)
