@@ -8,6 +8,7 @@ export default function SystemStatus({ health }: { health: HealthBody | null }) 
   const [rlRules, setRlRules] = useState<any[] | null>(null);
   const [rlErr, setRlErr] = useState<string | null>(null);
   const [testNs, setTestNs] = useState<any | null>(null);
+  const [center, setCenter] = useState<any | null>(null);
   const [gate, setGate] = useState<any | null>(null);
 
   useEffect(() => {
@@ -23,6 +24,9 @@ export default function SystemStatus({ health }: { health: HealthBody | null }) 
     // UFC T4/T5：测试与证据 + 机器 Gate
     iamGet("test-data/namespaces")
       .then(setTestNs).catch(() => setTestNs(null));
+    // SI2 T5：测试与证据中心总览（Test Run 历史/对象计数/扫描）
+    iamGet("test-data/center")
+      .then(setCenter).catch(() => setCenter(null));
     fetch("/api/v1/control/gate").then((r) => r.json())
       .then(setGate).catch(() => setGate(null));
   }, []);
@@ -167,6 +171,70 @@ export default function SystemStatus({ health }: { health: HealthBody | null }) 
               </table>)}
         </>)
         : <p className="muted">test-data 接口不可用</p>}
+
+      {center && (
+        <>
+          <h3>测试与证据中心（Test Run 全历史，可审计不可删）</h3>
+          <p className="v" style={{ fontSize: 12 }}>
+            一致性扫描：泄漏={JSON.stringify(
+              center.scope_scan?.operational_leakage ?? {})} ·
+            缺 test_run_id={center.scope_scan?.fixture_missing_test_run}
+            {" "}· 父子不一致=
+            {center.scope_scan?.parent_child_mismatch} ·
+            待人工裁决（unresolved）={center.unresolved}
+          </p>
+          {(center.test_runs ?? []).length === 0
+            ? <p className="v">暂无 Test Run 上下文</p>
+            : (
+              <table>
+                <thead><tr><th>test_run_id</th><th>状态</th>
+                  <th>runs</th><th>works</th><th>问卷</th><th>工作流</th>
+                  <th>agent</th><th>识别</th><th>创建</th><th>归档</th>
+                </tr></thead>
+                <tbody>
+                  {(center.test_runs ?? []).slice(0, 12).map((r: any) => (
+                    <tr key={r.test_run_id}>
+                      <td className="v">{r.test_run_id}</td>
+                      <td style={{ color: r.status === "current"
+                        ? "var(--accent-violet)" : undefined }}>
+                        {r.status}</td>
+                      <td>{r.objects?.runs ?? 0}</td>
+                      <td>{r.objects?.work_items ?? 0}</td>
+                      <td>{(r.objects?.survey_assignments ?? 0) + (
+                        r.objects?.survey_responses ?? 0)}</td>
+                      <td>{r.objects?.workflows ?? 0}</td>
+                      <td>{r.objects?.agent_runs ?? 0}</td>
+                      <td>{r.objects?.recognition_tasks ?? 0}</td>
+                      <td className="v">
+                        {String(r.created_at ?? "").slice(0, 16)}</td>
+                      <td className="v">
+                        {String(r.archived_at ?? "—").slice(0, 16)}</td>
+                    </tr>))}
+                </tbody>
+              </table>)}
+          {(center.backfill_audit ?? []).length > 0 && (
+            <details>
+              <summary className="v" style={{ fontSize: 12 }}>
+                Legacy backfill 审计账本（
+                {center.backfill_audit.length} 条）</summary>
+              <table>
+                <thead><tr><th>时间</th><th>表</th><th>判定依据</th>
+                  <th>行数</th><th>scope</th></tr></thead>
+                <tbody>
+                  {(center.backfill_audit ?? []).map((a: any, i: number) => (
+                    <tr key={i}>
+                      <td className="v">
+                        {String(a.occurred_at ?? "").slice(0, 16)}</td>
+                      <td className="v">{a.table_name}</td>
+                      <td className="v" style={{ fontSize: 11 }}>
+                        {a.matched_by}</td>
+                      <td>{a.matched_count}</td>
+                      <td className="v">{a.assigned_scope}</td>
+                    </tr>))}
+                </tbody>
+              </table>
+            </details>)}
+        </>)}
 
       <h3>机器 Gate（evidence-driven，只读）</h3>
       {!gate && <p className="muted">尚未生成 gate.json（运行 UAT V3

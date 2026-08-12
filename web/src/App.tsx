@@ -2,7 +2,7 @@
 // 一级导航来自 Module Registry 投影（不硬编码）；二级路由由
 // ModuleUIRegistry（platform/ui_registry.tsx）统一驱动（Z-1/P1-003）；
 // 旧路由保留 redirect；身份/production 全部来自实时 API。
-import { useEffect, useState } from "react";
+import { useEffect, lazy, Suspense, useState } from "react";
 import { NavLink, Navigate, Route, Routes, useLocation } from
   "react-router-dom";
 import "./platform/design/tokens.css";
@@ -17,8 +17,9 @@ import {
 } from "./platform/registry";
 import SupervisorWorkspace from "./platform/SupervisorWorkspace";
 import { MODULE_REDIRECTS, MODULE_ROUTES } from "./platform/ui_registry";
-import NewPackaging from "./pages/NewPackaging";
-import CascadeTasks from "./pages/CascadeTasks";
+// SI2 T9：三级深链页同样路由级 lazy（不进首页初始包）
+const NewPackaging = lazy(() => import("./pages/NewPackaging"));
+const CascadeTasks = lazy(() => import("./pages/CascadeTasks"));
 
 function ModulePage(_props: { modules: ModuleView[]; moduleId: string }) {
   // ABOSV2 Phase A–F：所有 planned 插槽已被真实路由取代；
@@ -190,8 +191,12 @@ export default function App() {
             <Route path="/runs" element={<Navigate to="/workflow/runs"
               replace />} />
             {/* 专业子页保留深链接（三级内容） */}
-            <Route path="/vision/cascade" element={<CascadeTasks />} />
-            <Route path="/vision/packaging" element={<NewPackaging />} />
+            <Route path="/vision/cascade" element={
+              <Suspense fallback={<p className="muted">加载中…</p>}>
+                <CascadeTasks /></Suspense>} />
+            <Route path="/vision/packaging" element={
+              <Suspense fallback={<p className="muted">加载中…</p>}>
+                <NewPackaging /></Suspense>} />
             <Route path="*" element={<div className="page">
               <div className="state-view">
                 <div className="title">页面不存在</div>

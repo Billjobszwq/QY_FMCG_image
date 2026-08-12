@@ -2,38 +2,79 @@
 // App.tsx 不再逐条手写模块路由；本文件的 MODULE_ROUTES 键必须与后端
 // module_catalog 的导航路由严格一致（契约测试双向校验，缺失 fail-closed）。
 // 禁止任意远程代码/HTML 注入：仅允许静态导入的本地组件。
-import { useEffect, useMemo, useState } from "react";
+// SI2 T9：除 Home/SystemStatus 外的模块页全部路由级 lazy，首页不同
+// 步加载 React Flow/ECharts/MapLibre/训练等重型依赖。
+import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import type { HealthBody } from "../api";
 import { fetchAgents } from "../api";
 import type { ModuleView, PlatformIdentity } from "./registry";
 import Home from "../pages/Home";
-import GraphRuns from "../pages/GraphRuns";
-import {
-  WorkflowAgentsAndModels, WorkflowApprovals, WorkflowConnectors,
-  WorkflowEvidenceUsage, WorkflowRunCenter,
-  WorkflowTemplates,
-} from "../pages/Workflow";
-import WorkflowCanvas from "../pages/WorkflowCanvas";
 import SystemStatus from "../pages/SystemStatus";
-import {
-  IamAccounts, IamAudit, MasterCustomers, MasterProjects, MasterSkus,
-} from "../pages/IamMaster";
-import { SurveyDesign, SurveyField, SurveyReport } from "../pages/Survey";
-import SurveyBuilder from "../pages/SurveyBuilder";
-import {
-  AnalyticsAnomalies, AnalyticsReports, AnalyticsSemantics,
-} from "../pages/Analytics";
-import BIWorkbench from "../pages/BIWorkbench";
-import { GeoAddresses, GeoField, GeoVisit } from "../pages/Geo";
-import { FinanceContracts, FinanceInvoices } from "../pages/Finance";
-import UsageWorkbench from "../pages/UsageWorkbench";
-import HelpDocs from "../pages/HelpDocs";
-import {
-  RecognizeNow, VisionAnnotation, VisionDatasets, VisionEvidence,
-  VisionModels, VisionTasks,
-} from "../pages/Vision";
-import ImportCenter from "../pages/ImportCenter";
-import AgentCenter from "../pages/AgentCenter";
+
+const GraphRuns = lazy(() => import("../pages/GraphRuns"));
+const WorkflowTemplates = lazy(() => import("../pages/Workflow").then(
+  (m) => ({ default: m.WorkflowTemplates })));
+const WorkflowAgentsAndModels = lazy(() => import("../pages/Workflow")
+  .then((m) => ({ default: m.WorkflowAgentsAndModels })));
+const WorkflowApprovals = lazy(() => import("../pages/Workflow").then(
+  (m) => ({ default: m.WorkflowApprovals })));
+const WorkflowConnectors = lazy(() => import("../pages/Workflow").then(
+  (m) => ({ default: m.WorkflowConnectors })));
+const WorkflowEvidenceUsage = lazy(() => import("../pages/Workflow")
+  .then((m) => ({ default: m.WorkflowEvidenceUsage })));
+const WorkflowRunCenter = lazy(() => import("../pages/Workflow").then(
+  (m) => ({ default: m.WorkflowRunCenter })));
+const WorkflowCanvas = lazy(() => import("../pages/WorkflowCanvas"));
+const IamAccounts = lazy(() => import("../pages/IamMaster").then(
+  (m) => ({ default: m.IamAccounts })));
+const IamAudit = lazy(() => import("../pages/IamMaster").then(
+  (m) => ({ default: m.IamAudit })));
+const MasterCustomers = lazy(() => import("../pages/IamMaster").then(
+  (m) => ({ default: m.MasterCustomers })));
+const MasterProjects = lazy(() => import("../pages/IamMaster").then(
+  (m) => ({ default: m.MasterProjects })));
+const MasterSkus = lazy(() => import("../pages/IamMaster").then(
+  (m) => ({ default: m.MasterSkus })));
+const SurveyDesign = lazy(() => import("../pages/Survey").then(
+  (m) => ({ default: m.SurveyDesign })));
+const SurveyField = lazy(() => import("../pages/Survey").then(
+  (m) => ({ default: m.SurveyField })));
+const SurveyReport = lazy(() => import("../pages/Survey").then(
+  (m) => ({ default: m.SurveyReport })));
+const SurveyBuilder = lazy(() => import("../pages/SurveyBuilder"));
+const AnalyticsAnomalies = lazy(() => import("../pages/Analytics").then(
+  (m) => ({ default: m.AnalyticsAnomalies })));
+const AnalyticsReports = lazy(() => import("../pages/Analytics").then(
+  (m) => ({ default: m.AnalyticsReports })));
+const AnalyticsSemantics = lazy(() => import("../pages/Analytics").then(
+  (m) => ({ default: m.AnalyticsSemantics })));
+const BIWorkbench = lazy(() => import("../pages/BIWorkbench"));
+const GeoAddresses = lazy(() => import("../pages/Geo").then(
+  (m) => ({ default: m.GeoAddresses })));
+const GeoField = lazy(() => import("../pages/Geo").then(
+  (m) => ({ default: m.GeoField })));
+const GeoVisit = lazy(() => import("../pages/Geo").then(
+  (m) => ({ default: m.GeoVisit })));
+const FinanceContracts = lazy(() => import("../pages/Finance").then(
+  (m) => ({ default: m.FinanceContracts })));
+const FinanceInvoices = lazy(() => import("../pages/Finance").then(
+  (m) => ({ default: m.FinanceInvoices })));
+const UsageWorkbench = lazy(() => import("../pages/UsageWorkbench"));
+const HelpDocs = lazy(() => import("../pages/HelpDocs"));
+const RecognizeNow = lazy(() => import("../pages/Vision").then(
+  (m) => ({ default: m.RecognizeNow })));
+const VisionAnnotation = lazy(() => import("../pages/Vision").then(
+  (m) => ({ default: m.VisionAnnotation })));
+const VisionDatasets = lazy(() => import("../pages/Vision").then(
+  (m) => ({ default: m.VisionDatasets })));
+const VisionEvidence = lazy(() => import("../pages/Vision").then(
+  (m) => ({ default: m.VisionEvidence })));
+const VisionModels = lazy(() => import("../pages/Vision").then(
+  (m) => ({ default: m.VisionModels })));
+const VisionTasks = lazy(() => import("../pages/Vision").then(
+  (m) => ({ default: m.VisionTasks })));
+const ImportCenter = lazy(() => import("../pages/ImportCenter"));
+const AgentCenter = lazy(() => import("../pages/AgentCenter"));
 
 export interface ModuleRouteContext {
   health: HealthBody | null;
@@ -104,7 +145,11 @@ export function ReferenceEcho() {
 }
 
 const wide = (el: JSX.Element) =>
-  (<div className="page wide">{el}</div>);
+  (<div className="page wide">
+    <Suspense fallback={<p className="muted">模块加载中…</p>}>
+      {el}
+    </Suspense>
+  </div>);
 
 // 路由 → 组件工厂（唯一事实源；键与后端导航路由一一对应）
 export const MODULE_ROUTES: Record<
