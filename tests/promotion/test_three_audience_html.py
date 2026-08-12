@@ -153,6 +153,16 @@ def test_token_flow_and_shared_loop_are_complete() -> None:
         assert stage in html
 
 
+def test_desktop_loop_stage_semantics_match_mobile_order() -> None:
+    html = load_html()
+    assert "index === 4 ? 'node node-human'" in html
+    assert "index === 5 ? 'node node-result-svg'" in html
+    assert "index === 6 ? 'node node-value'" in html
+    assert 'class="result-inner"' in html
+    assert ".loop-svg .node-result-svg" in html
+    assert ".loop-svg .result-inner" in html
+
+
 def test_cream_light_theme_contract() -> None:
     root = extract_css_block(load_html(), ":root")
     assert re.search(r"\bcolor-scheme\s*:\s*light\s*;", root)

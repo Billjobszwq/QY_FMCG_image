@@ -128,6 +128,8 @@
     .loop-svg .node { fill: var(--surface-paper); stroke: var(--execution); stroke-width: 1.25; }
     .loop-svg .node-trust { stroke: var(--trust); }
     .loop-svg .node-human { stroke: var(--human); }
+    .loop-svg .node-result-svg { stroke: var(--value); stroke-width: 1.5; }
+    .loop-svg .result-inner { fill: none; stroke: var(--value); stroke-width: 1; pointer-events: none; }
     .loop-svg .node-value { stroke: var(--value); stroke-width: 2; }
     .loop-mobile { display: none; }
     .workspace-bar { position: sticky; top: 74px; z-index: 18; border-bottom: 1px solid var(--line); background: rgba(251,248,241,.96); backdrop-filter: blur(16px); }
@@ -433,8 +435,9 @@
     function loopSvg(labels) {
       const xs = [74,230,386,542,698,854,1010];
       const nodes = labels.map((label,index) => {
-        const cls = index === 3 ? 'node node-human' : index >= 4 ? 'node node-value' : index === 2 ? 'node node-trust' : 'node';
-        return `<g><rect class="${cls}" x="${xs[index]-58}" y="39" width="116" height="56" rx="0"></rect><text x="${xs[index]}" y="72" text-anchor="middle" font-size="13">${escapeHtml(label)}</text><text class="small" x="${xs[index]}" y="25" text-anchor="middle">${String(index+1).padStart(2,'0')}</text></g>`;
+        const cls = index === 4 ? 'node node-human' : index === 5 ? 'node node-result-svg' : index === 6 ? 'node node-value' : index === 2 ? 'node node-trust' : 'node';
+        const resultInner = index === 5 ? `<rect class="result-inner" x="${xs[index]-53}" y="44" width="106" height="46"></rect>` : '';
+        return `<g><rect class="${cls}" x="${xs[index]-58}" y="39" width="116" height="56" rx="0"></rect>${resultInner}<text x="${xs[index]}" y="72" text-anchor="middle" font-size="13">${escapeHtml(label)}</text><text class="small" x="${xs[index]}" y="25" text-anchor="middle">${String(index+1).padStart(2,'0')}</text></g>`;
       }).join('');
       const mobile = labels.map((label,index)=>`<div class="loop-mobile-stage"><strong>${String(index+1).padStart(2,'0')}</strong><span>${escapeHtml(label)}</span></div>`).join('');
       return `<svg class="loop-svg" viewBox="0 0 1084 170" role="img" aria-labelledby="loop-svg-title loop-svg-desc"><title id="loop-svg-title">目标到结果的七阶段闭环</title><desc id="loop-svg-desc">七个阶段从左向右推进，最后通过反馈回路返回下一轮目标。</desc><defs><marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path class="marker-trust" d="M 0 0 L 10 5 L 0 10 z"></path></marker><marker id="arrow-value" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path class="marker-value" d="M 0 0 L 10 5 L 0 10 z"></path></marker></defs><path class="track token-flow" d="M132 67 H952" marker-end="url(#arrow)"></path>${nodes}<path class="return feedback-return" d="M1010 104 C1010 154 74 154 74 104"></path><text class="small" x="542" y="159" text-anchor="middle">结果经评估与验证，回到下一轮业务目标</text></svg><div class="loop-mobile">${mobile}<div class="loop-mobile-return">↩ 反馈、评估与能力进化回到下一轮业务目标</div></div>`;
