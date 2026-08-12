@@ -1,4 +1,6 @@
+import json
 import re
+import subprocess
 from pathlib import Path
 
 
@@ -155,24 +157,28 @@ def test_token_flow_and_shared_loop_are_complete() -> None:
 
 def test_desktop_loop_stage_semantics_match_mobile_order() -> None:
     html = load_html()
-    shared_loop = re.search(r"const SHARED_LOOP = \[(.*?)\];", html, re.DOTALL)
+    shared_loop = re.search(r"const SHARED_LOOP = \[.*?\];", html, re.DOTALL)
     assert shared_loop
-    labels = re.findall(r"'([^']+)'", shared_loop.group(1))
-    assert labels == [
-        "业务目标",
-        "可执行意图",
-        "词元驱动理解与决策",
-        "组织人员、数据与能力",
-        "持续执行与人工守门",
-        "可验证业务结果",
-        "反馈、评估与能力进化",
-    ]
-    class_mapping = (
-        "index === 4 ? 'node node-human' : index === 5 ? "
-        "'node node-result-svg' : index === 6 ? 'node node-value' : "
-        "index === 2 ? 'node node-trust' : 'node'"
+    classifier = re.search(
+        r"function classForLoopIndex\(index\)\s*\{.*?\n\s*\}", html, re.DOTALL
     )
-    assert class_mapping in html
+    assert classifier
+    script = (
+        f"{shared_loop.group(0)}\n{classifier.group(0)}\n"
+        "console.log(JSON.stringify(SHARED_LOOP.map((_, index) => classForLoopIndex(index))));"
+    )
+    result = subprocess.run(
+        ["node", "-e", script], capture_output=True, text=True, check=True
+    )
+    assert json.loads(result.stdout) == [
+        "node",
+        "node",
+        "node node-trust",
+        "node",
+        "node node-human",
+        "node node-result-svg",
+        "node node-value",
+    ]
     assert 'class="result-inner"' in html
     assert ".loop-svg .node-result-svg" in html
     assert ".loop-svg .result-inner" in html

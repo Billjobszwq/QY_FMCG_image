@@ -437,10 +437,18 @@
     const $$ = (selector) => Array.from(document.querySelectorAll(selector));
     const escapeHtml = (value) => String(value).replace(/[&<>"]/g, (char) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[char]));
 
+    function classForLoopIndex(index) {
+      if (index === 2) return 'node node-trust';
+      if (index === 4) return 'node node-human';
+      if (index === 5) return 'node node-result-svg';
+      if (index === 6) return 'node node-value';
+      return 'node';
+    }
+
     function loopSvg(labels) {
       const xs = [74,230,386,542,698,854,1010];
       const nodes = labels.map((label,index) => {
-        const cls = index === 4 ? 'node node-human' : index === 5 ? 'node node-result-svg' : index === 6 ? 'node node-value' : index === 2 ? 'node node-trust' : 'node';
+        const cls = classForLoopIndex(index);
         const resultInner = index === 5 ? `<rect class="result-inner" x="${xs[index]-53}" y="44" width="106" height="46"></rect>` : '';
         return `<g><rect class="${cls}" x="${xs[index]-58}" y="39" width="116" height="56" rx="0"></rect>${resultInner}<text x="${xs[index]}" y="72" text-anchor="middle" font-size="13">${escapeHtml(label)}</text><text class="small" x="${xs[index]}" y="25" text-anchor="middle">${String(index+1).padStart(2,'0')}</text></g>`;
       }).join('');
