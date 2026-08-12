@@ -204,9 +204,13 @@ class TestTerminalConsistency:
         assert run["status"] == "cancelled", \
             f"run 被回写为 {run['status']}"
         assert main["status"] == "cancelled"
-        assert branches and all(b["status"] == "cancelled"
-                                for b in branches), \
-            str([(b["branch_id"], b["status"]) for b in branches])
+        # 未结束分支必须 cancelled；已完成分支保持 completed（终态）
+        assert branches and all(
+            b["status"] in ("cancelled", "completed") for b in
+            branches), str([(b["branch_id"], b["status"])
+                            for b in branches])
+        assert not any(b["status"] in ("pending", "running")
+                       for b in branches), "存在未收敛分支"
         evs = store.list_events(run_id=rid)
         assert any(e["event_type"] in ("run.cancelled",
                                        "workflow.cancelled")

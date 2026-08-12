@@ -94,6 +94,7 @@ def create_control_plane_router(store: Any, gateway: CommandGateway,
     # WorkItemV2 主线（控制平面）+ 遗留域工作（审核/训练/Job/标注，
     # 经 supersession 账本排除被取代族）；不得再有平行真相。
     _RUN_TO_WORK = {"succeeded": "done", "failed": "blocked",
+                    "partial_failed": "blocked",
                     "cancelled": "cancelled", "waiting_human": "waiting",
                     "waiting_timer": "waiting",
                     "paused": "waiting", "running": "running",
@@ -138,11 +139,14 @@ def create_control_plane_router(store: Any, gateway: CommandGateway,
             "SELECT status, count(*) c FROM outbox_v1"
             " GROUP BY status").fetchall()
         outbox = {r["status"]: r["c"] for r in outbox_rows}
-        # BusinessRun 业务事实对账：run 状态 → 期望 work 状态
+        # BusinessRun 业务事实对账：仅对终态 run 强制收敛 work
+        # （UFC：活动态映射交给投影，reconcile 不得把终态回退）。
         drift_fixed = 0
         runs = store._conn.execute(
             "SELECT run_id, work_id, status FROM business_run_v1"
-            " WHERE work_id != ''").fetchall()
+            " WHERE work_id != '' AND status IN"
+            " ('succeeded','failed','partial_failed','cancelled')")
+        runs = runs.fetchall()
         for r in runs:
             expected = _RUN_TO_WORK.get(r["status"])
             if expected is None:

@@ -3620,10 +3620,12 @@ class PlatformStore:
     # ---------- 统一 Work/Event/Usage 控制平面（ABOSV2 Phase B） ----------
 
     RUN_TRANSITIONS = {
-        "queued": {"running", "cancelled"},
-        "running": {"running", "succeeded", "failed", "cancelled",
+        "queued": {"running", "cancelled", "failed"},
+        "running": {"running", "succeeded", "failed", "partial_failed",
+                    "cancelled",
                     "paused", "waiting_human", "waiting_timer"},
         "failed": {"running"},          # 只能经 retry 重新进入 running
+        "partial_failed": {"running"},  # UFC T9：部分工具失败可 retry
         "paused": {"running", "cancelled"},
         "waiting_human": {"running", "cancelled"},
         "waiting_timer": {"running", "cancelled"},
@@ -3691,7 +3693,8 @@ class PlatformStore:
         vals: list[Any] = [status, _utcnow()]
         if status == "running" and cur == "queued":
             sets.append("started_at=?"); vals.append(_utcnow())
-        if status in ("succeeded", "failed", "cancelled"):
+        if status in ("succeeded", "failed", "partial_failed",
+                      "cancelled"):
             sets.append("ended_at=?"); vals.append(_utcnow())
         # ABOSV3-P0-003：succeeded 不得残留上次失败的 current error；
         # 旧错误仍保留在 run.failed 事件/attempt 历史中。
@@ -3929,6 +3932,23 @@ class PlatformStore:
             elif t in ("workflow.timer_fired",):
                 st["status"] = "running"
         items = sorted(state.values(), key=lambda x: x["work_id"])
+        # UFC T1：终态保护——run 终态决定 work 终态；终态 work 不得
+        # 被事件派生的活动态回退（投影重建不回退终态）。
+        run_status = {r["run_id"]: r["status"] for r in self._conn
+                      .execute("SELECT run_id, status FROM"
+                               " business_run_v1").fetchall()}
+        _RUN_TO_WORK_T = {"succeeded": "done", "failed": "blocked",
+                          "partial_failed": "blocked",
+                          "cancelled": "cancelled"}
+        _TERMINAL_WORK = ("done", "cancelled", "blocked")
+        for it in items:
+            rs = run_status.get(it.get("run_id") or "", "")
+            if rs in _RUN_TO_WORK_T:
+                it["status"] = _RUN_TO_WORK_T[rs]
+            row0 = self.get_work_item_v2(it["work_id"])
+            if (row0 is not None and row0["status"] in _TERMINAL_WORK
+                    and it["status"] not in _TERMINAL_WORK):
+                it["status"] = row0["status"]  # 终态不回退
         # 同步到 work_item_v2（重建不丢失原始行，只更新状态/主体）；
         # 完成/取消时 blockers 随状态机清除（set_work_item_v2_status）。
         for it in items:

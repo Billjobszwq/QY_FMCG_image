@@ -37,6 +37,11 @@ class WorkflowError(Exception):
     """生命周期/执行错误（诚实失败）。"""
 
 
+class WorkflowCancelled(Exception):
+    """UFC T2：协作式取消信号。run 已进入终态时，分支/长 wait/
+    后续节点抛出本异常，其结果一律丢弃，不得把 run 写回活动/成功。"""
+
+
 class WorkflowExecutorBlocked(Exception):
     """外部执行器不可用（许可/依赖/网络未满足），诚实 blocked。"""
 
@@ -557,14 +562,37 @@ class WorkflowService:
             correlation_id=run["correlation_id"],
             actor_type="human", actor_id=actor,
             payload={"node_id": waiting["node_id"], "decision": decision})
+        # UFC T3：approval 子待办与节点/Run 关联关闭
+        appr_work = self.store._conn.execute(
+            "SELECT work_id FROM work_item_v2 WHERE run_id=? AND"
+            " status='approval' ORDER BY created_at DESC LIMIT 1",
+            (run_id,)).fetchone()
         if decision != "approved":
-            self.store.set_business_run_status(run_id, "cancelled")
+            # UFC D-006：拒绝是明确 Decision，不与模糊 cancel 混用
+            self.store.emit_event(
+                event_id=_new_id("evt"),
+                event_type="human_approval.rejected",
+                run_id=run_id, work_id=run["work_id"],
+                correlation_id=run["correlation_id"],
+                actor_type="human", actor_id=actor,
+                payload={"node_id": waiting["node_id"],
+                         "decision": decision})
             self.store.upsert_node_execution(
                 run_id, waiting["node_id"], node_type="human_approval",
                 status="skipped", output_data={"decision": decision})
-            self.store.set_work_item_v2_status(run["work_id"], "cancelled")
+            if appr_work:
+                self.store.set_work_item_v2_status(
+                    appr_work["work_id"], "cancelled",
+                    subject_type="decision", subject_id=decision)
+            self.finalize_run(run_id, "cancelled", actor=actor,
+                              decision=decision,
+                              current_node=waiting["node_id"])
             return self.store.get_business_run(run_id)
-        # 恢复：从批准节点的默认后继继续
+        # 批准：先关闭 approval 子待办（done + decision 留痕）再恢复后继
+        if appr_work:
+            self.store.set_work_item_v2_status(
+                appr_work["work_id"], "done",
+                subject_type="decision", subject_id="approved")
         d = self._must(run["workflow_definition_id"],
                        int(run["workflow_version"]))
         spec = d["spec"]
@@ -572,7 +600,8 @@ class WorkflowService:
         succ = adj.get(waiting["node_id"], [])
         self.store.upsert_node_execution(
             run_id, waiting["node_id"], node_type="human_approval",
-            status="succeeded", output_data={"decision": decision})
+            status="succeeded", output_data={"decision": decision,
+                                             "actor": actor})
         self.store.set_business_run_status(run_id, "running")
         ctx = self._restore_ctx(run_id, d)
         trace = self._run_nodes(d, succ, ctx, run_id=run_id,
@@ -601,10 +630,102 @@ class WorkflowService:
         return self.store.get_business_run(run_id)
 
     def cancel_run(self, run_id: str, *, actor: str) -> dict:
-        self.store.set_business_run_status(run_id, "cancelled")
+        self.finalize_run(run_id, "cancelled", actor=actor)
+        return self.store.get_business_run(run_id)
+
+    # ---------- UFC T1：统一终态收敛 ----------
+
+    TERMINAL_STATUSES = ("succeeded", "failed", "cancelled")
+    _RUN_TO_WORK_FINAL = {"succeeded": "done", "failed": "blocked",
+                          "cancelled": "cancelled"}
+
+    def _run_status(self, run_id: str) -> str:
         run = self.store.get_business_run(run_id)
-        self.store.set_work_item_v2_status(run["work_id"], "cancelled")
-        return run
+        return run["status"] if run else ""
+
+    def _ensure_run_active(self, run_id: str) -> None:
+        """UFC T2：节点/分支提交前检查；已终态则招 WorkflowCancelled。"""
+        if not run_id:
+            return
+        st = self._run_status(run_id)
+        if st in self.TERMINAL_STATUSES:
+            raise WorkflowCancelled(f"run {run_id} 已 {st}")
+
+    def finalize_run(self, run_id: str, status: str, *, error: str = "",
+                      actor: str = "workflow_runtime",
+                      decision: str = "", current_node: str | None = None
+                      ) -> bool:
+        """CAS 终态收敛（幂等）：已终态 no-op 返回 False；终态三态
+        互不可覆。同一事务内收敛主 work/approval/timer/branch 并发
+        终态事件；随后重建投影。返回是否由本次调用完成终态化。"""
+        if status not in self.TERMINAL_STATUSES:
+            raise WorkflowError(f"finalize 只接受终态: {status}")
+        run = self.store.get_business_run(run_id)
+        if run is None:
+            return False
+        if run["status"] in self.TERMINAL_STATUSES:
+            return False  # 终态不可互覆（CAS 失败）
+        try:
+            self.store.set_business_run_status(
+                run_id, status, error=error, current_node=current_node)
+        except Exception:
+            return False
+        conn = self.store._conn
+        work_id = run["work_id"]
+        if work_id:
+            blockers = [error[:200]] if (error and status == "failed") \
+                else None
+            self.store.set_work_item_v2_status(
+                work_id, self._RUN_TO_WORK_FINAL[status],
+                blockers=blockers)
+        # approval 子待办收敛：succeeded→done；其他终态→cancelled
+        appr_rows = conn.execute(
+            "SELECT work_id FROM work_item_v2 WHERE run_id=? AND"
+            " status='approval'", (run_id,)).fetchall()
+        appr_target = "done" if status == "succeeded" else "cancelled"
+        for r in appr_rows:
+            self.store.set_work_item_v2_status(r["work_id"], appr_target)
+        # pending timer 一律 cancelled（到期也不得恢复终态 run）
+        conn.execute(
+            "UPDATE workflow_timer_v1 SET status='cancelled', fired_at=?"
+            " WHERE run_id=? AND status='pending'",
+            (_now_iso(), run_id))
+        # 未结束分支一律 cancelled
+        conn.execute(
+            "UPDATE workflow_branch_v1 SET status='cancelled',"
+            " ended_at=?, error=CASE WHEN error='' THEN 'run 终态收敛'"
+            " ELSE error END WHERE run_id=? AND status IN"
+            " ('pending','running')", (_now_iso(), run_id))
+        conn.commit()
+        # 终态事件（投影可推导，不再依赖调用方补发）
+        etype = {"succeeded": "workflow.succeeded",
+                 "failed": "workflow.failed",
+                 "cancelled": "workflow.cancelled"}[status]
+        payload: dict = {}
+        if error:
+            payload["error"] = error[:300]
+        if decision:
+            payload["decision"] = decision
+        self.store.emit_event(
+            event_id=_new_id("evt"), event_type=etype,
+            run_id=run_id, work_id=work_id,
+            correlation_id=run["correlation_id"],
+            actor_type="human" if actor not in
+            ("workflow_runtime", "system") else "system",
+            actor_id=actor, payload=payload)
+        if status == "cancelled":
+            self.store.emit_event(
+                event_id=_new_id("evt"), event_type="run.cancelled",
+                run_id=run_id, work_id=work_id,
+                correlation_id=run["correlation_id"],
+                actor_type="human" if actor not in
+                ("workflow_runtime", "system") else "system",
+                actor_id=actor, payload=payload)
+        try:
+            self.store.rebuild_work_projection()
+        except Exception:
+            pass
+        return True
 
     def retry_run(self, run_id: str, *, actor: str,
                   inputs: dict | None = None) -> dict:
@@ -763,6 +884,8 @@ class WorkflowService:
         edges = spec.get("edges") or []
         frontier = [entry]
         while frontier:
+            # UFC T2：分支协作式取消检查（每节点前）
+            self._ensure_run_active(run_id)
             nid = frontier.pop(0)
             if nid in stop_nodes:
                 return {"reached": "join"}
@@ -915,6 +1038,11 @@ class WorkflowService:
                 self._branch_row(b["branch_id"], "completed",
                                  output={"entry": b["entry"], **out})
                 return {"status": "completed"}
+            except WorkflowCancelled as ce:
+                # UFC T2：run 已终态——分支标 cancelled，结果丢弃
+                self._branch_row(b["branch_id"], "cancelled",
+                                 error=str(ce)[:200])
+                return {"status": "cancelled"}
             except Exception as e:
                 self._branch_row(b["branch_id"], "failed",
                                  error=str(e))
@@ -976,6 +1104,9 @@ class WorkflowService:
                         break
             finally:
                 ex.shutdown(wait=False, cancel_futures=True)
+        # UFC T2：分支完成后先复查 run 终态；已被外部取消则不得
+        # 继续 join/回写，直接招 WorkflowCancelled。
+        self._ensure_run_active(run_id)
         ok = [b for b in branches
               if results.get(b["branch_id"], {}).get("status")
               == "completed"]
@@ -1117,6 +1248,14 @@ class WorkflowService:
         spec_all_edges = spec.get("edges") or []
         join_requeue: dict[str, int] = {}
         while frontier:
+            # UFC T2：每个节点前检查取消/暂停（协作式）；
+            # paused 不得继续启动新节点，cancelled 不得继续执行。
+            if run_id and not simulate:
+                st_now = self._run_status(run_id)
+                if st_now == "cancelled":
+                    return {"status": "cancelled", "node": None}
+                if st_now == "paused":
+                    return {"status": "paused", "node": None}
             nid = frontier.pop(0)
             node = nodes.get(nid)
             if node is None:
@@ -1125,6 +1264,8 @@ class WorkflowService:
                 out, branch = self._exec_node(
                     d, node, ctx, simulate=simulate, run_id=run_id,
                     work_id=work_id, corr=corr)
+            except WorkflowCancelled:
+                return {"status": "cancelled", "node": nid}
             except _WaitingHuman as w:
                 return {"status": "waiting_human", "node": nid,
                         "work_item": w.work_id}
@@ -1169,6 +1310,8 @@ class WorkflowService:
                     join_id = self._exec_parallel(
                         d, node, succ, ctx, simulate=simulate,
                         run_id=run_id, work_id=work_id, corr=corr)
+                except WorkflowCancelled:
+                    return {"status": "cancelled", "node": nid}
                 except WorkflowError as pe:
                     return self._fail_node(d, node, ctx, str(pe),
                                            run_id=run_id,
@@ -1180,18 +1323,16 @@ class WorkflowService:
                 continue
             for s in succ:
                 frontier.insert(0, s)
-        status = "succeeded"
-        if run_id:
-            self.store.set_business_run_status(
-                run_id, status, current_node="end")
-            self.store.emit_event(
-                event_id=_new_id("evt"), event_type="workflow.succeeded",
-                run_id=run_id, work_id=work_id, correlation_id=corr,
-                actor_type="system", actor_id="workflow_runtime",
-                payload={})
-            self.store.set_work_item_v2_status(work_id, "done")
-            self.store.rebuild_work_projection()
-        return {"status": status, "nodes": ctx["nodes"]}
+        # UFC T1：终态统一经 finalize_run（CAS）；若 run 已被取消/
+        # 失败，finalize no-op，后台线程不得把终态写回 succeeded。
+        if run_id and not simulate:
+            self.finalize_run(run_id, "succeeded",
+                              actor="workflow_runtime",
+                              current_node="end")
+            final_status = self._run_status(run_id)
+        else:
+            final_status = "succeeded"
+        return {"status": final_status, "nodes": ctx["nodes"]}
 
     def _fail_node(self, d, node, ctx, error: str, *, run_id: str,
                    work_id: str, corr: str) -> dict:
@@ -1220,23 +1361,16 @@ class WorkflowService:
                                            work_id=work_id, corr=corr)
                 except Exception as e2:
                     error = str(e2)
-            # 重试耗尽 → 死信 + run failed
+            # 重试耗尽 → 死信 + run failed（统一经 finalize_run）
             self.store.insert_dead_letter(
                 run_id, node["id"], reason=error,
                 payload={"node": node, "attempts": attempts + 1})
             self.store.upsert_node_execution(
                 run_id, node["id"], node_type=node["type"], status="failed",
                 error=error)
-            self.store.set_business_run_status(
-                run_id, "failed", error=error, current_node=node["id"])
-            self.store.emit_event(
-                event_id=_new_id("evt"), event_type="workflow.failed",
-                run_id=run_id, work_id=work_id, correlation_id=corr,
-                actor_type="system", actor_id="workflow_runtime",
-                payload={"node": node["id"], "error": error})
-            self.store.set_work_item_v2_status(
-                work_id, "blocked", blockers=[error])
-            self.store.rebuild_work_projection()
+            self.finalize_run(run_id, "failed", error=error,
+                              actor="workflow_runtime",
+                              current_node=node["id"])
         return {"status": "failed", "node": node["id"], "error": error}
 
     def _exec_node(self, d: dict, node: dict, ctx: dict, *,
@@ -1291,6 +1425,8 @@ class WorkflowService:
                 # 经 recover_interrupted_parallels 分支粒度重跑。
                 deadline = _time.monotonic() + seconds
                 while _time.monotonic() < deadline:
+                    # UFC T2：长 wait 心跳期检查取消（协作式）
+                    self._ensure_run_active(run_id)
                     _time.sleep(min(0.5, max(0.05,
                                              deadline
                                              - _time.monotonic())))

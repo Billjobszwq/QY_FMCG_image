@@ -28,6 +28,11 @@ REQUIRED_SECTIONS = (
     "relations",        # run/work/branch/agent/recognition/usage/evidence 关系
 )
 
+# UFC T6：主工作流必备节点类型（含 model/capability 真实调用）
+REQUIRED_NODE_TYPES = ("trigger", "transform", "condition", "wait",
+                       "parallel", "join", "loop", "human_approval",
+                       "agent", "model")
+
 
 def check_created(result: dict) -> tuple[bool, str]:
     """实体创建结果判定：inserted=0/skipped>0 不得当作创建成功。"""
@@ -40,7 +45,12 @@ def check_created(result: dict) -> tuple[bool, str]:
 
 
 def validate_report(report: dict) -> list[str]:
-    """返回缺失项列表；非空即报告 FAIL。"""
+    """返回缺失/违规项列表；非空即报告 FAIL（fail-closed）。
+
+    UFC T6：除基础必填外，还拒绝 failed>0、check.ok=false、意外
+    4xx/5xx、终态漂移/残留、工作流缺必备节点、异常链不完整、
+    Agent 失败无账本、Usage 未挂链、浏览器证据缺文件、服务不
+    健康、CURRENT 非 prod_v4_best_r1、存在长训练进程。"""
     problems: list[str] = []
     ids = report.get("ids") or {}
     for k in REQUIRED_ID_KEYS:
@@ -48,13 +58,93 @@ def validate_report(report: dict) -> list[str]:
         if not v:
             problems.append(f"缺关键 ID: ids.{k}")
     for s in REQUIRED_SECTIONS:
-        if s not in report or report[s] in (None, "", [], {}):
+        if s not in report or report[s] is None:
+            problems.append(f"缺必填段: {s}")
+        elif s != "failures" and report[s] in ("", [], {}):
+            # failures 允许为空列表（无失败）；其余段不得为空
             problems.append(f"缺必填段: {s}")
     # 实体创建判定：任何 inserted=0/skipped>0 标记失败
     for name, res in (report.get("created") or {}).items():
         ok, reason = check_created(res or {})
         if not ok:
             problems.append(f"实体 {name} {reason}")
+
+    # ---- UFC T6 强化校验 ----
+    if int(report.get("failed", 0) or 0) > 0:
+        problems.append(f"failed={report.get('failed')} > 0")
+    for c in report.get("checks", []) or []:
+        if not c.get("ok"):
+            problems.append(f"check 失败: {c.get('check')}")
+    # API 步骤：非预期 4xx/5xx（预期负例需标 expected_error）
+    for s in report.get("api_steps", []) or []:
+        st = s.get("status")
+        if isinstance(st, int) and st >= 400 \
+                and not s.get("expected_error"):
+            problems.append(f"意外 {st}: {s.get('path')}")
+    # 终态一致性：漂移/残留
+    ts = report.get("terminal_state")
+    if ts is not None:
+        if ts.get("drift"):
+            problems.append(f"终态漂移: {str(ts['drift'])[:120]}")
+        if ts.get("open_approvals"):
+            problems.append("approval 残留")
+        if ts.get("open_branches"):
+            problems.append("branch 残留")
+        if ts.get("pending_timers"):
+            problems.append("pending timer 残留")
+    # 工作流必备节点（含 model/capability）
+    if "workflow_node_types" in report:
+        wnt = set(report.get("workflow_node_types") or [])
+        for t in REQUIRED_NODE_TYPES:
+            if t not in wnt:
+                problems.append(f"工作流缺必备节点类型: {t}")
+    # 异常追问链
+    an = report.get("anomaly_chain")
+    if an is not None:
+        if not an.get("anomaly_id"):
+            problems.append("anomaly 无真实 anomaly_id")
+        if not an.get("follow_up"):
+            problems.append("缺 Agent 追问")
+        if not an.get("human_answer"):
+            problems.append("缺人工回答")
+        if int(an.get("report_versions", 0) or 0) < 2:
+            problems.append("回答后无报表新版本")
+        if an.get("resolved") is not True:
+            problems.append("anomaly 未 resolved")
+    # Agent 失败账本
+    af = report.get("agent_failure")
+    if af is not None:
+        if not af.get("failed_run"):
+            problems.append("Agent 失败缺 failed run")
+        if not af.get("evidence"):
+            problems.append("Agent 失败缺 evidence")
+        if not af.get("usage_recorded"):
+            problems.append("Agent 失败缺 Usage")
+    # Usage 挂链完整率
+    ul = report.get("usage_lineage")
+    if ul is not None and int(ul.get("linked", 0) or 0) != \
+            int(ul.get("total", 0) or 0):
+        problems.append("Usage 未 100% 挂 run/work/evidence")
+    # 浏览器证据：必须真实存在文件，不接受纯文字
+    br = report.get("browser") or {}
+    files = br.get("files") or []
+    if br and not files:
+        problems.append("浏览器证据只有文字，无截图文件")
+    elif files:
+        import os
+        base = report.get("_base_dir") or ""
+        for f in files:
+            fp = os.path.join(base, f) if base else f
+            if not os.path.exists(fp):
+                problems.append(f"截图不存在: {f}")
+    # 服务健康 / 当前模型 / 训练进程
+    if report.get("services_healthy") is False:
+        problems.append("服务未健康")
+    cb = report.get("current_bundle")
+    if cb and cb != "prod_v4_best_r1":
+        problems.append(f"CURRENT 非 prod_v4_best_r1: {cb}")
+    if int(report.get("training_processes", 0) or 0) > 0:
+        problems.append("检测到长训练进程")
     return problems
 
 
@@ -62,16 +152,18 @@ if __name__ == "__main__":
     import json
     import sys
     path = sys.argv[1] if len(sys.argv) > 1 else \
-        ".eval/v3_uat_v2/report.json"
+        ".eval/v3_uat_v3/report.json"
     try:
         rep = json.load(open(path, encoding="utf-8"))
     except FileNotFoundError:
         print(f"[FAIL] 报告不存在: {path}")
         raise SystemExit(1)
+    import os as _os
+    rep.setdefault("_base_dir", _os.path.dirname(_os.path.abspath(path)))
     probs = validate_report(rep)
     if probs:
-        print("[FAIL] UAT V2 报告校验未通过：")
+        print(f"[FAIL] UAT 报告校验未通过（{len(probs)} 项）：")
         for p in probs:
             print("  -", p)
         raise SystemExit(1)
-    print("[PASS] UAT V2 报告校验通过")
+    print("[PASS] UAT 报告校验通过")

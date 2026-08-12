@@ -444,7 +444,16 @@ class AgentRuntime:
             d = self.get_definition(agent_id)
             degraded = True
         if d is None:
-            raise AgentRuntimeError(f"Agent 无定义（拒绝运行）: {agent_id}")
+            # UFC T9：定义缺失也必须进统一调用链——先写 failed
+            # BusinessRun/Work/Evidence/事件，再抛错（不得在链外 409）。
+            self._record_definition_failure(
+                agent_id, text, actor=actor, session_id=session_id,
+                customer_id=customer_id, project_id=project_id,
+                parent_run_id=parent_run_id,
+                correlation_id=correlation_id, tenant_id=tenant_id,
+                branch_id=branch_id)
+            raise AgentRuntimeError(
+                f"Agent 无定义（拒绝运行）: {agent_id}")
         # UATCC T2：统一身份模型——每次调用必有 agent_run +
         # BusinessRun + WorkItem + Evidence + 挂链 Usage。
         # 缺 customer/project 时明确写 unattributed（不静默空串）。
@@ -580,10 +589,25 @@ class AgentRuntime:
         except Exception as e:  # 工具循环外层的意外错误 → 失败 run
             hard_error = str(e)[:300]
 
-        # UATCC T2：写 Run/Event/Evidence/Usage（失败也写失败 run、
-        # evidence 与实际已消耗 Usage；账本写失败 fail-closed，
-        # 不 except: pass 吞错）。
-        ok = not hard_error
+        # UATCC T2/UFC T9：写 Run/Event/Evidence/Usage（失败也写失败
+        # run、evidence 与实际已消耗 Usage；账本写失败 fail-closed）。
+        # 状态由工具结果决定：全部关键工具失败→failed；部分失败→
+        # partial_failed；不得把错误 trace 包装为整体 succeeded。
+        executed = [t for t in trace
+                    if t.get("status") in ("ok", "error")]
+        errored = [t for t in executed if t.get("status") == "error"]
+        if hard_error or (executed and len(errored) == len(executed)):
+            final = "failed"
+        elif errored:
+            final = "partial_failed"
+        else:
+            final = "succeeded"
+        ok = final == "succeeded"
+        resp["status"] = final
+        resp["failed_tools"] = [t.get("tool") for t in errored]
+        if errored and not hard_error:
+            hard_error = "; ".join(str(t.get("error", ""))
+                                   for t in errored)[:300]
         trace_json = json.dumps(trace, ensure_ascii=False)
         cas_hash = hashlib.sha256(trace_json.encode()).hexdigest()
         self.store._conn.execute(
@@ -591,7 +615,7 @@ class AgentRuntime:
             " tool_trace_json=?, provider=?, ended_at=?,"
             " business_run_id=?, evidence_bundle_id=?"
             " WHERE run_id=?",
-            ("succeeded" if ok else "failed", trace_json,
+            (final, trace_json,
              resp["provider"], _now(), biz_run_id, evid_id, run_id))
         self.store._conn.commit()
         try:
@@ -603,7 +627,7 @@ class AgentRuntime:
                 producer=f"agent:{agent_id}",
                 config_version=f"def@v{d['version']}")
             self.store.set_business_run_status(
-                biz_run_id, "succeeded" if ok else "failed",
+                biz_run_id, final if final != "succeeded" else "succeeded",
                 error=hard_error,
                 evidence_bundle_id=evid["evidence_id"])
             self.store.set_work_item_v2_status(
@@ -617,6 +641,7 @@ class AgentRuntime:
                 actor_type="agent", actor_id=agent_id,
                 payload={"agent_run_id": run_id,
                          "tools": [t[0] for t in tools],
+                         "status": final,
                          "error": hard_error})
             self.store.insert_usage_event_v2(
                 usage_id=_new_id("usage"), unit="agent_call",
@@ -630,11 +655,101 @@ class AgentRuntime:
             raise AgentRuntimeError(
                 f"Agent 账本/证据写入失败（fail-closed）: {e}") from e
         resp["evidence_bundle_id"] = evid_id
-        if not ok:
+        if final == "failed":
             resp["error"] = hard_error
             raise AgentRuntimeError(
                 f"Agent 调用失败: {hard_error}")
         return resp
+
+    def _record_definition_failure(self, agent_id: str, text: str, *,
+                                  actor: str, session_id: str,
+                                  customer_id: str, project_id: str,
+                                  parent_run_id: str | None,
+                                  correlation_id: str, tenant_id: str,
+                                  branch_id: str) -> None:
+        """UFC T9：定义缺失的受控失败命令记录（failed run/blocked
+        work/evidence/error_code/关联身份/零或实际 Usage）。"""
+        attr_customer = customer_id or "unattributed"
+        attr_project = project_id or "unattributed"
+        arun = _new_id("arun")
+        biz_run_id = _new_id("run")
+        work_id = _new_id("work")
+        corr = correlation_id or ("corr-" + uuid.uuid4().hex[:12])
+        evid_id = _new_id("evid")
+        initiator_type = "agent" if parent_run_id else "human"
+        err = "AGENT_DEFINITION_NOT_FOUND"
+        self.store._conn.execute(
+            "INSERT INTO agent_run_v1 (run_id, agent_id, session_id,"
+            " intent, status, actor, customer_id, project_id," " created_at, ended_at)"
+            " VALUES (?,?,?,?,?,?,?,?,?,?)",
+            (arun, agent_id, session_id, text[:400], "failed",
+             actor, attr_customer, attr_project, _now(), _now()))
+        self.store.insert_business_run({
+            "run_id": biz_run_id, "work_id": work_id,
+            "tenant_id": tenant_id, "customer_id": attr_customer,
+            "project_id": attr_project, "trigger_type": "agent",
+            "parent_run_id": parent_run_id, "correlation_id": corr,
+            "subject_type": "agent_run", "subject_id": arun,
+            "initiator_type": initiator_type, "initiator_id": actor,
+            "status": "queued", "command_kind": "agent.invoke",
+            "params": {"agent_id": agent_id, "intent": text[:200],
+                       "error_code": err}})
+        self.store.insert_work_item_v2({
+            "work_id": work_id, "tenant_id": tenant_id,
+            "customer_id": attr_customer, "project_id": attr_project,
+            "run_id": biz_run_id, "status": "running",
+            "owner_type": "agent", "owner_id": agent_id,
+            "title": f"Agent {agent_id} 调用（定义缺失）",
+            "business_summary": text[:120],
+            "subject_type": "agent_run", "subject_id": arun})
+        self.store.emit_event(
+            event_id=_new_id("evt"), event_type="command.accepted",
+            run_id=biz_run_id, work_id=work_id, correlation_id=corr,
+            actor_type=initiator_type, actor_id=actor,
+            payload={"command_kind": "agent.invoke",
+                     "agent_id": agent_id})
+        self.store.set_business_run_status(biz_run_id, "running",
+                                           current_node=agent_id)
+        try:
+            evid = self.store.insert_evidence_bundle(
+                evidence_id=evid_id, kind="agent_run",
+                run_id=biz_run_id, work_id=work_id,
+                source_uri=f"agent_run:{arun}",
+                cas_hash=hashlib.sha256(
+                    json.dumps({"error_code": err,
+                                "agent_id": agent_id}).encode()
+                ).hexdigest(),
+                content_type="application/json",
+                producer=f"agent:{agent_id}", config_version="def@v0")
+            self.store.set_business_run_status(
+                biz_run_id, "failed", error=err,
+                evidence_bundle_id=evid["evidence_id"])
+            self.store.set_work_item_v2_status(
+                work_id, "blocked", blockers=[err])
+            self.store.emit_event(
+                event_id=_new_id("evt"), event_type="run.failed",
+                run_id=biz_run_id, work_id=work_id,
+                correlation_id=corr,
+                actor_type="agent", actor_id=agent_id,
+                payload={"agent_run_id": arun, "error_code": err,
+                         "error": f"Agent 无定义: {agent_id}"})
+            # 实际消耗为零但调用发生：记 1 次 agent_call 并挂链，
+            # 失败身份由 run 状态标识。
+            self.store.insert_usage_event_v2(
+                usage_id=_new_id("usage"), unit="agent_call",
+                quantity=1, run_id=biz_run_id, work_id=work_id,
+                node=branch_id or agent_id,
+                capability=f"agent.{agent_id}.invoke",
+                customer_id=attr_customer, project_id=attr_project,
+                source_evidence=f"evidence_bundle:{evid_id}")
+            self.store._conn.execute(
+                "UPDATE agent_run_v1 SET business_run_id=?,"
+                " evidence_bundle_id=? WHERE run_id=?",
+                (biz_run_id, evid_id, arun))
+            self.store._conn.commit()
+        except Exception as e:
+            raise AgentRuntimeError(
+                f"Agent 失败账本写入失败（fail-closed）: {e}") from e
 
     def _plan(self, definition: dict, text: str
               ) -> list[tuple[str, dict]]:
