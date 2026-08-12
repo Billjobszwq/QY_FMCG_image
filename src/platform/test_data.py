@@ -72,6 +72,14 @@ class TestDataService:
             "UPDATE business_run_v1 SET data_scope='uat_fixture'"
             " WHERE test_run_id=? OR customer_id LIKE ?",
             (namespace, namespace + "%"))
+        # 运行期新建的 work（customer 可能为空）：按已标记 fixture
+        # 的 run 追加式归档。
+        conn.execute(
+            "UPDATE work_item_v2 SET data_scope='uat_fixture',"
+            " visibility='history', superseded_at=? WHERE"
+            " data_scope='operational' AND run_id IN (SELECT run_id"
+            " FROM business_run_v1 WHERE data_scope='uat_fixture')",
+            (now,))
         conn.commit()
         self._audit(actor, "test_data.archived", namespace, {})
         return {"namespace": namespace, "archived_at": now}

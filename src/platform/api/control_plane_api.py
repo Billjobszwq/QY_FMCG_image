@@ -158,9 +158,16 @@ def create_control_plane_router(store: Any, gateway: CommandGateway,
         consistent = (proj["hash"] == proj2["hash"]
                       and len(events) >= proj["count"]
                       and outbox.get("pending", 0) == 0)
-        return {"consistent": consistent,
+        # UFC：只读终态漂移扫描（运营域；fixture 不参与）
+        try:
+            from ..gate_evaluator import scan_terminal_drift
+            drift = scan_terminal_drift(store)
+        except Exception:
+            drift = []
+        return {"consistent": consistent and not drift,
                 "business_facts_checked": True,
                 "drift_fixed": drift_fixed,
+                "drift": drift,
                 "projection": {"count": proj["count"],
                                "hash": proj["hash"]},
                 "event_count": len(events),
