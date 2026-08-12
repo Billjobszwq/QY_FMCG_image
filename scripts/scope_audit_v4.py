@@ -119,7 +119,9 @@ def main() -> None:
     out["bi_metric_has_scope_cols"] = (
         "data_scope" in _cols("bi_metric_v1"))
     rows = conn.execute("SELECT metric_id, name, scope FROM"
-                        " bi_metric_v1").fetchall()
+                        " bi_metric_v1 WHERE COALESCE(data_scope,"
+                        "'operational')='operational' AND COALESCE("
+                        "status,'active')!='archived'").fetchall()
     uat_names = re.compile(r"uat|测试|预演", re.I)
     out["bi_metrics_uat_suspect"] = [
         dict(r) for r in rows

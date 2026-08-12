@@ -594,6 +594,111 @@ class Backfill:
                    [r["sku_id"] for r in rows], "uat_fixture",
                    legacy_ns, "legacy 前缀（一次性，合成归档上下文）")
 
+    def r20_iam_identity_provenance(self) -> None:
+        """SI4 一次性收敛（指令 7.3/DEC-SI4-008）：存量 UAT 身份按
+        已登记 registry namespace 回绑 provenance，未命中的归入
+        legacy 合成上下文；随后统一禁用+归档+会话失效（历史行
+        保留）。运行时绝不依赖名称判断。"""
+        namespaces = [r["test_run_id"] for r in self.conn.execute(
+            "SELECT test_run_id FROM uat_test_run_v1").fetchall()]
+        legacy_ns = "legacy_uat_v2v3_backfill"
+        rows = self.conn.execute(
+            "SELECT principal_id, username FROM iam_principal_v1 WHERE"
+            " COALESCE(data_scope,'operational')='operational'"
+        ).fetchall()
+        bound: list[tuple[str, str]] = []
+        for r in rows:
+            uname = r["username"].lower()
+            ns = next((n for n in namespaces if n in uname), "")
+            if not ns and (uname.startswith("uat")
+                           or uname.startswith("demo")):
+                ns = legacy_ns
+            if ns:
+                bound.append((r["principal_id"], ns))
+        for pid, ns in bound:
+            if self.apply:
+                self.conn.execute(
+                    "UPDATE iam_principal_v1 SET data_scope="
+                    "'uat_fixture', test_run_id=?, origin='uat' WHERE"
+                    " principal_id=?", (ns, pid))
+        self.audit("iam_principal_v1", "r20_iam_identity_provenance",
+                   [f"{p[0]}:{p[1]}" for p in bound], "uat_fixture",
+                   "per-row",
+                   "uat_test_run_v1 registry（存量回绑，一次性）")
+        # membership 继承 principal provenance
+        if self.apply:
+            self.conn.execute(
+                "UPDATE iam_membership_v1 SET data_scope="
+                "'uat_fixture', test_run_id=(SELECT p.test_run_id FROM"
+                " iam_principal_v1 p WHERE p.principal_id="
+                "iam_membership_v1.principal_id) WHERE principal_id IN"
+                " (SELECT principal_id FROM iam_principal_v1 WHERE"
+                " data_scope='uat_fixture')")
+        mem_n = self.conn.execute(
+            "SELECT count(*) c FROM iam_membership_v1 WHERE"
+            " principal_id IN (SELECT principal_id FROM"
+            " iam_principal_v1 WHERE data_scope='uat_fixture')"
+        ).fetchone()["c"]
+        self.audit("iam_membership_v1",
+                   "r20_iam_identity_provenance", [f"count={mem_n}"],
+                   "uat_fixture", "per-row", "继承 principal")
+
+    def r21_iam_identity_archive_convergence(self) -> None:
+        """存量 fixture 身份统一收敛：禁用+history+会话失效（历史
+        行保留；安全面清零）。"""
+        rows = self.conn.execute(
+            "SELECT principal_id, username FROM iam_principal_v1 WHERE"
+            " data_scope='uat_fixture' AND status='active'").fetchall()
+        if self.apply and rows:
+            self.conn.execute(
+                "UPDATE iam_principal_v1 SET status='disabled',"
+                " visibility='history', archived_at=?,"
+                " disabled_reason='si4_backfill_archived', updated_at=?"
+                " WHERE data_scope='uat_fixture' AND status='active'",
+                (_now(), _now()))
+            self.conn.execute(
+                "UPDATE iam_membership_v1 SET visibility='history',"
+                " archived_at=? WHERE principal_id IN (SELECT"
+                " principal_id FROM iam_principal_v1 WHERE"
+                " data_scope='uat_fixture')", (_now(),))
+            unames = tuple(r["username"] for r in rows)
+            qm = ",".join("?" * len(unames))
+            self.conn.execute(
+                "DELETE FROM auth_sessions WHERE actor IN (" + qm + ")",
+                unames)
+        self.audit("iam_principal_v1",
+                   "r21_iam_identity_archive_convergence",
+                   [r["username"] for r in rows], "disabled+history",
+                   "per-row", "SI4 存量收敛（会话失效）")
+
+    def r22_bi_metric_legacy_archive(self) -> None:
+        """存量 UAT 指标：回绑 provenance 并归档（不进运营 BI）。"""
+        namespaces = [r["test_run_id"] for r in self.conn.execute(
+            "SELECT test_run_id FROM uat_test_run_v1").fetchall()]
+        legacy_ns = "legacy_uat_v2v3_backfill"
+        rows = self.conn.execute(
+            "SELECT metric_id, name FROM bi_metric_v1 WHERE"
+            " COALESCE(data_scope,'operational')='operational'"
+        ).fetchall()
+        hit: list[tuple[str, str]] = []
+        for r in rows:
+            blob = (r["metric_id"] + "|" + (r["name"] or "")).lower()
+            ns = next((n for n in namespaces if n.lower() in blob), "")
+            if not ns and ("uat" in blob or "预演" in blob):
+                ns = legacy_ns
+            if ns:
+                hit.append((r["metric_id"], ns))
+        for mid, ns in hit:
+            if self.apply:
+                self.conn.execute(
+                    "UPDATE bi_metric_v1 SET data_scope='uat_fixture',"
+                    " test_run_id=?, status='archived', archived_at=?"
+                    " WHERE metric_id=?", (ns, _now(), mid))
+        self.audit("bi_metric_v1", "r22_bi_metric_legacy_archive",
+                   [f"{m}:{ns}" for m, ns in hit],
+                   "uat_fixture+archived", "per-row",
+                   "registry/legacy 上下文（一次性）")
+
     def r12_finance_under_fixture_customer(self) -> None:
         for table, id_col in (("fin_invoice_v1", "invoice_id"),
                               ("fin_invoice_line_v1", "invoice_id"),
@@ -654,6 +759,9 @@ def main() -> None:
                bf.r16_runs_under_fixture_customer,
                bf.r17_legacy_sku_namespaces,
                bf.r18_legacy_prefix_objects,
+               bf.r20_iam_identity_provenance,
+               bf.r21_iam_identity_archive_convergence,
+               bf.r22_bi_metric_legacy_archive,
                bf.r12_finance_under_fixture_customer):
         fn()
     if args.apply:
