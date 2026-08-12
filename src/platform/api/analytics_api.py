@@ -248,7 +248,7 @@ def create_analytics_router(store: Any, svc: AnalyticsService,
             versions = svc.list_report_versions(spec_id)
         except AnalyticsError as e:
             raise HTTPException(404, str(e))
-        _guard(iam, p["actor"], p["role"], "analytics.read",
+        _guard(iam, p["actor"], p["role"],
                customer_id=versions[-1]["customer_id"])
         return {"spec_id": spec_id, "count": len(versions),
                 "versions": versions}

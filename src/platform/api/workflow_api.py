@@ -259,8 +259,7 @@ def create_workflow_router(store: Any, service: WorkflowService,
         p = require_principal(auth, request, csrf=True)
         try:
             run = service.retry_run(run_id, actor=p["actor"],
-                                    inputs=(body or {}).get("inputs")
-                                    if body else None)
+                                    inputs=body.inputs if body else None)
         except WorkflowError as e:
             raise HTTPException(409, str(e))
         return {"run": run,

@@ -368,6 +368,11 @@ class WorkflowService:
                         stack.append(r["to"])
                 if (node.get("config") or {}).get("default") in idset:
                     stack.append(node["config"]["default"])
+                # UATCC T4：loop 的 body 经 config.body 引用（无入边），
+                # 属于可达节点。
+                if node.get("type") == "loop" and \
+                        (node.get("config") or {}).get("body") in idset:
+                    stack.append(node["config"]["body"])
         for i in ids:
             if i not in reachable:
                 issues.append({"level": "error", "code": "unreachable",
@@ -1249,14 +1254,21 @@ class WorkflowService:
         if t == "transform":
             mapping = cfg.get("map") or {}
             out: dict[str, Any] = {}
+            vwrites: dict[str, Any] = {}
             for k, v in mapping.items():
                 val = _resolve_value(v, ctx)
                 if k.startswith("vars."):
                     # UATCC T3：受限变量写（显式 vars.<name> 前缀），
                     # 供并行分支写变量与合并冲突检测。
-                    ctx["vars"][k.split(".", 1)[1]] = val
+                    vk = k.split(".", 1)[1]
+                    ctx["vars"][vk] = val
+                    vwrites[vk] = val
                 else:
                     out[k] = val
+            if vwrites:
+                # UATCC T4：变量写入记入 checkpoint（_vars），
+                # timer/重启恢复时 _restore_ctx 可重建。
+                out["_vars"] = vwrites
             return out, None
         if t == "condition":
             for r in cfg.get("rules") or []:
@@ -1449,19 +1461,37 @@ class WorkflowService:
 
     def _restore_ctx(self, run_id: str, d: dict,
                      extra_inputs: dict | None = None) -> dict:
-        """从 checkpoint 恢复执行上下文（可恢复性）。"""
+        """从 checkpoint 恢复执行上下文（可恢复性）。
+
+        UATCC T4 修复：必须重建 trigger 输入与 transform 变量写入，
+        否则 timer/重启恢复后 vars 退回 default，条件分支失真。"""
         spec = d["spec"]
+        execs = self.store.list_node_executions(run_id)
+        inputs: dict[str, Any] = {}
+        for e in execs:
+            if e["node_type"] == "trigger" and e["status"] == "succeeded":
+                inputs = e.get("input") or {}
+                break
+        if not inputs:
+            for e in execs:
+                if e["status"] == "succeeded":
+                    inputs = e.get("input") or {}
+                    if inputs:
+                        break
         vars_ = {k: v.get("default")
                  for k, v in (spec.get("variables") or {}).items()}
-        vars_.update(extra_inputs or {})
-        ctx = {"vars": vars_, "inputs": dict(extra_inputs or {}),
-               "nodes": {}}
-        for e in self.store.list_node_executions(run_id):
+        vars_.update(inputs)
+        ctx = {"vars": vars_, "inputs": dict(inputs), "nodes": {}}
+        for e in execs:
             if e["status"] == "succeeded":
+                output = e.get("output") or {}
+                # transform 变量写入重建（含并行分支外的主链）
+                for vk, vv in (output.get("_vars") or {}).items():
+                    ctx["vars"][vk] = vv
                 ctx["nodes"][e["node_id"]] = {
-                    "status": "succeeded", **e["output"]}
-                if not ctx["inputs"]:
-                    ctx["inputs"] = e.get("input") or {}
+                    "status": "succeeded", **output}
+        vars_.update(extra_inputs or {})
+        ctx["inputs"].update(extra_inputs or {})
         return ctx
 
     # ---------- Workflow Agent：自然语言 → draft patch ----------
