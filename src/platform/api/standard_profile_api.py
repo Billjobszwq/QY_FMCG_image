@@ -58,6 +58,8 @@ def create_standard_profile_router(
     def switch(body: SwitchBody, request: Request) -> dict:
         p = require_principal(auth, request, csrf=True)
         _require_admin(p)
+        from ..rate_limit import enforce
+        enforce(request, "model.switch", p["actor"])
         try:
             cur = svc.switch(bundle_id=body.bundle_id, actor=p["actor"],
                              reason=body.reason)
@@ -71,6 +73,8 @@ def create_standard_profile_router(
     def rollback(request: Request) -> dict:
         p = require_principal(auth, request, csrf=True)
         _require_admin(p)
+        from ..rate_limit import enforce
+        enforce(request, "model.switch", p["actor"])
         try:
             cur = svc.rollback(actor=p["actor"])
         except StandardProfileError as e:

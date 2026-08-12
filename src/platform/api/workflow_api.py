@@ -179,6 +179,8 @@ def create_workflow_router(store: Any, service: WorkflowService,
     def start_run(definition_id: str, body: StartBody,
                   request: Request) -> dict:
         p = require_principal(auth, request, csrf=True)
+        from ..rate_limit import enforce
+        enforce(request, "workflow.run.start", p["actor"])
         try:
             out = service.start_run(
                 definition_id, inputs=body.inputs, actor=p["actor"],

@@ -53,6 +53,8 @@ def create_import_router(center: ImportCenter,
                      template_id: str = Form(...),
                      file: UploadFile = File(...)) -> dict:
         p = require_principal(auth, request, csrf=True)
+        from ..rate_limit import enforce
+        enforce(request, "import.upload", p["actor"])
         data = await file.read()
         if len(data) > 20 * 1024 * 1024:
             raise HTTPException(413, "上传文件超过 20MB 限制")
@@ -98,6 +100,8 @@ def create_import_router(center: ImportCenter,
     @router.post("/api/v1/import/batches/{batch_id}/commit")
     def commit(batch_id: str, request: Request) -> dict:
         p = require_principal(auth, request, csrf=True)
+        from ..rate_limit import enforce
+        enforce(request, "import.commit", p["actor"])
         try:
             b = center.commit(batch_id, actor=p["actor"])
         except ImportError_ as e:

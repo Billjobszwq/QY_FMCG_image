@@ -96,6 +96,8 @@ def create_analytics_router(store: Any, svc: AnalyticsService,
                         customer_id: str) -> dict:
         p = require_principal(auth, request, csrf=False)
         _guard(iam, p["actor"], p["role"], customer_id)
+        from ..rate_limit import enforce
+        enforce(request, "bi.query", p["actor"])
         try:
             v = svc.evaluate_metric(metric_id, customer_id=customer_id)
         except AnalyticsError as e:
@@ -108,6 +110,8 @@ def create_analytics_router(store: Any, svc: AnalyticsService,
                   customer_id: str, limit: int = 20) -> dict:
         p = require_principal(auth, request, csrf=False)
         _guard(iam, p["actor"], p["role"], customer_id)
+        from ..rate_limit import enforce
+        enforce(request, "bi.query", p["actor"])
         try:
             return svc.drilldown(metric_id, customer_id=customer_id,
                                  limit=min(limit, 100))

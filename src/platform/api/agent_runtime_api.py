@@ -71,6 +71,9 @@ def create_agent_runtime_router(store: Any,
     @router.post("/api/agent/v1/chat")
     def chat(body: ChatBody, request: Request) -> dict:
         p = require_principal(auth, request, csrf=True)
+        # UATCC T6：Agent invoke/chat 限流
+        from ..rate_limit import enforce
+        enforce(request, "agent.invoke", p["actor"])
         if not store._conn.execute(
                 "SELECT 1 FROM agent_session_v1 WHERE session_id=?",
                 (body.session_id,)).fetchone():
@@ -190,6 +193,9 @@ def create_agent_runtime_router(store: Any,
                      body: dict | None = None) -> dict:
         """ABOSV3：真实工具循环 invoke（不再统一 ok=true）。"""
         p = require_principal(auth, request, csrf=True)
+        # UATCC T6：Agent invoke 限流
+        from ..rate_limit import enforce
+        enforce(request, "agent.invoke", p["actor"])
         if runtime is None:
             raise HTTPException(503, "Agent Runtime 未装配")
         body = body or {}

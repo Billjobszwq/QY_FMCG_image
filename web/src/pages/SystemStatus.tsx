@@ -1,15 +1,23 @@
 import { useEffect, useState } from "react";
-import { CapabilityInfo, fetchCapabilities, fetchVersion, HealthBody } from "../api";
+import { CapabilityInfo, fetchCapabilities, fetchVersion, HealthBody,
+  iamGet } from "../api";
 
 export default function SystemStatus({ health }: { health: HealthBody | null }) {
   const [version, setVersion] = useState<{ platform: string; version: string } | null>(null);
   const [caps, setCaps] = useState<CapabilityInfo[] | null>(null);
+  const [rlRules, setRlRules] = useState<any[] | null>(null);
+  const [rlErr, setRlErr] = useState<string | null>(null);
 
   useEffect(() => {
     fetchVersion().then(setVersion).catch(() => setVersion(null));
     fetchCapabilities()
       .then((b) => setCaps(b.capabilities))
       .catch(() => setCaps(null));
+    // UATCC T6：限流规则与命中（仅管理员可见）
+    iamGet("rate-limit/rules")
+      .then((d) => setRlRules(d.rules))
+      .catch((e) => { setRlRules([]);
+        setRlErr(e instanceof Error ? e.message : String(e)); });
   }, []);
 
   return (
@@ -95,6 +103,34 @@ export default function SystemStatus({ health }: { health: HealthBody | null }) 
           ))}
         </tbody>
       </table>
+      <h3>限流规则与命中（rate limit）</h3>
+      {rlErr && rlRules?.length === 0 && (
+        <p className="muted">仅管理员可见：{rlErr}</p>)}
+      {rlRules && rlRules.length > 0 && (
+        <table>
+          <thead>
+            <tr>
+              <th>capability</th>
+              <th>窗口上限</th>
+              <th>窗口(秒)</th>
+              <th>burst</th>
+              <th>启用</th>
+              <th>累计命中</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rlRules.map((r) => (
+              <tr key={r.capability}>
+                <td>{r.capability}</td>
+                <td>{r.max_per_window}</td>
+                <td>{r.window_seconds}</td>
+                <td>{r.burst}</td>
+                <td>{r.enabled ? "是" : "否"}</td>
+                <td>{r.hits_total}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>)}
     </section>
   );
 }

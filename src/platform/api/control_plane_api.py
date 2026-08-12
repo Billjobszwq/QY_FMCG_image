@@ -35,6 +35,10 @@ def create_control_plane_router(store: Any, gateway: CommandGateway,
     @router.post("/api/v1/commands")
     def submit_command(body: CommandBody, request: Request) -> dict:
         p = require_principal(auth, request, csrf=True)
+        # UATCC T6：识别等高成本命令限流
+        if body.command_kind == "vision.recognition.create":
+            from ..rate_limit import enforce
+            enforce(request, "recognition.create", p["actor"])
         idem = body.idempotency_key or request.headers.get(
             "idempotency-key")
         try:

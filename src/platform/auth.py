@@ -189,7 +189,10 @@ def create_auth_router(auth: AuthService) -> APIRouter:
     router = APIRouter()
 
     @router.post("/api/v1/auth/login")
-    def login(body: LoginBody, response: Response):
+    def login(body: LoginBody, response: Response, request: Request):
+        # UATCC T6：登录限流（主体=用户名，叠加 IP；不得伪造绕过）
+        from .rate_limit import enforce
+        enforce(request, "auth.login", body.username)
         try:
             s = auth.login(body.username, body.password)
         except PermissionError as e:

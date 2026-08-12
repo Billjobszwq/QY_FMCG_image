@@ -111,6 +111,15 @@ def create_app(
         # UMT-006：本机登录 session/CSRF（身份不再由客户端 header 自证）
         from src.platform.auth import AuthService, create_auth_router
         app.include_router(create_auth_router(AuthService(bundle.store)))
+        # UATCC T6：真实限流（SQLite 持久化窗口；重启不完全丢失）
+        from src.platform.rate_limit import RateLimiter
+        from src.platform.api.rate_limit_api import \
+            create_rate_limit_router
+        from src.platform.iam import IAMService as _RateLimitIAM
+        app.state.rate_limiter = RateLimiter(bundle.store)
+        app.include_router(create_rate_limit_router(
+            bundle.store, app.state.rate_limiter,
+            _RateLimitIAM(bundle.store), auth=AuthService(bundle.store)))
         # U2-1：统一任务中心（只读聚合，角色首页数据源）
         from src.platform.api.workitems import create_workitems_router
         app.include_router(create_workitems_router(bundle.store))

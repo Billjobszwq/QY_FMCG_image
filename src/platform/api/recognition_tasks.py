@@ -222,6 +222,9 @@ def create_recognition_tasks_router(
     @router.post("/api/v1/recognition/tasks/url")
     def by_url(body: UrlBody, request: Request):
         p = require_principal(auth, request)
+        # UATCC T6：URL 下载限流（出站网络 + 识别成本）
+        from ..rate_limit import enforce
+        enforce(request, "url.download", p["actor"])
         idem = request.headers.get("idempotency-key")
         if idem:
             hit = store.find_recognition_task_by_idempotency_key(idem)
