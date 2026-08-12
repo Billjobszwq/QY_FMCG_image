@@ -70,17 +70,23 @@ def _migration_hash(store) -> str:
 
 
 def _service_health() -> dict:
-    out = {}
-    for name, url in (("app", "http://127.0.0.1:8400/api/v1/health"),
-                      ("recognize", "http://127.0.0.1:8091/health"),
-                      ("monitor", "http://127.0.0.1:8092/health"),
-                      ("label_studio", "http://127.0.0.1:8300/")):
+    """与 bin/abos probe 同语义：app=/api/v1/health 200；
+    LS=/health 200；recognize/monitor 根路径可达（任意 HTTP 响应）。"""
+    import urllib.error
+
+    def code(url: str) -> int:
         try:
             with urllib.request.urlopen(url, timeout=8) as r:
-                out[name] = r.status == 200
+                return r.status
+        except urllib.error.HTTPError as e:
+            return e.code
         except Exception:  # noqa: BLE001
-            out[name] = False
-    return out
+            return 0
+
+    return {"app": code("http://127.0.0.1:8400/api/v1/health") == 200,
+            "recognize": code("http://127.0.0.1:8091/") != 0,
+            "monitor": code("http://127.0.0.1:8092/") != 0,
+            "label_studio": code("http://127.0.0.1:8300/health") == 200}
 
 
 def main() -> int:

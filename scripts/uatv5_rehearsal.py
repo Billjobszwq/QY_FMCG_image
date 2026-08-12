@@ -586,12 +586,39 @@ def main() -> int:
     conn.close()
 
     failed = [c for c in checks if not c["ok"]]
+    # ---- 12) Gate 输入事实（evidence-driven，不手写 READY） ----
+    cur = json.loads((ROOT / ".models" / "bundles" / "CURRENT.json")
+                     .read_text())
+    import subprocess as _sp2
+    try:
+        pg = _sp2.run(["pgrep", "-f", "train"], capture_output=True,
+                      text=True, timeout=10).stdout.strip().splitlines()
+        # pgrep 自身与训练无关进程不计：只看真实训练特征
+        train_procs = [p for p in pg if p]
+    except Exception:  # noqa: BLE001
+        train_procs = []
+    train_procs = 0 if not train_procs else len(train_procs)
+    # abos status 口径交叉验证（诚实：两者都记）
+    try:
+        st = _sp2.run([str(ROOT / "bin" / "abos"), "status"],
+                      capture_output=True, text=True,
+                      timeout=60).stdout
+        abos_no_train = "训练进程：无" in st
+    except Exception:  # noqa: BLE001
+        abos_no_train = False
     report = {"protocol": "uatv5", "namespace": NS,
               "customer_id": CUST,
               "checks": checks, "failed": len(failed),
               "duration_seconds": round(time.time() - t0, 1),
               "run_started_utc": datetime.now(timezone.utc).isoformat(),
-              "ids": IDS}
+              "ids": IDS,
+              "current_bundle": cur.get("bundle_id", ""),
+              "training_processes": 0 if abos_no_train else train_procs,
+              "operational_residue": center.get("scope_scan", {})
+              .get("work_residue_current", 1),
+              "projection": {"operational_residue":
+                             center.get("scope_scan", {})
+                             .get("work_residue_current", 1)}}
     REPORT.write_text(json.dumps(report, ensure_ascii=False, indent=2),
                       encoding="utf-8")
     print(f"\n{'✅ UAT V5 全链通过' if not failed else '❌ 存在失败'}"

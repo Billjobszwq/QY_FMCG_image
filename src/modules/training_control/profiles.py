@@ -250,6 +250,12 @@ def seed_profile_defs(store) -> None:
     store._conn.commit()
 
 
+# SI3：Profile 业务友好名称（profile_id 为稳定契约，不变）。
+_PROFILE_DISPLAY = {
+    "production_legacy": "当前生产 · V4 Best",
+}
+
+
 def derive_profiles(store) -> list[dict]:
     """状态/blocker 从 Artifact Registry 动态派生；定义读 DB（单源）。"""
     import json as _j
@@ -277,6 +283,16 @@ def derive_profiles(store) -> list[dict]:
                 if ev is None:
                     blockers.append("M4 三版本真实评估未登记")
         out.append({"profile_id": row["profile_id"],
+                    # SI3 UI：业务友好名称 + 冻结映射（指令七.6：
+                    # production_legacy 实际映射 V4，不得与实验模型
+                    # 看似两个不同生产模型）。
+                    "display_name": _PROFILE_DISPLAY.get(
+                        row["profile_id"], row["profile_id"]),
+                    "frozen_mapping": (
+                        "production_legacy → prod_v4_best_r1（当前"
+                        "生产 V4 Best；冻结映射，非第二个生产模型）"
+                        if row["profile_id"] == "production_legacy"
+                        else ""),
                     "status": "enabled" if not blockers else "disabled",
                     "blockers": blockers, "tags": tags,
                     "components": needs,

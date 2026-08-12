@@ -215,7 +215,7 @@ async def main_async() -> int:
         pages.append(await semantic_page(
             ws, msg_id, cookie, route="/#/vision/recognize", width=1440,
             expected_type="production_banner_v4best",
-            expected_id="",
+            expected_id="V4BEST_NO_FX",
             js_extract=("(()=>{const t=document.body.innerText||'';"
                         "const ok=t.includes('V4 Best')||t.includes("
                         "'当前生产');const fx=(t.match(/uatv[0-9]+_/"
