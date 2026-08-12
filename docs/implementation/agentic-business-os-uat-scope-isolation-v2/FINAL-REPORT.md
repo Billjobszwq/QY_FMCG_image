@@ -5,8 +5,8 @@
 1. HEAD/branch/worktree：开始 `9f3554e7` / `feat/nextgen-training-cycle-v2` /
    tracked 干净；结束 HEAD 见 `git log -1`（本轮提交链见第 3 项），
    tracked worktree 在终评前提交干净（Gate `tracked_worktree_clean`）。
-2. 开始和结束 commit：`9f3554e7` → `ea6ea086`（gate.json
-    source_commit 与终评 HEAD 一致）。
+2. 开始和结束 commit：`9f3554e7` → 最后代码提交 `ea6ea086`；终评
+    gate.json source_commit = 终评时 HEAD（其后仅治理文档提交）。
 3. 本轮 commit 链：`18ac09d0`(T0) → `5183cd83`(T1 红) → `013efe3a`(T2-T4/T6)
    → `9548cc30`(T3 backfill) → `52b9069b`(T5/T8-prep) → `fbeac0f3`(T8)
    → `b38d9421`(T9) → `ea6ea086`(T6/T7/T10 收尾；其后仅治理文档
