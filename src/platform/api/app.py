@@ -120,6 +120,12 @@ def create_app(
         app.include_router(create_rate_limit_router(
             bundle.store, app.state.rate_limiter,
             _RateLimitIAM(bundle.store), auth=AuthService(bundle.store)))
+        # UFC T4：测试与证据（UAT fixture 隔离/归档）
+        from src.platform.test_data import TestDataService
+        from src.platform.api.test_data_api import create_test_data_router
+        app.include_router(create_test_data_router(
+            bundle.store, TestDataService(bundle.store),
+            _RateLimitIAM(bundle.store), auth=AuthService(bundle.store)))
         # U2-1：统一任务中心（只读聚合，角色首页数据源）
         from src.platform.api.workitems import create_workitems_router
         app.include_router(create_workitems_router(bundle.store))

@@ -306,14 +306,17 @@ class AgentRuntime:
                                          "project_count": fewest[1]}
                                         if fewest else None)}
         if tool_id == "master.data.summary":
-            def _c(table: str) -> int:
+            def _c(table: str, fixture_filter: bool = False) -> int:
                 try:
-                    return conn.execute(
-                        f"SELECT count(*) c FROM {table}"
-                        ).fetchone()["c"]
+                    sql = f"SELECT count(*) c FROM {table}"
+                    if fixture_filter:
+                        sql += (" WHERE COALESCE(data_scope,'operational')"
+                               "='operational'")
+                    return conn.execute(sql).fetchone()["c"]
                 except Exception:
                     return 0
-            return {"customers": _c("md_customer_v1"),
+            # UFC T4：Agent 默认查询不混入 fixture
+            return {"customers": _c("md_customer_v1", True),
                     "projects": _c("md_project_v1"),
                     "skus": _c("md_sku_v1"),
                     "addresses": _c("geo_address_v1"),

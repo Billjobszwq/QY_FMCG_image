@@ -2037,6 +2037,23 @@ ALTER TABLE agent_run_v1 ADD COLUMN evidence_bundle_id TEXT NOT NULL
     DEFAULT '';
 """
 
+# UFC T4：UAT fixture 结构性隔离（data_scope/visibility，不以名字
+# 前缀为唯一机制；历史数据保留，仅追加式标记）。
+_M049 = """
+ALTER TABLE md_customer_v1 ADD COLUMN data_scope TEXT NOT NULL
+    DEFAULT 'operational';
+ALTER TABLE business_run_v1 ADD COLUMN data_scope TEXT NOT NULL
+    DEFAULT 'operational';
+ALTER TABLE business_run_v1 ADD COLUMN test_run_id TEXT NOT NULL
+    DEFAULT '';
+ALTER TABLE work_item_v2 ADD COLUMN data_scope TEXT NOT NULL
+    DEFAULT 'operational';
+ALTER TABLE work_item_v2 ADD COLUMN visibility TEXT NOT NULL
+    DEFAULT 'current';
+ALTER TABLE work_item_v2 ADD COLUMN superseded_at TEXT NOT NULL
+    DEFAULT '';
+"""
+
 MIGRATIONS: tuple[tuple[str, str], ...] = (
     ("001_platform_init", _M001),
     ("002_labeling_inbox", _M002),
@@ -2086,6 +2103,7 @@ MIGRATIONS: tuple[tuple[str, str], ...] = (
     ("046_bi_dashboard_v1", _M046),
     ("047_contract_correction_v1", _M047),
     ("048_agent_run_business_link", _M048),
+    ("049_fixture_isolation", _M049),
 )
 
 
@@ -3896,7 +3914,10 @@ class PlatformStore:
         state: dict[str, dict[str, Any]] = {}
         # 投影基线 = work_item_v2 全部行（含无事件的 approval/追问等
         # 人工工作）；事件流只覆盖其可推导的状态，不得丢失无事件工作。
+        # UFC T4：uat_fixture 结构性隔离——不进运营投影（行保留可审计）。
         for row in self.list_work_items_v2():
+            if row.get("data_scope") == "uat_fixture":
+                continue
             state[row["work_id"]] = {
                 "work_id": row["work_id"], "status": row["status"],
                 "subject_type": row.get("subject_type", ""),
@@ -3931,7 +3952,13 @@ class PlatformStore:
                 st["status"] = "waiting"
             elif t in ("workflow.timer_fired",):
                 st["status"] = "running"
-        items = sorted(state.values(), key=lambda x: x["work_id"])
+        # UFC T4：事件重建出的 fixture work 同样排除（双保险）
+        _fx = {r["work_id"] for r in self._conn.execute(
+            "SELECT work_id FROM work_item_v2 WHERE data_scope="
+            "'uat_fixture'").fetchall()}
+        items = sorted((it for it in state.values()
+                        if it["work_id"] not in _fx),
+                       key=lambda x: x["work_id"])
         # UFC T1：终态保护——run 终态决定 work 终态；终态 work 不得
         # 被事件派生的活动态回退（投影重建不回退终态）。
         run_status = {r["run_id"]: r["status"] for r in self._conn

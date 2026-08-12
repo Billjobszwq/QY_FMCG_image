@@ -85,14 +85,18 @@ def _load_json(path) -> dict | None:
 
 
 def scan_terminal_drift(store) -> list[dict]:
-    """DB 终态漂移扫描：run 终态但主 work/approval/timer/branch 未收敛。"""
+    """DB 终态漂移扫描：run 终态但主 work/approval/timer/branch 未收敛。
+
+    UFC T4：uat_fixture 为归档测试数据，不参与运营一致性判定。"""
     drift: list[dict] = []
     conn = store._conn
     rows = conn.execute(
         "SELECT br.run_id, br.status AS run_status, w.status AS"
         " work_status FROM business_run_v1 br JOIN work_item_v2 w"
         " ON w.work_id=br.work_id WHERE br.status IN"
-        " ('succeeded','failed','partial_failed','cancelled')").fetchall()
+        " ('succeeded','failed','partial_failed','cancelled') AND"
+        " COALESCE(br.data_scope,'operational')='operational'"
+        ).fetchall()
     expect = {"succeeded": "done", "failed": "blocked",
               "partial_failed": "blocked", "cancelled": "cancelled"}
     for r in rows:
@@ -105,7 +109,9 @@ def scan_terminal_drift(store) -> list[dict]:
         " w.status FROM business_run_v1 br JOIN work_item_v2 w"
         " ON w.run_id=br.run_id WHERE br.status IN"
         " ('succeeded','failed','partial_failed','cancelled') AND"
-        " w.status='approval'").fetchall()
+        " w.status='approval' AND"
+        " COALESCE(br.data_scope,'operational')='operational'")
+    rows = rows.fetchall()
     for r in rows:
         drift.append({"kind": "approval_open", "run_id": r["run_id"],
                       "run": r["run_status"], "work": r["work_id"]})
@@ -113,7 +119,9 @@ def scan_terminal_drift(store) -> list[dict]:
         "SELECT t.run_id, t.status FROM workflow_timer_v1 t JOIN"
         " business_run_v1 br ON br.run_id=t.run_id WHERE br.status IN"
         " ('succeeded','failed','partial_failed','cancelled') AND"
-        " t.status='pending'").fetchall()
+        " t.status='pending' AND"
+        " COALESCE(br.data_scope,'operational')='operational'")
+    rows = rows.fetchall()
     for r in rows:
         drift.append({"kind": "timer_pending", "run_id": r["run_id"]})
     rows = conn.execute(
@@ -121,7 +129,9 @@ def scan_terminal_drift(store) -> list[dict]:
         " workflow_branch_v1 b JOIN business_run_v1 br ON"
         " br.run_id=b.run_id WHERE br.status IN"
         " ('succeeded','failed','partial_failed','cancelled') AND"
-        " b.status IN ('pending','running')").fetchall()
+        " b.status IN ('pending','running') AND"
+        " COALESCE(br.data_scope,'operational')='operational'")
+    rows = rows.fetchall()
     for r in rows:
         drift.append({"kind": "branch_open", "run_id": r["run_id"],
                       "branch": r["branch_id"]})
