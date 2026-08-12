@@ -33,6 +33,7 @@ class PrincipalBody(BaseModel):
     username: str
     display_name: str = ""
     password: str = ""
+    test_run_id: str = ""   # SI4：受信 UAT 路径（registry fail-closed）
 
 
 class GrantBody(BaseModel):
@@ -155,18 +156,22 @@ def create_iam_router(store: Any, auth: AuthService | None) -> APIRouter:
             pr = iam.create_principal(
                 kind=body.kind, username=body.username,
                 display_name=body.display_name, password=body.password,
-                created_by=p["actor"])
+                created_by=p["actor"], test_run_id=body.test_run_id)
+        except ScopeViolation as e:
+            raise HTTPException(409, str(e))
         except IAMError as e:
             raise HTTPException(409, str(e))
         return {"principal": {k: pr[k] for k in
                               ("principal_id", "kind", "username",
-                               "display_name", "status")}}
+                               "display_name", "status")
+                              if k in pr}}
 
     @router.get("/api/v1/iam/principals")
-    def list_principals(request: Request) -> dict:
+    def list_principals(request: Request,
+                        include_fixture: bool = False) -> dict:
         p = require_principal(auth, request, csrf=False)
         _guard(iam, p["actor"], p["role"], "iam.read")
-        rows = iam.list_principals()
+        rows = iam.list_principals(include_fixture=include_fixture)
         return {"count": len(rows), "principals": rows}
 
     @router.post("/api/v1/iam/grants")

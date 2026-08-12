@@ -67,6 +67,12 @@ REQUIRED_UAT_IDS = (
     "bi_report", "anomaly", "recognition_task", "evidence", "usage",
 )
 
+# SI4 / UAT V6：新增 IAM/BI/Finance 验收对象 ID（指令十二）。
+REQUIRED_UATV6_EXTRA_IDS = (
+    "principals", "memberships", "metric", "dashboard",
+    "finance_dry_run_invoice", "rate_calc",
+)
+
 
 def _validate_uatv4(report: dict) -> list[str]:
     problems: list[str] = []
@@ -102,7 +108,15 @@ def validate_report(report: dict) -> list[str]:
     Agent 失败无账本、Usage 未挂链、浏览器证据缺文件、服务不
     健康、CURRENT 非 prod_v4_best_r1、存在长训练进程。
 
-    SI2：protocol=uatv4 报告走 V4 协议校验（scope-first 检查集）。"""
+    SI2：protocol=uatv4 报告走 V4 协议校验（scope-first 检查集）。
+    SI4：protocol=uatv6 在 V5 基础上追加 IAM/BI/Finance IDs 校验。"""
+    if report.get("protocol") == "uatv6":
+        problems = _validate_uatv4(report)
+        ids = report.get("ids") or {}
+        for k in REQUIRED_UATV6_EXTRA_IDS:
+            if not ids.get(k):
+                problems.append(f"缺关键 ID: ids.{k}（V6 必备）")
+        return problems
     if report.get("protocol") in ("uatv4", "uatv5"):
         return _validate_uatv4(report)
     problems: list[str] = []

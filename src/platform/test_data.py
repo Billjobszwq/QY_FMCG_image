@@ -35,6 +35,8 @@ _SCOPED_DOMAIN_TABLES = (
     # 触发器禁止 UPDATE）——归档不得改原行，改经
     # scope_attribution_ledger_v1 追加式绑定（下方 _archive_ledgers）。
     "bi_report_spec_v1", "bi_anomaly_v1",
+    # SI4：看板具备 scope 列（迁移 058），随归档结构化处理。
+    "bi_dashboard_v1",
 )
 
 
@@ -209,6 +211,31 @@ class FixtureTestDataService:
             " test_run_id=? WHERE business_run_id IN"
             " (SELECT run_id FROM business_run_v1 WHERE test_run_id=?)",
             (namespace, namespace))
+        # 2d) SI4：测试身份生命周期收敛（指令 7.3）：principal 追加
+        # 式禁用 + membership 归档 + 会话失效（运行时态，不删历史行）。
+        unames = [r["username"] for r in conn.execute(
+            "SELECT username FROM iam_principal_v1 WHERE test_run_id=?",
+            (namespace,)).fetchall()]
+        if unames:
+            qm = ",".join("?" * len(unames))
+            conn.execute(
+                "UPDATE iam_principal_v1 SET status='disabled',"
+                " visibility='history', archived_at=?,"
+                " disabled_reason='test_run_archived', updated_at=?"
+                " WHERE test_run_id=?", (now, now, namespace))
+            conn.execute(
+                "UPDATE iam_membership_v1 SET visibility='history',"
+                " archived_at=? WHERE principal_id IN (SELECT"
+                " principal_id FROM iam_principal_v1 WHERE"
+                " test_run_id=?)", (now, namespace))
+            conn.execute(
+                "DELETE FROM auth_sessions WHERE actor IN (" + qm + ")",
+                tuple(unames))
+        # 2e) SI4：BI 注册表归档（指令 8.2）：UAT metric 置 archived，
+        # 不再进入运营指标目录/看板/异常规则/Agent 分析。
+        conn.execute(
+            "UPDATE bi_metric_v1 SET status='archived', archived_at=?"
+            " WHERE test_run_id=?", (now, namespace))
         # node/timer/branch 随 run 归档（审计可见）
         for table in ("workflow_node_execution_v1", "workflow_timer_v1",
                       "workflow_branch_v1"):
@@ -221,6 +248,9 @@ class FixtureTestDataService:
             " WHERE test_run_id=?", (now, namespace))
         conn.commit()
         self._audit(actor, "test_data.archived", namespace, {})
+        if unames:
+            self._audit(actor, "test_data.identities_archived",
+                        namespace, {"principals": len(unames)})
         return {"namespace": namespace, "archived_at": now}
 
     def operational_residue_full(self) -> dict[str, int]:

@@ -3,9 +3,11 @@ import { useCallback, useEffect, useState } from "react";
 import { iamGet, iamPost } from "../api";
 import { EmptyState, ErrorState, Loading, PageHeader } from
   "../platform/components";
+import { CustomerPicker, useOperationalCustomer } from
+  "../platform/useOperationalCustomer";
 
 export default function UsageWorkbench() {
-  const [customer, setCustomer] = useState("uat-cust-a");
+  const { customer, setCustomer, options } = useOperationalCustomer();
   const [summary, setSummary] = useState<any | null>(null);
   const [rows, setRows] = useState<any[] | null>(null);
   const [budgets, setBudgets] = useState<any[] | null>(null);
@@ -36,8 +38,8 @@ export default function UsageWorkbench() {
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap",
           alignItems: "center" }}>
           <label className="v">客户</label>
-          <input value={customer} aria-label="客户"
-            onChange={(e) => setCustomer(e.target.value)} />
+          <CustomerPicker customer={customer} setCustomer={setCustomer}
+            options={options} ariaLabel="客户" />
           <button className="btn" onClick={load}>刷新</button>
           <a className="btn"
             href={`/api/v1/usage/export.csv?customer_id=${

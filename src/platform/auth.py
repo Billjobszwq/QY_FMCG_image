@@ -124,9 +124,15 @@ class AuthService:
             # session role 取首个成员角色（fail-closed 无角色则拒绝）。
             iam_row = None
             try:
-                from .iam import IAMService
-                iam_row = IAMService(self.store).verify_login(
-                    username, password)
+                from .iam import IAMError, IAMService
+                try:
+                    iam_row = IAMService(self.store).verify_login(
+                        username, password)
+                except IAMError as e:
+                    # SI4：归档身份拒绝必须携带稳定错误码上抛
+                    raise PermissionError(str(e))
+            except PermissionError:
+                raise
             except Exception:
                 iam_row = None
             if iam_row is None:

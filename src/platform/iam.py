@@ -144,27 +144,43 @@ class IAMService:
 
     def create_principal(self, *, kind: str, username: str,
                          display_name: str = "", password: str = "",
-                         created_by: str) -> dict:
+                         created_by: str,
+                         test_run_id: str = "") -> dict:
         if kind not in ("user", "service_account", "agent"):
             raise IAMError(f"身份类型非法: {kind}")
         if not username:
             raise IAMError("username 必填")
         if kind == "user" and not password:
             raise IAMError("user 身份必须设置口令")
+        # SI4：测试身份 provenance（唯一事实源，指令 7.1）：携带
+        # test_run 时先过 registry fail-closed，再同事务写入。
+        from .scope import ScopeResolver, ScopeViolation
+        if test_run_id:
+            ScopeResolver(self.store).assert_test_run_current(
+                test_run_id)
+            data_scope, origin = "uat_fixture", "uat"
+        else:
+            data_scope, origin = "operational", "manual"
         pw_hash = hash_password(password) if password else ""
         pid = _new_id("pr")
         try:
             self.store._conn.execute(
-                "INSERT INTO iam_principal_v1 (principal_id, kind, username,"
-                " display_name, password_hash, created_by, created_at,"
-                " updated_at) VALUES (?,?,?,?,?,?,?,?)",
-                (pid, kind, username, display_name or username, pw_hash,
-                 created_by, _now(), _now()))
+                "INSERT INTO iam_principal_v1 (principal_id, kind,"
+                " username, display_name, password_hash, created_by,"
+                " created_at, updated_at, data_scope, test_run_id,"
+                " origin) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+                (pid, kind, username, display_name or username,
+                 pw_hash, created_by, _now(), _now(), data_scope,
+                 test_run_id, origin))
             self.store._conn.commit()
+        except ScopeViolation:
+            raise
         except Exception:
             raise IAMError(f"username 已存在: {username}")
         self.audit(created_by, "iam.principal.created",
-                   f"principal:{username}", {"kind": kind})
+                   f"principal:{username}",
+                   {"kind": kind, "data_scope": data_scope,
+                    "test_run_id": test_run_id})
         return self.get_principal_by_username(username)
 
     def get_principal_by_username(self, username: str) -> dict | None:
@@ -173,16 +189,40 @@ class IAMService:
             (username,)).fetchone()
         return dict(row) if row else None
 
-    def list_principals(self) -> list[dict]:
-        rows = self.store._conn.execute(
-            "SELECT principal_id, kind, username, display_name, status,"
-            " created_at FROM iam_principal_v1"
-            " ORDER BY created_at").fetchall()
+    def list_principals(self, *,
+                        include_fixture: bool = False) -> list[dict]:
+        # SI4：运营账号列表默认排除 fixture/已归档身份；测试中心
+        # 口径（include_fixture）可见全历史。
+        if include_fixture:
+            sql = ("SELECT principal_id, kind, username, display_name,"
+                   " status, data_scope, test_run_id, origin,"
+                   " visibility, archived_at, created_at FROM"
+                   " iam_principal_v1 ORDER BY created_at")
+        else:
+            sql = ("SELECT principal_id, kind, username, display_name,"
+                   " status, data_scope, test_run_id, origin,"
+                   " visibility, archived_at, created_at FROM"
+                   " iam_principal_v1 WHERE COALESCE(data_scope,"
+                   "'operational')='operational' AND COALESCE("
+                   "visibility,'current')='current' ORDER BY"
+                   " created_at")
+        rows = self.store._conn.execute(sql).fetchall()
         return [dict(r) for r in rows]
 
     def verify_login(self, username: str, password: str) -> dict | None:
         p = self.get_principal_by_username(username)
-        if p is None or p["status"] != "active":
+        if p is None:
+            return None
+        # SI4：归档/禁用身份登录拒绝（稳定错误码 + 审计，指令 7.2）
+        if p.get("visibility") == "history" or (p.get("status")
+                                                == "disabled"):
+            self.audit(username, "iam.login.rejected",
+                       f"principal:{username}",
+                       {"code": "IDENTITY_ARCHIVED",
+                        "reason": p.get("disabled_reason") or ""})
+            raise IAMError("IDENTITY_ARCHIVED: 身份已随 Test Run 归档"
+                           "，禁止登录")
+        if p["status"] != "active":
             return None
         if p["kind"] not in ("user", "service_account"):
             return None  # agent 身份不得走口令登录
@@ -204,12 +244,16 @@ class IAMService:
             (role,)).fetchone()
         if role_row is None:
             raise IAMError(f"角色不存在: {role}")
+        # SI4：membership 继承 principal provenance（唯一事实源）。
         self.store._conn.execute(
             "INSERT OR IGNORE INTO iam_membership_v1 (principal_id,"
-            " role_id, customer_id, project_id, granted_by, granted_at)"
-            " VALUES (?,?,?,?,?,?)",
+            " role_id, customer_id, project_id, granted_by, granted_at,"
+            " data_scope, test_run_id)"
+            " VALUES (?,?,?,?,?,?,?,?)",
             (p["principal_id"], role_row["role_id"], customer_id,
-             project_id, granted_by, _now()))
+             project_id, granted_by, _now(),
+             p.get("data_scope") or "operational",
+             p.get("test_run_id") or ""))
         self.store._conn.commit()
         self.audit(granted_by, "iam.membership.granted",
                    f"principal:{username}",
@@ -219,11 +263,13 @@ class IAMService:
                 "customer_id": customer_id, "project_id": project_id}
 
     def roles_of(self, username: str) -> list[str]:
+        # SI4：已归档 membership 不参与运营授权（指令 7.2）。
         rows = self.store._conn.execute(
             "SELECT r.name FROM iam_membership_v1 m"
             " JOIN iam_principal_v1 p ON p.principal_id=m.principal_id"
             " JOIN iam_role_v1 r ON r.role_id=m.role_id"
-            " WHERE p.username=?", (username,)).fetchall()
+            " WHERE p.username=? AND COALESCE(m.visibility,'current')"
+            "='current'", (username,)).fetchall()
         return sorted({r["name"] for r in rows})
 
     def memberships_of(self, username: str) -> list[dict]:
@@ -257,7 +303,9 @@ class IAMService:
             " JOIN iam_principal_v1 p ON p.principal_id=m.principal_id"
             " JOIN iam_role_permission_v1 rp ON rp.role_id=m.role_id"
             " JOIN iam_permission_bundle_v1 b ON b.bundle_id=rp.bundle_id"
-            " WHERE p.username=? AND b.scope=?", (username, scope)).fetchall()
+            " WHERE p.username=? AND b.scope=? AND COALESCE("
+            "m.visibility,'current')='current'",
+            (username, scope)).fetchall()
         for r in rows:
             # customer_id 缺省 = 作用域级检查（列表类接口由调用方
             # 按自身作用域过滤）；指定时要求成员作用域匹配。

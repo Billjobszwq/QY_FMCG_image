@@ -21,6 +21,34 @@ class AnalyticsError(Exception):
     pass
 
 
+def bi_effective_counts(conn) -> dict[str, int]:
+    """SI4：数据产品 effective operational 计数（唯一口径，data-
+    products 端点与 Gate 3.1 对账共用；禁止物理总行数，fail-fast）。"""
+
+    def eff(table: str, *, cust_fixture_flag: bool = False) -> int:
+        cond = ("COALESCE(data_scope,'operational')='operational'"
+                " AND COALESCE(test_run_id,'')=''")
+        if cust_fixture_flag:
+            cond += " AND is_test_fixture=0"
+        return conn.execute(
+            f"SELECT count(*) c FROM {table} WHERE {cond}"
+        ).fetchone()["c"]
+
+    from .api.usage_api import _EFFECTIVE_OP
+    usage_eff = conn.execute(
+        "SELECT count(*) c FROM usage_event_v2 u WHERE "
+        + _EFFECTIVE_OP).fetchone()["c"]
+    return {"md_customer_v1": eff("md_customer_v1",
+                                   cust_fixture_flag=True),
+            "md_project_v1": eff("md_project_v1"),
+            "md_sku_v1": eff("md_sku_v1"),
+            "survey_response_v1": eff("survey_response_v1"),
+            "recognition_task": eff("recognition_task"),
+            "usage_event_v2": usage_eff,
+            "geo_address_v1": eff("geo_address_v1"),
+            "import_batch_v1": eff("import_batch_v1")}
+
+
 def _new_id(prefix: str) -> str:
     return f"{prefix}-" + uuid.uuid4().hex[:12]
 
@@ -57,9 +85,17 @@ class AnalyticsService:
                 (mid, name, json.dumps({"source": definition}), _now()))
         self.store._conn.commit()
 
-    def list_metrics(self) -> list[dict]:
-        rows = self.store._conn.execute(
-            "SELECT * FROM bi_metric_v1 ORDER BY metric_id").fetchall()
+    def list_metrics(self, *, include_fixture: bool = False
+                     ) -> list[dict]:
+        # SI4：运营指标目录默认排除 fixture/已归档（指令 8.2）。
+        if include_fixture:
+            sql = "SELECT * FROM bi_metric_v1 ORDER BY metric_id"
+        else:
+            sql = ("SELECT * FROM bi_metric_v1 WHERE COALESCE("
+                   "data_scope,'operational')='operational' AND"
+                   " COALESCE(status,'active')!='archived' ORDER BY"
+                   " metric_id")
+        rows = self.store._conn.execute(sql).fetchall()
         out = []
         for r in rows:
             d = dict(r)
@@ -70,18 +106,23 @@ class AnalyticsService:
     # ---- ABOSV3 T9：受限公式 DSL（AST 白名单，禁任意 SQL/代码） ----
 
     def create_computed_metric(self, *, metric_id: str, name: str,
-                               formula: str, actor: str) -> dict:
+                               formula: str, actor: str,
+                               data_scope: str = "operational",
+                               test_run_id: str = "") -> dict:
         refs = self._validate_formula(formula)
         if self.store._conn.execute(
                 "SELECT 1 FROM bi_metric_v1 WHERE metric_id=?",
                 (metric_id,)).fetchone():
             raise AnalyticsError(f"指标已存在: {metric_id}")
+        # SI4：指标与 provenance 同事务写入（指令 8.2）。
         self.store._conn.execute(
             "INSERT INTO bi_metric_v1 (metric_id, name, definition_json,"
-            " created_at) VALUES (?,?,?,?)",
+            " created_at, data_scope, test_run_id, status, created_by)"
+            " VALUES (?,?,?,?,?,?,?,?)",
             (metric_id, name,
              json.dumps({"source": "computed", "formula": formula,
-                         "refs": refs, "created_by": actor}), _now()))
+                         "refs": refs, "created_by": actor}), _now(),
+             data_scope, test_run_id, "active", actor))
         self.store._conn.commit()
         return {"metric_id": metric_id, "formula": formula,
                 "refs": refs}

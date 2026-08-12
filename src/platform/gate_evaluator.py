@@ -27,6 +27,14 @@ REQUIRED_WORKFLOW_NODE_TYPES = ("trigger", "transform", "condition",
                                 "human_approval", "agent")
 CAPABILITY_WORKFLOW_NODE_TYPES = ("model", "command")
 
+# SI4：浏览器验收必须覆盖的 12 个一级工作台（少一页 Gate 不过）。
+REQUIRED_BROWSER_ROUTES = (
+    "home", "data/import", "survey/design", "geo/addresses",
+    "vision/recognize", "analytics/reports", "workflow/studio",
+    "iam/accounts", "master/customers", "finance/contracts", "help",
+    "status",
+)
+
 
 def evaluate_gate(*, p0_open: int, p1_open: int, rate_limit_ok: bool,
                   scenarios_ok: bool, parallel_ok: bool,
@@ -362,6 +370,67 @@ def evaluate_gate_from_evidence(*, store=None,
                 f"coverage={cov['coverage']}%"
                 f" missing={cov['missing'][:5]}",
                 "BLOCKED_BY_SCOPE_REGISTRY")
+            # SI4 Gate 3.1：IAM 测试身份（指令 11.1）
+            act_fx = conn.execute(
+                "SELECT count(*) c FROM iam_principal_v1 WHERE"
+                " status='active' AND COALESCE(data_scope,"
+                "'operational') IN ('uat_fixture','demo_fixture')"
+            ).fetchone()["c"]
+            chk("iam_active_fixture_principal_zero", act_fx == 0,
+                str(act_fx), "BLOCKED_BY_IAM_IDENTITY")
+            op_fx_mem = conn.execute(
+                "SELECT count(*) c FROM iam_membership_v1 WHERE"
+                " COALESCE(visibility,'current')='current' AND"
+                " COALESCE(data_scope,'operational') IN"
+                " ('uat_fixture','demo_fixture')").fetchone()["c"]
+            chk("iam_operational_fixture_membership_zero",
+                op_fx_mem == 0, str(op_fx_mem),
+                "BLOCKED_BY_IAM_IDENTITY")
+            # SI4 Gate 3.1：BI 注册表（指令 11.2）
+            uat_metric_op = conn.execute(
+                "SELECT count(*) c FROM bi_metric_v1 WHERE"
+                " COALESCE(data_scope,'operational')='operational'"
+                " AND COALESCE(test_run_id,'')!=''").fetchone()["c"]
+            chk("uat_metric_operational_zero", uat_metric_op == 0,
+                str(uat_metric_op), "BLOCKED_BY_BI_EFFECTIVE")
+            metric_not_archived = conn.execute(
+                "SELECT count(*) c FROM bi_metric_v1 WHERE"
+                " COALESCE(test_run_id,'')!='' AND COALESCE(status,"
+                "'active')!='archived' AND test_run_id IN (SELECT"
+                " test_run_id FROM uat_test_run_v1 WHERE status="
+                "'archived')").fetchone()["c"]
+            chk("uat_metric_archived_consistent",
+                metric_not_archived == 0, str(metric_not_archived),
+                "BLOCKED_BY_BI_EFFECTIVE")
+            uat_dash_op = conn.execute(
+                "SELECT count(*) c FROM bi_dashboard_v1 WHERE"
+                " COALESCE(data_scope,'operational')='operational'"
+                " AND COALESCE(test_run_id,'')!=''").fetchone()["c"]
+            chk("uat_dashboard_operational_zero", uat_dash_op == 0,
+                str(uat_dash_op), "BLOCKED_BY_BI_EFFECTIVE")
+            # SI4 Gate 3.1：data-products effective 口径证明
+            # （物理存在 fixture 而 effective 计数排除之；与运营
+            # Domain API 对账由红测试 r06 在端点层覆盖）。
+            try:
+                from .analytics import bi_effective_counts
+                effc = bi_effective_counts(conn)
+                phys_cust = conn.execute(
+                    "SELECT count(*) c FROM md_customer_v1"
+                ).fetchone()["c"]
+                chk("data_products_effective_basis",
+                    effc["md_customer_v1"] <= phys_cust
+                    and effc["md_customer_v1"] == conn.execute(
+                        "SELECT count(*) c FROM md_customer_v1 WHERE"
+                        " COALESCE(data_scope,'operational')"
+                        "='operational' AND is_test_fixture=0"
+                    ).fetchone()["c"],
+                    f"effective={effc['md_customer_v1']}"
+                    f" physical={phys_cust}",
+                    "BLOCKED_BY_BI_EFFECTIVE")
+            except Exception as e:  # noqa: BLE001
+                chk("data_products_effective_basis", False,
+                    f"effective 计数不可用: {e}",
+                    "BLOCKED_BY_BI_EFFECTIVE")
         except Exception as e:
             chk("scope_lineage_scanned", False, f"扫描异常: {e}",
                 "BLOCKED_BY_SCOPE_LINEAGE")
@@ -551,6 +620,18 @@ def evaluate_gate_from_evidence(*, store=None,
         need = {"1440", "1280", "1024", "768"}
         chk("browser_viewports_covered", need.issubset(widths),
             f"covered={sorted(widths)}", "BLOCKED_BY_GATE_EVIDENCE")
+        # SI4：浏览器证据必须覆盖 12 个一级工作台（指令 11.4；
+        # 少一页即 Gate 不过，证据面必须等于报告表述）。
+        covered_routes = set()
+        for p in (brow.get("pages") or []):
+            rt = str(p.get("route", "")).lstrip("/#/").strip("/")
+            covered_routes.add(rt)
+        missing_routes = [r for r in REQUIRED_BROWSER_ROUTES
+                          if r not in covered_routes]
+        chk("browser_routes_covered", not missing_routes,
+            f"covered={len(covered_routes)}"
+            f" missing={missing_routes[:6]}",
+            "BLOCKED_BY_BROWSER_SEMANTICS")
         # SI2 T7：实际对象 ID/文本必须与预期一致（不得只看截图存在）；
         # 无语义断言页面 = 证据缺失（GATE_EVIDENCE），断言失败 =
         # 语义不一致（BROWSER_SEMANTICS）。
@@ -588,7 +669,12 @@ def evaluate_gate_from_evidence(*, store=None,
         gate = "BLOCKED_BY_GATE_EVIDENCE"
         for prio in (STALE, "BLOCKED_BY_P0", "BLOCKED_BY_P1",
                      "BLOCKED_BY_BROWSER_SEMANTICS",
+                     "BLOCKED_BY_IAM_IDENTITY",
+                     "BLOCKED_BY_BI_EFFECTIVE",
+                     "BLOCKED_BY_FINANCE_CONTEXT",
+                     "BLOCKED_BY_OPERATIONAL_FIXTURE_SURFACE",
                      "BLOCKED_BY_SCOPE_LINEAGE",
+                     "BLOCKED_BY_SCOPE_REGISTRY",
                      "BLOCKED_BY_UAT_FIXTURE_PROJECTION",
                      "BLOCKED_BY_UAT_FIXTURE_POLLUTION",
                      "BLOCKED_BY_STATE_PROJECTION"):

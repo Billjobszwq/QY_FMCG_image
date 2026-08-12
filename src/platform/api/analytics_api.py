@@ -44,6 +44,7 @@ class ComputedMetricBody(BaseModel):
     metric_id: str
     name: str
     formula: str
+    test_run_id: str = ""   # SI4：受信 UAT 路径
 
 
 class DashboardBody(BaseModel):
@@ -51,6 +52,7 @@ class DashboardBody(BaseModel):
     customer_id: str = ""
     widgets: list = []
     filters: dict = {}
+    test_run_id: str = ""   # SI4：受信 UAT 路径
 
 
 def _platform(iam: IAMService, actor: str, session_role: str) -> bool:
@@ -86,10 +88,20 @@ def create_analytics_router(store: Any, svc: AnalyticsService,
     def computed_metric(body: ComputedMetricBody, request: Request) -> dict:
         p = require_principal(auth, request, csrf=True)
         _guard(iam, p["actor"], p["role"])
+        # SI4：metric provenance（受信 test_run 校验 + 同事务写入）。
+        from ..scope import ScopeResolver, ScopeViolation
+        try:
+            mscope = ScopeResolver(store).resolve(
+                test_run_id=getattr(body, "test_run_id", "") or "",
+                actor_id=p["actor"], source="api")
+        except ScopeViolation as e:
+            raise HTTPException(409, str(e))
         try:
             return svc.create_computed_metric(
                 metric_id=body.metric_id, name=body.name,
-                formula=body.formula, actor=p["actor"])
+                formula=body.formula, actor=p["actor"],
+                data_scope=mscope.data_scope,
+                test_run_id=mscope.test_run_id)
         except AnalyticsError as e:
             raise HTTPException(409, str(e))
 
@@ -122,38 +134,33 @@ def create_analytics_router(store: Any, svc: AnalyticsService,
 
     @router.get("/api/v1/analytics/data-products")
     def data_products(request: Request) -> dict:
-        """数据产品与血缘（事实表计数 + 导入批次溯源）。"""
+        """数据产品与血缘（SI4：effective operational 口径，禁止
+        物理总行数；fail-fast 不吞异常；与运营 Domain API 对账）。"""
         p = require_principal(auth, request, csrf=False)
-        conn = store._conn
-
-        def count(table: str) -> int:
-            try:
-                return conn.execute(
-                    f"SELECT count(*) c FROM {table}").fetchone()["c"]
-            except Exception:
-                return 0
-
+        # SI4：唯一 effective 口径（与 Gate 3.1 对账共用）。
+        from ..analytics import bi_effective_counts
+        effc = bi_effective_counts(store._conn)
         products = [
             {"product": "master.customers_v1", "rows":
-                count("md_customer_v1"), "lineage": "Import Center → 客户库"},
+                effc["md_customer_v1"],
+             "lineage": "Import Center → 客户库"},
             {"product": "master.projects_v1", "rows":
-                count("md_project_v1"), "lineage": "Import Center → 项目库"},
-            {"product": "master.skus_v1", "rows": count("md_sku_v1"),
+                effc["md_project_v1"], "lineage": "Import Center → 项目库"},
+            {"product": "master.skus_v1", "rows": effc["md_sku_v1"],
              "lineage": "Import Center → SKU 库"},
             {"product": "survey.responses_v1", "rows":
-                count("survey_response_v1"),
+                effc["survey_response_v1"],
              "lineage": "问卷发布 → 分配 → 填写 → 报表"},
             {"product": "vision.recognition_tasks", "rows":
-                count("recognition_task"),
+                effc["recognition_task"],
              "lineage": "五入口 → Command Gateway → 任务台账"},
-            {"product": "usage.event_v2", "rows":
-                count("usage_event_v2"),
-             "lineage": "运行节点 → 不可变账本 → 账单"},
+            {"product": "usage.event_v2", "rows": effc["usage_event_v2"],
+             "lineage": "运行节点 → 不可变账本 → 账单（effective）"},
             {"product": "geo.addresses_v1", "rows":
-                count("geo_address_v1"),
+                effc["geo_address_v1"],
              "lineage": "地址导入/地理编码 → 确认 → 路线"},
             {"product": "import.batches_v1", "rows":
-                count("import_batch_v1"),
+                effc["import_batch_v1"],
              "lineage": "模板 → 上传 → dry-run → 提交 → 证据"},
         ]
         return {"count": len(products), "products": products}
@@ -164,29 +171,44 @@ def create_analytics_router(store: Any, svc: AnalyticsService,
         import uuid as _uuid
         p = require_principal(auth, request, csrf=True)
         _guard(iam, p["actor"], p["role"], body.customer_id)
+        # SI4：看板继承调用方 scope（受信 test_run 校验）。
+        from ..scope import ScopeResolver, ScopeViolation
+        try:
+            dscope = ScopeResolver(store).resolve(
+                test_run_id=body.test_run_id,
+                customer_id=body.customer_id, actor_id=p["actor"],
+                source="api")
+        except ScopeViolation as e:
+            raise HTTPException(409, str(e))
         did = "dash-" + _uuid.uuid4().hex[:10]
         from datetime import datetime, timezone
         now = datetime.now(timezone.utc).isoformat()
         store._conn.execute(
             "INSERT INTO bi_dashboard_v1 (dashboard_id, name,"
             " customer_id, widgets_json, filters_json, status,"
-            " created_by, created_at, updated_at)"
-            " VALUES (?,?,?,?,?,?,?,?,?)",
+            " created_by, created_at, updated_at, data_scope,"
+            " test_run_id)"
+            " VALUES (?,?,?,?,?,?,?,?,?,?,?)",
             (did, body.name, body.customer_id,
              _json.dumps(body.widgets, ensure_ascii=False),
              _json.dumps(body.filters, ensure_ascii=False), "draft",
-             p["actor"], now, now))
+             p["actor"], now, now, dscope.data_scope,
+             dscope.test_run_id))
         store._conn.commit()
         return {"dashboard_id": did, "name": body.name,
                 "status": "draft"}
 
     @router.get("/api/v1/analytics/dashboards")
-    def list_dashboards(request: Request) -> dict:
+    def list_dashboards(request: Request,
+                        include_fixture: bool = False) -> dict:
         import json as _json
         p = require_principal(auth, request, csrf=False)
+        # SI4：运营看板默认排除 fixture（指令 8.3）。
+        where = "" if include_fixture else (
+            " WHERE COALESCE(data_scope,'operational')='operational'")
         rows = store._conn.execute(
-            "SELECT * FROM bi_dashboard_v1 ORDER BY updated_at DESC"
-            " LIMIT 100").fetchall()
+            "SELECT * FROM bi_dashboard_v1" + where +
+            " ORDER BY updated_at DESC LIMIT 100").fetchall()
         out = []
         for r in rows:
             d = dict(r)

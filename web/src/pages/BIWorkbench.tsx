@@ -1,6 +1,8 @@
 // ABOSV3 T9：BI 工作台 —— 数据产品/受限公式指标/下钻/ECharts
 // Dashboard 画布（真实 API 求值，禁静态假图）。
 import { useCallback, useEffect, useRef, useState } from "react";
+import { CustomerPicker, useOperationalCustomer } from
+  "../platform/useOperationalCustomer";
 // SI3 T10（指令 11.2）：echarts 模块化按需引入（只用 bar/line/pie），
 // 不再整包引入全量 echarts。
 import * as echarts from "echarts/core";
@@ -84,7 +86,8 @@ function ChartWidget({ widget, customerId, onDrill }: {
 export default function BIWorkbench() {
   const [metrics, setMetrics] = useState<any[]>([]);
   const [products, setProducts] = useState<any[] | null>(null);
-  const [customer, setCustomer] = useState("uat-cust-a");
+  const { customer, setCustomer, options: custOptions } =
+    useOperationalCustomer();
   const [dashboards, setDashboards] = useState<DashboardRow[]>([]);
   const [selDash, setSelDash] = useState<string>("");
   const [drill, setDrill] = useState<any | null>(null);
@@ -142,8 +145,8 @@ export default function BIWorkbench() {
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap",
           alignItems: "center" }}>
           <label className="v">客户筛选</label>
-          <input value={customer} aria-label="客户筛选"
-            onChange={(e) => setCustomer(e.target.value)} />
+          <CustomerPicker customer={customer} setCustomer={setCustomer}
+            options={[...custOptions]} ariaLabel="客户筛选" />
           <select value={selDash} aria-label="选择看板"
             onChange={(e) => setSelDash(e.target.value)}>
             <option value="">选择看板…</option>

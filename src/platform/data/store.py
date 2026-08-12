@@ -2194,6 +2194,34 @@ ALTER TABLE geofence_v1 ADD COLUMN data_scope TEXT NOT NULL DEFAULT 'operational
 ALTER TABLE geofence_v1 ADD COLUMN test_run_id TEXT NOT NULL DEFAULT '';
 """
 
+# SI4 T2：IAM 测试身份生命周期（追加式，不动历史行）。
+_M057 = """
+ALTER TABLE iam_principal_v1 ADD COLUMN data_scope TEXT NOT NULL DEFAULT 'operational';
+ALTER TABLE iam_principal_v1 ADD COLUMN test_run_id TEXT NOT NULL DEFAULT '';
+ALTER TABLE iam_principal_v1 ADD COLUMN origin TEXT NOT NULL DEFAULT 'manual';
+ALTER TABLE iam_principal_v1 ADD COLUMN visibility TEXT NOT NULL DEFAULT 'current';
+ALTER TABLE iam_principal_v1 ADD COLUMN archived_at TEXT NOT NULL DEFAULT '';
+ALTER TABLE iam_principal_v1 ADD COLUMN disabled_reason TEXT NOT NULL DEFAULT '';
+ALTER TABLE iam_membership_v1 ADD COLUMN data_scope TEXT NOT NULL DEFAULT 'operational';
+ALTER TABLE iam_membership_v1 ADD COLUMN test_run_id TEXT NOT NULL DEFAULT '';
+ALTER TABLE iam_membership_v1 ADD COLUMN visibility TEXT NOT NULL DEFAULT 'current';
+ALTER TABLE iam_membership_v1 ADD COLUMN archived_at TEXT NOT NULL DEFAULT '';
+"""
+
+# SI4 T3：BI 注册表生命周期 + import 批次 scope（防分类逃逸）。
+_M058 = """
+ALTER TABLE bi_metric_v1 ADD COLUMN data_scope TEXT NOT NULL DEFAULT 'operational';
+ALTER TABLE bi_metric_v1 ADD COLUMN test_run_id TEXT NOT NULL DEFAULT '';
+ALTER TABLE bi_metric_v1 ADD COLUMN status TEXT NOT NULL DEFAULT 'active';
+ALTER TABLE bi_metric_v1 ADD COLUMN archived_at TEXT NOT NULL DEFAULT '';
+ALTER TABLE bi_metric_v1 ADD COLUMN created_by TEXT NOT NULL DEFAULT '';
+ALTER TABLE bi_metric_v1 ADD COLUMN customer_id TEXT NOT NULL DEFAULT '';
+ALTER TABLE bi_dashboard_v1 ADD COLUMN data_scope TEXT NOT NULL DEFAULT 'operational';
+ALTER TABLE bi_dashboard_v1 ADD COLUMN test_run_id TEXT NOT NULL DEFAULT '';
+ALTER TABLE import_batch_v1 ADD COLUMN data_scope TEXT NOT NULL DEFAULT 'operational';
+ALTER TABLE import_batch_v1 ADD COLUMN test_run_id TEXT NOT NULL DEFAULT '';
+"""
+
 MIGRATIONS: tuple[tuple[str, str], ...] = (
     ("001_platform_init", _M001),
     ("002_labeling_inbox", _M002),
@@ -2251,6 +2279,8 @@ MIGRATIONS: tuple[tuple[str, str], ...] = (
     ("054_scope_attribution_ledger_v1", _M054),
     ("055_finance_scope_v1", _M055),
     ("056_geofence_scope_v1", _M056),
+    ("057_iam_identity_lifecycle_v1", _M057),
+    ("058_bi_registry_lifecycle_v1", _M058),
 )
 
 

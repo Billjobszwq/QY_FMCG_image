@@ -6,6 +6,8 @@ import { useEffect } from "react";
 import { iamGet, iamPost } from "../api";
 import { EmptyState, ErrorState, Loading, PageHeader }
   from "../platform/components";
+import { CustomerPicker, useOperationalCustomer } from
+  "../platform/useOperationalCustomer";
 
 function useLoad<T>(path: string | null): {
   data: T | null; err: string | null; reload: () => void;
@@ -23,7 +25,8 @@ function useLoad<T>(path: string | null): {
 
 // ---- 1. 合同与价目卡 ----
 export function FinanceContracts() {
-  const [cid, setCid] = useState("demo-cust-a");
+  const { customer: cid, setCustomer: setCid, options } =
+    useOperationalCustomer();
   const contracts = useLoad<any>(
     cid ? `finance/contracts?customer_id=${cid}` : null);
   const rc = useLoad<any>("finance/rate-cards/rc_standard");
@@ -34,8 +37,8 @@ export function FinanceContracts() {
         desc="rate card 版本化；价格变更仅限平台角色；历史账单不重算" />
       <div className="card">
         <div style={{ display: "flex", gap: 8 }}>
-          <input placeholder="customer_id" aria-label="客户" value={cid}
-            onChange={(e) => setCid(e.target.value)} />
+          <CustomerPicker customer={cid} setCustomer={setCid}
+            options={options} ariaLabel="客户" />
           <button className="btn small primary" onClick={async () => {
             try {
               await iamPost("finance/contracts",
@@ -93,7 +96,8 @@ export function FinanceContracts() {
 
 // ---- 2. 账单与结算 ----
 export function FinanceInvoices() {
-  const [cid, setCid] = useState("demo-cust-a");
+  const { customer: cid, setCustomer: setCid, options } =
+    useOperationalCustomer();
   const [period, setPeriod] = useState(() =>
     new Date().toISOString().slice(0, 7));
   const invs = useLoad<any>(
@@ -106,8 +110,8 @@ export function FinanceInvoices() {
         desc="仅从 immutable Usage 生成；每行下钻 usage/run/node/证据；调整 append-only" />
       <div className="card">
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-          <input placeholder="customer_id" aria-label="客户" value={cid}
-            onChange={(e) => setCid(e.target.value)} />
+          <CustomerPicker customer={cid} setCustomer={setCid}
+            options={options} ariaLabel="客户" />
           <input placeholder="期间 YYYY-MM" aria-label="期间"
             value={period}
             onChange={(e) => setPeriod(e.target.value)} />

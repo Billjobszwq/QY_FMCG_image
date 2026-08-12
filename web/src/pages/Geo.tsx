@@ -4,6 +4,8 @@ import { useEffect, useState } from "react";
 import { iamGet, iamPost } from "../api";
 import { EmptyState, ErrorState, Loading, PageHeader }
   from "../platform/components";
+import { CustomerPicker, useOperationalCustomer } from
+  "../platform/useOperationalCustomer";
 import { GeoMapPanel } from "./GeoMap";
 
 function useLoad<T>(path: string | null): {
@@ -70,7 +72,8 @@ function ManualCoordsForm({ addressId, onDone }: {
 
 // ---- 1. 地址与地理编码 ----
 export function GeoAddresses() {
-  const [cid, setCid] = useState("demo-cust-a");
+  const { customer: cid, setCustomer: setCid, options } =
+    useOperationalCustomer();
   const addrs = useLoad<any>(cid ? `geo/addresses?customer_id=${cid}`
     : null);
   const [raw, setRaw] = useState("");
@@ -83,8 +86,8 @@ export function GeoAddresses() {
       <GeoMapPanel customerId={cid} />
       <div className="card">
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-          <input placeholder="customer_id" aria-label="客户" value={cid}
-            onChange={(e) => setCid(e.target.value)} />
+          <CustomerPicker customer={cid} setCustomer={setCid}
+            options={options} ariaLabel="客户" />
           <input style={{ flex: 1 }} placeholder="原始地址（含 [geo] 标记=高置信样例）"
             aria-label="原始地址" value={raw}
             onChange={(e) => setRaw(e.target.value)} />
@@ -156,7 +159,8 @@ export function GeoAddresses() {
 
 // ---- 2. 任务与路线 ----
 export function GeoField() {
-  const [cid, setCid] = useState("demo-cust-a");
+  const { customer: cid, setCustomer: setCid, options } =
+    useOperationalCustomer();
   const tasks = useLoad<any>(cid ? `geo/tasks?customer_id=${cid}` : null);
   const plans = useLoad<any>(cid ? `geo/plans?customer_id=${cid}` : null);
   const addrs = useLoad<any>(cid ? `geo/addresses?customer_id=${cid}`
@@ -173,8 +177,8 @@ export function GeoField() {
         desc="VRP 最近邻 + 约束（max_km/多项目硬隔离）；未分配原因显式留痕" />
       <div className="card">
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-          <input placeholder="customer_id" aria-label="客户" value={cid}
-            onChange={(e) => setCid(e.target.value)} />
+          <CustomerPicker customer={cid} setCustomer={setCid}
+            options={options} ariaLabel="客户" />
         </div>
         <h3 style={{ marginTop: 8 }}>新建外勤任务</h3>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
@@ -302,7 +306,8 @@ function DispatchBtn({ taskId, emps, planId, onMsg }: {
 
 // ---- 3. 围栏与到店 ----
 export function GeoVisit() {
-  const [cid, setCid] = useState("demo-cust-a");
+  const { customer: cid, setCustomer: setCid, options } =
+    useOperationalCustomer();
   const fences = useLoad<any>(cid ? `geo/fences?customer_id=${cid}` : null);
   const tasks = useLoad<any>(cid ? `geo/tasks?customer_id=${cid}` : null);
   const [form, setForm] = useState({ name: "", lat: "31.0", lng: "121.0",
@@ -314,8 +319,8 @@ export function GeoVisit() {
         desc="围栏 enter 事件（半径+精度校验）；门头必拍；差旅费随完成生成" />
       <div className="card">
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-          <input placeholder="customer_id" aria-label="客户" value={cid}
-            onChange={(e) => setCid(e.target.value)} />
+          <CustomerPicker customer={cid} setCustomer={setCid}
+            options={options} ariaLabel="客户" />
         </div>
         <h3 style={{ marginTop: 8 }}>新建围栏</h3>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>

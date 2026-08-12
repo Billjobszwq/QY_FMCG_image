@@ -465,6 +465,136 @@ SCOPE_REGISTRY: dict[str, dict[str, Any]] = {
 }
 
 
+# --------------------------------------------------------------------
+# SI4 T5：对象生命周期语义层（防分类逃逸，指令第十节）。
+# “表已登记”≠“UAT 数据不会进入运营平面”：每张表还必须声明
+# UAT 可创建性/provenance/归档/登录授权/计费/BI/浏览器暴露面。
+# --------------------------------------------------------------------
+
+LIFECYCLE_KEYS = ("uat_creatable", "provenance", "archive_rule",
+                  "login_impact", "billing_impact", "bi_impact",
+                  "browser_surface")
+
+_DEFAULT_LIFECYCLE_BY_CATEGORY = {
+    "scoped_business_object": {
+        "uat_creatable": "yes",
+        "provenance": "data_scope/test_run_id 列（同事务写入）",
+        "archive_rule": "archive_namespace 按 test_run_id 结构化归档",
+        "login_impact": "none", "billing_impact": "via usage 父链",
+        "bi_impact": "计入 data-products effective 口径",
+        "browser_surface": "运营列表默认排除 fixture"},
+    "immutable_ledger": {
+        "uat_creatable": "yes",
+        "provenance": "自身 scope 列 ⊕ attribution ledger ⊕ 父链",
+        "archive_rule": "不改原行；attribution 追加式绑定",
+        "login_impact": "none",
+        "billing_impact": "effective 口径排除 fixture 后才可计费",
+        "bi_impact": "usage effective 计数",
+        "browser_surface": "仅测试中心可下钻 fixture 账本"},
+    "global_configuration": {
+        "uat_creatable": "restricted",
+        "provenance": "创建者/来源必须可追踪（created_by/audit）",
+        "archive_rule": "UAT 创建的配置必须可归档且不参与运营执行",
+        "login_impact": "按表声明", "billing_impact": "按表声明",
+        "bi_impact": "按表声明",
+        "browser_surface": "运营页默认不暴露 UAT 配置"},
+    "reference_registry": {
+        "uat_creatable": "restricted",
+        "provenance": "data_scope/test_run_id/status（迁移 058 起）",
+        "archive_rule": "UAT 创建的引用对象归档后不进运营目录",
+        "login_impact": "none", "billing_impact": "按表声明",
+        "bi_impact": "metric/dashboard 不进运营 BI",
+        "browser_surface": "运营目录默认排除 fixture"},
+    "derived_projection": {
+        "uat_creatable": "derived", "provenance": "随源表",
+        "archive_rule": "重建时按 effective 口径过滤",
+        "login_impact": "none", "billing_impact": "none",
+        "bi_impact": "none", "browser_surface": "同源表"},
+    "cache_runtime": {
+        "uat_creatable": "runtime", "provenance": "actor 关联",
+        "archive_rule": "Test Run 归档时失效/清理（运行时态）",
+        "login_impact": "会话失效", "billing_impact": "none",
+        "bi_impact": "none", "browser_surface": "不暴露"},
+    "audit_only": {
+        "uat_creatable": "append-only", "provenance": "actor/detail 自带",
+        "archive_rule": "不归档不删除（审计面）",
+        "login_impact": "登录拒绝写审计", "billing_impact": "none",
+        "bi_impact": "none", "browser_surface": "仅审计/测试中心"},
+}
+
+_SPECIFIC_LIFECYCLE = {
+    "iam_principal_v1": {
+        "uat_creatable": "yes（受信 test_run 路径）",
+        "provenance": "data_scope/test_run_id/origin/visibility 列",
+        "archive_rule": "Test Run 归档同事务：disabled+history",
+        "login_impact": "归档身份拒绝登录（IDENTITY_ARCHIVED）",
+        "billing_impact": "none", "bi_impact": "none",
+        "browser_surface": "运营账号页默认排除 fixture"},
+    "iam_membership_v1": {
+        "uat_creatable": "yes（继承 principal provenance）",
+        "provenance": "data_scope/test_run_id/visibility 列",
+        "archive_rule": "Test Run 归档同事务：visibility=history",
+        "login_impact": "归档 membership 不参与授权/权限矩阵",
+        "billing_impact": "none", "bi_impact": "none",
+        "browser_surface": "运营授权页默认排除 fixture"},
+    "auth_sessions": {
+        "uat_creatable": "runtime", "provenance": "actor 关联",
+        "archive_rule": "Test Run 归档时全部注销（安全失效）",
+        "login_impact": "会话失效后不得继续鉴权",
+        "billing_impact": "none", "bi_impact": "none",
+        "browser_surface": "不暴露"},
+    "bi_metric_v1": {
+        "uat_creatable": "yes（受信 test_run 路径）",
+        "provenance": "data_scope/test_run_id/status/created_by 列",
+        "archive_rule": "Test Run 归档：status=archived",
+        "login_impact": "none",
+        "billing_impact": "none",
+        "bi_impact": "不进运营指标目录/看板/异常规则/Agent 分析",
+        "browser_surface": "运营 BI 页默认排除 fixture"},
+    "bi_dashboard_v1": {
+        "uat_creatable": "yes（受信 test_run 路径）",
+        "provenance": "data_scope/test_run_id 列",
+        "archive_rule": "archive_namespace 按 test_run_id 归档",
+        "login_impact": "none", "billing_impact": "none",
+        "bi_impact": "不进运营看板列表",
+        "browser_surface": "运营 BI 页默认排除 fixture"},
+    "import_batch_v1": {
+        "uat_creatable": "yes",
+        "provenance": "data_scope/test_run_id 列（迁移 058）",
+        "archive_rule": "archive_namespace 按 test_run_id 归档",
+        "login_impact": "none",
+        "billing_impact": "none",
+        "bi_impact": "data-products effective 计数",
+        "browser_surface": "运营导入页默认排除 fixture"},
+    "fin_rate_card_v1": {
+        "uat_creatable": "restricted（平台配置）",
+        "provenance": "created_by/audit",
+        "archive_rule": "UAT 创建的价目卡不得参与运营计费",
+        "login_impact": "none",
+        "billing_impact": "计费必须只用 operational 价目卡",
+        "bi_impact": "none", "browser_surface": "财务页"},
+    "agent_definition_v1": {
+        "uat_creatable": "restricted（平台种子）",
+        "provenance": "created_by",
+        "archive_rule": "UAT 不得创建持久 Agent 定义",
+        "login_impact": "none", "billing_impact": "none",
+        "bi_impact": "Agent BI 工具继承调用方 scope",
+        "browser_surface": "Agent 中心"},
+    "platform_flag": {
+        "uat_creatable": "restricted（平台配置）",
+        "provenance": "创建审计",
+        "archive_rule": "UAT 创建的特性开关不得参与运营执行",
+        "login_impact": "none", "billing_impact": "none",
+        "bi_impact": "none", "browser_surface": "系统管理"},
+}
+
+for _t, _e in SCOPE_REGISTRY.items():
+    _base = dict(_DEFAULT_LIFECYCLE_BY_CATEGORY[_e["category"]])
+    _base.update(_SPECIFIC_LIFECYCLE.get(_t, {}))
+    for _k, _v in _base.items():
+        _e.setdefault(_k, _v)
+
+
 def registry_coverage(conn) -> dict[str, Any]:
     """覆盖率对账：sqlite_master 全表必须 100% 登记（剔除 sqlite_*
     内部表）；返回 missing/unknown/coverage。fail-fast（异常上抛）。"""

@@ -136,7 +136,7 @@ class TestIamIdentityLifecycle:
         assert row["status"] != "active", "归档后 principal 必须禁用"
         assert row["visibility"] == "history"
         mem = env["store"]._conn.execute(
-            "SELECT visibility FROM iam_membership_v1 m JOIN"
+            "SELECT m.visibility FROM iam_membership_v1 m JOIN"
             " iam_principal_v1 p ON p.principal_id=m.principal_id"
             " WHERE p.username=?", (f"{NS}_pm",)).fetchone()
         assert mem is None or mem["visibility"] == "history"
@@ -219,7 +219,7 @@ class TestBiEffectiveOperational:
                                json={"metric_id": f"{NS}_rate",
                                      "name": f"SI4 自检率 {NS}",
                                      "formula":
-                                         "survey:submitted:count",
+                                         "recognition.tasks * 1",
                                      "test_run_id": NS})
         assert r.status_code == 200, r.text
         row = env["store"]._conn.execute(
