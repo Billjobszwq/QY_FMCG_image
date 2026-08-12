@@ -247,6 +247,8 @@ def create_app(
             analytics=analytics_service, gateway=gateway)
         # T5：agent 节点调用指定 Agent；wait timer 后台轮询恢复
         wf_service.agent_runtime = agent_runtime
+        # UFC T8：异常追问链端点按 request 时惰性读取 runtime
+        app.state.agent_runtime = agent_runtime
 
         # ABOSV3 T8：standard profile 受控切换/回滚（审计+fail-closed）
         from src.platform.standard_profile import StandardProfileService

@@ -297,11 +297,50 @@ def create_analytics_router(store: Any, svc: AnalyticsService,
         p = require_principal(auth, request, csrf=True)
         _guard(iam, p["actor"], p["role"], body.customer_id)
         try:
-            return svc.check_anomaly(
+            out = svc.check_anomaly(
                 metric_id=body.metric_id, customer_id=body.customer_id,
                 op=body.op, threshold=body.threshold, actor=p["actor"])
         except AnalyticsError as e:
             raise HTTPException(409, str(e))
+        # UFC T8：命中异常 → Analytics Agent 生成追问（带 run/work/
+        # evidence 链）；人工回答前不得标 resolved。
+        if out.get("hit") and out.get("anomaly"):
+            ano = out["anomaly"]
+            rt = getattr(request.app.state, "agent_runtime", None)
+            question = ""
+            agent_run = ""
+            if rt is not None:
+                try:
+                    resp = rt.invoke(
+                        "analytics_agent",
+                        f"指标 {body.metric_id} 异常"
+                        f"（observed={out['observed']}，阈值"
+                        f" {body.threshold}），请生成追问并查询相关指标",
+                        actor=p["actor"], customer_id=body.customer_id)
+                    question = str(resp.get("message", ""))[:200]
+                    agent_run = resp.get("business_run_id", "")
+                except Exception as ae:
+                    question = (f"指标 {body.metric_id} 异常，请说明"
+                                f"原因（Agent 生成失败：{str(ae)[:60]}）")
+            if not question:
+                question = (f"指标 {body.metric_id} 观测值"
+                            f" {out['observed']} 超过阈值"
+                            f" {body.threshold}，请说明原因")
+            store._conn.execute(
+                "UPDATE bi_anomaly_v1 SET follow_up_question=?,"
+                " followup_agent_run_id=? WHERE anomaly_id=?",
+                (question, agent_run, ano["anomaly_id"]))
+            store._conn.execute(
+                "UPDATE work_item_v2 SET title=?, business_summary=?"
+                " WHERE work_id=?",
+                (f"异常追问：{question[:60]}",
+                 f"metric={body.metric_id} observed={out['observed']}"
+                 f" agent_run={agent_run}",
+                 ano["follow_up_work_id"]))
+            store._conn.commit()
+            out["anomaly"]["follow_up_question"] = question
+            out["anomaly"]["followup_agent_run_id"] = agent_run
+        return out
 
     @router.get("/api/v1/analytics/anomalies")
     def anomalies(request: Request, customer_id: str = "") -> dict:

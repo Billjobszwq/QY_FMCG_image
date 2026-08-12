@@ -507,7 +507,8 @@ class WorkflowService:
     def start_run(self, definition_id: str, *, inputs: dict, actor: str,
                   source: str = "web", version: int | None = None,
                   parent_run_id: str | None = None,
-                  correlation_id: str | None = None) -> dict:
+                  correlation_id: str | None = None,
+                  customer_id: str = "", project_id: str = "") -> dict:
         d = self._must(definition_id, version)
         if d["status"] != "published":
             raise WorkflowError(
@@ -515,6 +516,7 @@ class WorkflowService:
         corr = correlation_id or "corr-" + uuid.uuid4().hex[:12]
         run = self.store.insert_business_run({
             "run_id": _new_id("run"), "work_id": _new_id("work"),
+            "customer_id": customer_id, "project_id": project_id,
             "trigger_type": d["spec"].get("trigger", {}).get(
                 "type", "manual"),
             "correlation_id": corr, "parent_run_id": parent_run_id,
@@ -1585,10 +1587,19 @@ class WorkflowService:
             params = _resolve_value(node.get("inputs") or {}, ctx)
             if not isinstance(params, dict):
                 raise WorkflowError("command inputs 必须解析为对象")
+            # UFC T7：工作流内 capability 继承 customer/project/
+            # correlation/parent_run（识别等命令链完整挂上下文）。
+            wfrun = self.store.get_business_run(run_id) if run_id else None
             out = self.gateway.submit(
                 command_kind=cap, params=params, actor="workflow_runtime",
                 source="internal", correlation_id=corr,
-                tenant_id="local", parent_run_id=run_id or None)
+                tenant_id="local", parent_run_id=run_id or None,
+                customer_id=(wfrun or {}).get("customer_id", "") or "",
+                project_id=(wfrun or {}).get("project_id", "") or "")
+            if out.get("status") == "failed":
+                raise WorkflowError(
+                    f"capability {cap} 执行失败："
+                    f"{out.get('error') or '未知错误'}")
             return {"status": out["status"], "run_id": out["run_id"],
                     "work_id": out["work_id"],
                     "result": out.get("result"),

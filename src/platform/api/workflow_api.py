@@ -35,6 +35,8 @@ class StartBody(BaseModel):
     inputs: dict = {}
     source: str = "web"
     version: int | None = None
+    customer_id: str = ""   # UFC T7：工作流内命令链继承客户上下文
+    project_id: str = ""
 
 
 class ApproveRunBody(BaseModel):
@@ -184,7 +186,8 @@ def create_workflow_router(store: Any, service: WorkflowService,
         try:
             out = service.start_run(
                 definition_id, inputs=body.inputs, actor=p["actor"],
-                source=body.source, version=body.version)
+                source=body.source, version=body.version,
+                customer_id=body.customer_id, project_id=body.project_id)
         except WorkflowError as e:
             raise HTTPException(409, str(e))
         return {"run": out["run"],

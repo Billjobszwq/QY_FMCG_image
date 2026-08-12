@@ -2054,6 +2054,14 @@ ALTER TABLE work_item_v2 ADD COLUMN superseded_at TEXT NOT NULL
     DEFAULT '';
 """
 
+# UFC T8：异常追问链——Analytics Agent 生成的追问与 run 关联。
+_M050 = """
+ALTER TABLE bi_anomaly_v1 ADD COLUMN followup_agent_run_id TEXT NOT
+    NULL DEFAULT '';
+ALTER TABLE bi_anomaly_v1 ADD COLUMN follow_up_question TEXT NOT NULL
+    DEFAULT '';
+"""
+
 MIGRATIONS: tuple[tuple[str, str], ...] = (
     ("001_platform_init", _M001),
     ("002_labeling_inbox", _M002),
@@ -2104,6 +2112,7 @@ MIGRATIONS: tuple[tuple[str, str], ...] = (
     ("047_contract_correction_v1", _M047),
     ("048_agent_run_business_link", _M048),
     ("049_fixture_isolation", _M049),
+    ("050_anomaly_followup", _M050),
 )
 
 
