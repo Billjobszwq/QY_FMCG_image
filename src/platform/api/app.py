@@ -242,6 +242,12 @@ def create_app(
             bundle.store, standard_profile_service,
             IAMService(bundle.store), auth=AuthService(bundle.store)))
 
+        # ABOSV3 T10：客户级 Usage 工作台（趋势/异常/下钻/导出）
+        from src.platform.api.usage_api import create_usage_router
+        app.include_router(create_usage_router(
+            bundle.store, IAMService(bundle.store),
+            auth=AuthService(bundle.store)))
+
         def _timer_poller():
             import time as _time
             while True:
