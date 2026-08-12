@@ -37,6 +37,8 @@ _SCOPED_DOMAIN_TABLES = (
     "bi_report_spec_v1", "bi_anomaly_v1",
     # SI4：看板具备 scope 列（迁移 058），随归档结构化处理。
     "bi_dashboard_v1",
+    # SI4：账单继承客户 provenance（迁移 055），随归档处理。
+    "fin_invoice_v1",
 )
 
 
@@ -236,6 +238,12 @@ class FixtureTestDataService:
         conn.execute(
             "UPDATE bi_metric_v1 SET status='archived', archived_at=?"
             " WHERE test_run_id=?", (now, namespace))
+        # 2f) SI4：账单行随账单归档（继承 invoice provenance）。
+        conn.execute(
+            "UPDATE fin_invoice_line_v1 SET data_scope='uat_fixture',"
+            " test_run_id=? WHERE invoice_id IN (SELECT invoice_id"
+            " FROM fin_invoice_v1 WHERE test_run_id=?)",
+            (namespace, namespace))
         # node/timer/branch 随 run 归档（审计可见）
         for table in ("workflow_node_execution_v1", "workflow_timer_v1",
                       "workflow_branch_v1"):

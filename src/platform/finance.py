@@ -155,10 +155,21 @@ class FinanceService:
         self.store._conn.execute(
             "INSERT INTO fin_invoice_v1 (invoice_id, customer_id,"
             " contract_id, period, status, total, rate_card_id,"
-            " rate_card_version, created_at)"
-            " VALUES (?,?,?,?,?,?,?,?,?)",
+            " rate_card_version, created_at, data_scope, test_run_id)"
+            " VALUES (?,?,?,?,?,?,?,?,?,?,?)",
             (invoice_id, customer_id, contract_id, period, "draft", 0.0,
-             rc_id, rc["version"], now))
+             rc_id, rc["version"], now,
+             # SI4：账单继承客户 provenance（fixture 客户账单不进
+             # 运营财务面，指令 9.3）。
+             (self.store._conn.execute(
+                 "SELECT COALESCE(data_scope,'operational') ds FROM"
+                 " md_customer_v1 WHERE customer_id=?",
+                 (customer_id,)).fetchone() or {"ds": "operational"})
+             ["ds"],
+             (self.store._conn.execute(
+                 "SELECT COALESCE(test_run_id,'') tr FROM"
+                 " md_customer_v1 WHERE customer_id=?",
+                 (customer_id,)).fetchone() or {"tr": ""})["tr"]))
         if include_subscription and "subscription_month" in prices:
             # 同客户同期间月订阅只计一次（幂等）
             dup = self.store._conn.execute(
