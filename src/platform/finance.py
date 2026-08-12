@@ -138,6 +138,11 @@ class FinanceService:
             " WHERE u.customer_id=? AND strftime('%Y-%m', u.occurred_at)=?"
             " AND COALESCE(u.data_scope,'operational')='operational'"
             " AND COALESCE(r.data_scope,'operational')='operational'"
+            # SI3：attribution 绑定为 fixture 的不可变账本不计费
+            " AND NOT EXISTS (SELECT 1 FROM scope_attribution_ledger_v1"
+            " a WHERE a.subject_table='usage_event_v2' AND"
+            " a.subject_id=u.usage_id AND a.effective_scope IN"
+            " ('uat_fixture','demo_fixture'))"
             " ORDER BY u.occurred_at", (customer_id, period)).fetchall()
         groups: dict[str, list[dict]] = {}
         for u in usage_rows:

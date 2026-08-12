@@ -99,7 +99,8 @@ def audit(db: Path) -> dict:
                     OR COALESCE(test_run_id,'')!=''))
     """, conn)
 
-    # 6) fixture Run → operational Usage
+    # 6) fixture Run → operational Usage（V3：已 attribution 绑定
+    # 的行视为已纠偏，不计泄漏；原行不可变）
     out["usage_from_fixture_run_operational"] = _c(f"""
         SELECT count(*) FROM usage_event_v2 u
         WHERE {OP.replace('data_scope', 'u.data_scope')}
@@ -110,6 +111,10 @@ def audit(db: Path) -> dict:
                OR u.customer_id IN (SELECT customer_id FROM
                     md_customer_v1 WHERE data_scope IN {FIXTURE}
                     OR is_test_fixture=1))
+          AND NOT EXISTS (SELECT 1 FROM scope_attribution_ledger_v1 a
+               WHERE a.subject_table='usage_event_v2' AND
+               a.subject_id=u.usage_id AND a.effective_scope IN
+               {FIXTURE})
     """, conn)
 
     # 7) is_test_fixture=1 但 data_scope=operational 客户
@@ -187,14 +192,29 @@ def audit(db: Path) -> dict:
     """, conn)
 
     # 12) usage 财务口径：operational 发票覆盖 fixture usage 客户
-    out["finance_invoice_operational_from_fixture_usage"] = _c(f"""
-        SELECT count(*) FROM fin_invoice_v1 i
-        WHERE EXISTS (SELECT 1 FROM usage_event_v2 u
-               WHERE u.customer_id=i.customer_id
-                 AND (u.run_id IN (SELECT run_id FROM business_run_v1
-                        WHERE data_scope IN {FIXTURE})
-                      OR COALESCE(u.test_run_id,'')!=''))
-    """, conn)
+    # （V3：发票自身结构化 scope 列；旧库无列时回退父链口径）
+    fin_cols = {r[1] for r in conn.execute(
+        "PRAGMA table_info(fin_invoice_v1)").fetchall()}
+    if "data_scope" in fin_cols:
+        out["finance_invoice_operational_from_fixture_usage"] = _c(f"""
+            SELECT count(*) FROM fin_invoice_v1 i
+            WHERE COALESCE(i.data_scope,'operational')='operational'
+              AND EXISTS (SELECT 1 FROM usage_event_v2 u
+                   WHERE u.customer_id=i.customer_id
+                     AND (u.run_id IN (SELECT run_id FROM
+                            business_run_v1 WHERE data_scope IN
+                            {FIXTURE})
+                          OR COALESCE(u.test_run_id,'')!=''))
+        """, conn)
+    else:
+        out["finance_invoice_operational_from_fixture_usage"] = _c(f"""
+            SELECT count(*) FROM fin_invoice_v1 i
+            WHERE EXISTS (SELECT 1 FROM usage_event_v2 u
+                   WHERE u.customer_id=i.customer_id
+                     AND (u.run_id IN (SELECT run_id FROM business_run_v1
+                            WHERE data_scope IN {FIXTURE})
+                          OR COALESCE(u.test_run_id,'')!=''))
+        """, conn)
 
     # 13) Gate 一致性：gate.json READY 与上述计数冲突（由调用方比对）
     # 19) UAT V4 report ids

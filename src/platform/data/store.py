@@ -2178,6 +2178,16 @@ CREATE INDEX IF NOT EXISTS idx_scope_attr_subject
   ON scope_attribution_ledger_v1 (subject_table, subject_id);
 """
 
+# SI3 T5：财务表补结构化 scope 列（发票不得计入 fixture 客户）。
+_M055 = """
+ALTER TABLE fin_invoice_v1 ADD COLUMN data_scope TEXT NOT NULL DEFAULT 'operational';
+ALTER TABLE fin_invoice_v1 ADD COLUMN test_run_id TEXT NOT NULL DEFAULT '';
+ALTER TABLE fin_invoice_line_v1 ADD COLUMN data_scope TEXT NOT NULL DEFAULT 'operational';
+ALTER TABLE fin_invoice_line_v1 ADD COLUMN test_run_id TEXT NOT NULL DEFAULT '';
+ALTER TABLE fin_adjustment_v1 ADD COLUMN data_scope TEXT NOT NULL DEFAULT 'operational';
+ALTER TABLE fin_adjustment_v1 ADD COLUMN test_run_id TEXT NOT NULL DEFAULT '';
+"""
+
 MIGRATIONS: tuple[tuple[str, str], ...] = (
     ("001_platform_init", _M001),
     ("002_labeling_inbox", _M002),
@@ -2233,6 +2243,7 @@ MIGRATIONS: tuple[tuple[str, str], ...] = (
     ("052_execution_scope_geo_v1", _M052),
     ("053_execution_scope_customer_v1", _M053),
     ("054_scope_attribution_ledger_v1", _M054),
+    ("055_finance_scope_v1", _M055),
 )
 
 
