@@ -784,8 +784,45 @@ Agent 不是万能管理员。Graph 节点必须声明 capability、数据域、
   production `prod_v4_best_r1` 未切换；未启动训练；真实数据 UAT
   与人工验收由用户执行，此前不得写 ACCEPTED/PRODUCTION_READY。
 
+## 2026-08-13 · Operational Scope V4：IAM/BI/Finance 测试污染清零方法论（当前接续入口）
+
+- 入口：`docs/implementation/agentic-business-os-operational-scope-v4/`
+  （STATUS/FINAL-REPORT 为准）。开工基线 HEAD `63679be0`（含外部
+  TaaS commits，已审计）。
+- **SI3 READY 再次被证伪的教训（必须永久记取）**：
+  1. **物理表覆盖率 ≠ 业务对象隔离覆盖率**：Scope Registry 登记了
+     全部 123 表，但 IAM 身份/BI 注册表/前端默认值三个运营面仍被
+     UAT 污染（85 active 账号、物理行数统计、硬编码客户）。每张表
+     除分类外必须声明 UAT 生命周期（可创建性/provenance/归档/
+     登录/计费/BI/浏览器暴露面）。
+  2. **global configuration / reference registry 也会被 UAT 污染**：
+     metric/dashboard/价目表/导入批次等“配置类”对象由 UAT 创建后
+     会永久滞留运营平面；必须与业务对象同等的 provenance+归档。
+  3. **测试账号必须有完整生命周期**：创建即登记 provenance（受
+     信 test_run fail-closed）；Test Run 归档同事务收敛（禁用+
+     membership 归档+会话失效）；登录拒绝带稳定错误码+审计；
+     历史行永不物理删除。
+  4. **BI 数据产品必须用 effective operational 口径**：禁止裸
+     SELECT count(*) 物理行数；唯一计数函数与运营 Domain API 逐项
+     对账并进 Gate。
+  5. **Finance 默认上下文不得使用 demo/UAT 客户**：默认客户只能
+     来自 operational customer 服务；无客户时空态+入口；永不回退。
+  6. **Gate 浏览器覆盖必须与全部运营 Domain Pack 对齐**：12 个
+     一级工作台语义断言强制；证据面必须等于报告表述（少一页即
+     BLOCKED）。
+  7. **READY 必须绑定最终 HEAD、DB fingerprint 与全应用语义证据**；
+     外部 commits 会自然触发 STALE，必须先审计新 commits 再继续。
+  8. **Agent 自动化必须保留人工备用入口**：IAM/BI/Finance 人工操作
+     路径不依赖 Agent；Agent 失败不关闭人工入口。
+  9. **后续所有 Domain Pack 必须声明 Test Run 创建、归档、计费和
+     BI 影响**（module manifest 扩展项）。
+- 当前机器 Gate：`.eval/scope_v4/gate.json`（Gate 3.1，34 检查）；
+  production `prod_v4_best_r1` 未切换；未启动训练；真实数据 UAT 与
+  人工验收由用户执行，此前不得写 ACCEPTED/PRODUCTION_READY。
+
 ## 14. 手册变更记录（追加）
 
 | 日期 | HEAD | 变更 |
 |---|---|---|
 | 2026-08-13 | si3 收尾提交 | Scope Integrity V3 收口：假阳性 Gate 降级并修复；Scope Graph V3/effective scope/attribution ledger/全表 Registry/Gate 3.0 freshness/UAT V5 48 项；hermetic 1425 passed，host MPS 6 passed |
+| 2026-08-13 | si4 收尾提交 | Operational Scope V4 收口：SI3 READY 再次证伪（IAM 85 active 账号/BI 物理计数/前端默认值）；IAM 身份生命周期（迁移 057）；BI/Finance effective 口径（迁移 058）；Registry 语义层；Gate 3.1 + 22 负例；UAT V6 57/57；12 页浏览器 30/30；hermetic 1447 passed，host MPS 6 passed |
