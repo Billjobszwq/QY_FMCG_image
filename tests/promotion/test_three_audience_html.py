@@ -87,3 +87,49 @@ def test_copy_is_centralized_and_has_editing_guidance() -> None:
     assert "sections:" in html
     assert "cta:" in html
 
+
+def test_taas_naming_and_chinese_first_brand_hierarchy() -> None:
+    html = load_html()
+    assert "TaaS｜词元即服务" in html
+    assert "AI 原生业务操作系统" in html
+    assert "Token as a Service" in html
+    assert "Token as a Severs" not in html
+    assert html.index("TaaS｜词元即服务") < html.index("Token as a Service")
+    assert "brand:" in html
+    assert "concept:" in html
+    assert "positioning:" in html
+    assert "english:" in html
+
+
+def test_taas_definition_and_audience_token_roles_are_present() -> None:
+    html = load_html()
+    assert "词元不再只是智能模型处理内容的计量单位" in html
+    assert "驱动业务理解、决策、协同与执行的智能生产要素" in html
+    assert html.count("TaaS") >= 4
+    for phrase in ("智能生产要素", "伙伴能力", "理解目标和上下文"):
+        assert phrase in html
+
+
+def test_real_qiyun_logo_is_embedded_for_offline_delivery() -> None:
+    html = load_html()
+    assert 'class="qiyun-logo"' in html
+    assert 'src="data:image/png;base64,' in html
+    assert 'alt="QIYUN 公司标识，DECISION DATA DRIVE"' in html
+    assert "/Users/zhangweiqi/Documents/QY/相关设计文档" not in html
+    assert ".brand-mark" not in html
+
+
+def test_token_flow_and_shared_loop_are_complete() -> None:
+    html = load_html()
+    for semantic in ("token-flow", "token-pulse", "human-gate", "verified-result", "feedback-return"):
+        assert semantic in html
+    for stage in (
+        "业务目标",
+        "可执行意图",
+        "词元驱动理解与决策",
+        "组织人员、数据与能力",
+        "持续执行与人工守门",
+        "可验证业务结果",
+        "反馈、评估与能力进化",
+    ):
+        assert stage in html
