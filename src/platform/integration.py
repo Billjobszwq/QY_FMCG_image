@@ -61,6 +61,7 @@ UI_ROUTES_MIRROR: tuple[str, ...] = (
     "/analytics/reports", "/analytics/anomalies", "/analytics/semantics",
     "/geo/addresses", "/geo/field", "/geo/visit",
     "/finance/contracts", "/finance/invoices",
+    "/help",
     "/status", "/reference/echo",
 )
 

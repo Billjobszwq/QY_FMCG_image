@@ -101,7 +101,12 @@ export default function App() {
     || m.navigation.some((n) => location.pathname === n.route
       || (n.route !== m.primary_route
         && location.pathname.startsWith(n.route + "/"))));
-  const navModules = modules.filter((m) => m.module_id !== "reference.echo");
+  // ABOSV3 T11：系统管理仅管理员可见；reference.echo 不进导航
+  const navModules = modules.filter((m) => {
+    if (m.module_id === "reference.echo") return false;
+    if (m.module_id === "system" && me.role !== "admin") return false;
+    return true;
+  });
 
   return (
     <div className="abos-app">

@@ -291,7 +291,24 @@ def build_default_module_registry() -> ModuleRegistry:
         agents=("finance_agent",),
     ))
     reg.register(ModuleManifestV2(
-        module_id="system", name="系统与开发者", version="1.0.0",
+        module_id="help", name="帮助与文档", version="1.0.0",
+        domain="help", status="live", theme_token="cyan",
+        primary_route="/help",
+        navigation=(
+            NavRoute(route="/help", label="帮助与文档",
+                     description="按角色/任务的操作手册、导入模板说明、"
+                                 "API Explorer、故障排查",
+                     actions=("搜索", "角色手册", "模板说明", "排障")),
+        ),
+        agents=(),
+        queries=(),
+        api_prefix="/api/v1/import", openapi_tag="import-center",
+        permission_scopes=("system.read",), billing_units=("call",),
+        health_checks=(),
+    ))
+    reg.register(ModuleManifestV2(
+        module_id="system", name="系统管理（仅管理员）",
+        version="1.0.0",
         domain="system", status="live", theme_token="slate",
         primary_route="/status",
         navigation=(

@@ -27,6 +27,7 @@ import BIWorkbench from "../pages/BIWorkbench";
 import { GeoAddresses, GeoField, GeoVisit } from "../pages/Geo";
 import { FinanceContracts, FinanceInvoices } from "../pages/Finance";
 import UsageWorkbench from "../pages/UsageWorkbench";
+import HelpDocs from "../pages/HelpDocs";
 import {
   RecognizeNow, VisionAnnotation, VisionDatasets, VisionEvidence,
   VisionModels, VisionTasks,
@@ -158,6 +159,8 @@ export const MODULE_ROUTES: Record<
   "/finance/contracts": () => wide(
     <><UsageWorkbench /><FinanceContracts /></>),
   "/finance/invoices": () => wide(<FinanceInvoices />),
+  // 帮助与文档（全员）；系统管理（仅管理员，导航按角色过滤）
+  "/help": () => wide(<HelpDocs />),
   // 系统与参考
   "/status": (ctx) => <SystemStatus health={ctx.health} />,
   "/reference/echo": () => <ReferenceEcho />,
