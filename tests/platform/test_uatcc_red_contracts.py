@@ -119,17 +119,21 @@ class TestPhotoContract:
         assert "门头" in str(ei.value) or "storefront" in str(ei.value)
 
     def test_photo_without_storefront_role_fails(self, client):
-        """RED-2：只有非门头角色照片时不得满足门头必拍。"""
+        """RED-2：门头题上传非 storefront 角色照片必须失败
+        （fail-fast 于上传，提交层另有守卫）。"""
         svc, sid, rid = _make_survey(client, require_storefront=True,
                                      min_count=1)
         svc.save_answers(rid, {"q1": {"value": "open"}})
-        # 上传一张 shelf 角色照片（不是 storefront）
-        svc.attach_media(response_id=rid, question_id="qsf",
-                         image_b64=IMG_B64, actor="field",
-                         capture_role="shelf")
+        # 上传一张 shelf 角色照片（不是 storefront）→ 必须拒绝
         with pytest.raises(Exception) as ei:
+            svc.attach_media(response_id=rid, question_id="qsf",
+                             image_b64=IMG_B64, actor="field",
+                             capture_role="shelf")
+        assert "storefront" in str(ei.value)
+        # 无门头照时提交也必须失败（提交层守卫）
+        with pytest.raises(Exception) as ei2:
             svc.submit(rid, actor="field")
-        assert "门头" in str(ei.value) or "storefront" in str(ei.value)
+        assert "门头" in str(ei2.value) or "storefront" in str(ei2.value)
 
     def test_skipped_storefront_does_not_block(self, client):
         """守卫-3：被跳题隐藏的门头题不得错误阻断提交。"""
