@@ -20,7 +20,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 DB = ROOT / ".platform" / "platform.sqlite"
-OUT = ROOT / ".eval" / "scope_v4" / "before_audit.json"
+OUT = ROOT / ".eval" / "scope_v4" / "audit_latest.json"
 UAT_GLOB = ("uatv2_%", "uatv3_%", "uatv4_%", "uatv5_%", "uat_%",
             "uat-%", "demo-%")
 
@@ -49,7 +49,8 @@ def main() -> None:
     out["iam_uat_memberships"] = _c(conn, f"""
         SELECT count(*) FROM iam_membership_v1 m JOIN iam_principal_v1 p
           ON p.principal_id=m.principal_id
-          WHERE ({_uat_cond('p.username')})""")
+          WHERE COALESCE(m.visibility,'current')='current'
+            AND ({_uat_cond('p.username')})""")
     out["iam_uat_memberships_with_customer_grant"] = _c(conn, f"""
         SELECT count(*) FROM iam_membership_v1 m JOIN iam_principal_v1 p
           ON p.principal_id=m.principal_id
