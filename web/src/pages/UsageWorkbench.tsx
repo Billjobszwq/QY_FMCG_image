@@ -1,6 +1,6 @@
 // ABOSV3 T10：客户级 Usage 工作台（汇总/趋势/下钻/预算/导出）。
 import { useCallback, useEffect, useState } from "react";
-import { iamGet } from "../api";
+import { iamGet, iamPost } from "../api";
 import { EmptyState, ErrorState, Loading, PageHeader } from
   "../platform/components";
 
@@ -9,6 +9,8 @@ export default function UsageWorkbench() {
   const [summary, setSummary] = useState<any | null>(null);
   const [rows, setRows] = useState<any[] | null>(null);
   const [budgets, setBudgets] = useState<any[] | null>(null);
+  const [legacy, setLegacy] = useState<any[] | null>(null);
+  const [msg, setMsg] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
 
   const load = useCallback(() => {
@@ -20,6 +22,8 @@ export default function UsageWorkbench() {
       .then((d) => setRows(d.rows)).catch(() => setRows([]));
     iamGet(`usage/budgets?customer_id=${encodeURIComponent(customer)}`)
       .then((d) => setBudgets(d.budgets)).catch(() => setBudgets([]));
+    iamGet("usage/legacy").then((d) => setLegacy(d.attributions))
+      .catch(() => setLegacy([]));
   }, [customer]);
   useEffect(() => { load(); }, [load]);
 
@@ -133,8 +137,50 @@ export default function UsageWorkbench() {
                     <td data-label="profile" className="v">
                       {r.profile_id || "—"}</td>
                     <td data-label="证据" className="v">
-                      {r.source_evidence || r.evidence_bundle_id || "—"}
+                      {r.lineage === "legacy_unattributed" ? (
+                        <span style={{ color: "var(--warn)" }}>
+                          历史未归属（无 run/evidence）</span>
+                      ) : (r.source_evidence || r.evidence_bundle_id
+                          || "—")}
                     </td>
+                  </tr>))}
+              </tbody>
+            </table>)}
+      </div>
+
+      <div className="card">
+        <h3>历史未归属账本（追加式对账）</h3>
+        <p className="v" style={{ fontSize: 12 }}>历史 Agent 调用无统一
+          BusinessRun；不篡改不可变 Usage、不猜测客户/项目，只追加归属
+          记录并诚实展示。</p>
+        <button className="btn" onClick={async () => {
+          try {
+            const out = await iamPost("usage/reconcile-legacy", {});
+            setMsg(`已追加 ${out.added} 条归属记录（累计 `
+              + `${out.legacy_total}）`);
+            load();
+          } catch (e) { setMsg(`对账失败：${e instanceof Error
+            ? e.message : e}`); }
+        }}>执行追加式对账</button>
+        {msg && <p className="v" style={{ fontSize: 12 }}>{msg}</p>}
+        {!legacy ? <Loading /> : legacy.length === 0
+          ? <EmptyState title="暂无历史未归属记录" />
+          : (
+            <table className="table">
+              <thead><tr><th>usage</th><th>状态</th><th>备注</th>
+                <th>时间</th></tr></thead>
+              <tbody>
+                {legacy.map((a) => (
+                  <tr key={a.attribution_id}>
+                    <td data-label="usage" className="v">
+                      {String(a.usage_id).slice(0, 16)}…</td>
+                    <td data-label="状态">
+                      <span style={{ color: "var(--warn)" }}>
+                        {a.attribution_status}</span></td>
+                    <td data-label="备注" className="v">
+                      {String(a.note).slice(0, 60)}</td>
+                    <td data-label="时间" className="v">
+                      {String(a.created_at).slice(0, 16)}</td>
                   </tr>))}
               </tbody>
             </table>)}

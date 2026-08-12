@@ -149,12 +149,17 @@ class TestSupervisorEightIntents:
         assert bundle.store._conn.execute(
             "SELECT count(*) c FROM agent_run_v1").fetchone()[
             "c"] == before + 1
+        # UATCC T2：统一链——command.accepted + run.succeeded 事件
         assert bundle.store._conn.execute(
             "SELECT count(*) c FROM event_envelope_v1"
-            " WHERE event_type='agent.invoked'").fetchone()["c"] >= 1
-        assert bundle.store._conn.execute(
-            "SELECT count(*) c FROM usage_event_v2"
-            " WHERE unit='agent_call'").fetchone()["c"] >= 1
+            " WHERE event_type IN ('command.accepted','run.succeeded')"
+        ).fetchone()["c"] >= 2
+        # Usage 必须挂统一 run/work 与 evidence 下钻
+        row = bundle.store._conn.execute(
+            "SELECT * FROM usage_event_v2 WHERE unit='agent_call'"
+            " ORDER BY occurred_at DESC LIMIT 1").fetchone()
+        assert row["run_id"] and row["work_id"]
+        assert row["source_evidence"].startswith("evidence_bundle:")
 
     def test_domain_agent_allowlist_enforced(self, client):
         c, h, _b, _g = client

@@ -895,12 +895,19 @@ class WorkflowService:
             # ABOSV3：调用节点指定的 Agent（真实工具循环）；
             # runtime 未装配时回退 Supervisor 规则回答（诚实降级）。
             if self.agent_runtime is not None:
+                # UATCC T2：工作流内 Agent 节点以工作流 run 为 parent，
+                # 继承 correlation/customer/project，形成清晰子 run。
+                wfrun = self.store.get_business_run(run_id) or {}
                 resp = self.agent_runtime.invoke(
                     agent_id, str(prompt), actor="workflow_runtime",
-                    session_id=f"workflow:{run_id or 'sim'}")
+                    session_id=f"workflow:{run_id or 'sim'}",
+                    parent_run_id=run_id, correlation_id=corr,
+                    customer_id=wfrun.get("customer_id", "") or "",
+                    project_id=wfrun.get("project_id", "") or "")
                 return {"agent_id": agent_id,
                         "message": resp.get("message"),
                         "tool_trace": resp.get("tool_trace"),
+                        "business_run_id": resp.get("business_run_id"),
                         "provider": resp.get("provider")}, None
             sup = SupervisorAgent(self.store)
             resp = sup.chat(session_id=f"workflow:{run_id or 'sim'}",

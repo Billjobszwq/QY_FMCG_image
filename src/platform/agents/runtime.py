@@ -14,6 +14,7 @@
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import time
 import uuid
@@ -434,7 +435,9 @@ class AgentRuntime:
 
     def invoke(self, agent_id: str, text: str, *, actor: str,
                session_id: str = "", customer_id: str = "",
-               project_id: str = "") -> dict:
+               project_id: str = "", parent_run_id: str | None = None,
+               correlation_id: str = "", tenant_id: str = "local",
+               branch_id: str = "") -> dict:
         d = self.get_published_definition(agent_id)
         degraded = False
         if d is None:
@@ -442,20 +445,58 @@ class AgentRuntime:
             degraded = True
         if d is None:
             raise AgentRuntimeError(f"Agent 无定义（拒绝运行）: {agent_id}")
+        # UATCC T2：统一身份模型——每次调用必有 agent_run +
+        # BusinessRun + WorkItem + Evidence + 挂链 Usage。
+        # 缺 customer/project 时明确写 unattributed（不静默空串）。
+        attr_customer = customer_id or "unattributed"
+        attr_project = project_id or "unattributed"
         run_id = _new_id("arun")
+        biz_run_id = _new_id("run")
+        work_id = _new_id("work")
+        corr = correlation_id or ("corr-" + uuid.uuid4().hex[:12])
+        evid_id = _new_id("evid")
+        initiator_type = "agent" if parent_run_id else "human"
         t0 = time.time()
         self.store._conn.execute(
             "INSERT INTO agent_run_v1 (run_id, agent_id, session_id,"
             " intent, status, actor, customer_id, project_id, created_at)"
             " VALUES (?,?,?,?,?,?,?,?,?)",
             (run_id, agent_id, session_id, text[:400], "running",
-             actor, customer_id, project_id, _now()))
-        self.store._conn.commit()
+             actor, attr_customer, attr_project, _now()))
+        self.store.insert_business_run({
+            "run_id": biz_run_id, "work_id": work_id,
+            "tenant_id": tenant_id, "customer_id": attr_customer,
+            "project_id": attr_project, "trigger_type": "agent",
+            "parent_run_id": parent_run_id, "correlation_id": corr,
+            "subject_type": "agent_run", "subject_id": run_id,
+            "initiator_type": initiator_type, "initiator_id": actor,
+            "status": "queued", "command_kind": "agent.invoke",
+            "params": {"agent_id": agent_id, "intent": text[:200],
+                       "definition_version": d["version"],
+                       "provider": d["provider"]}})
+        self.store.insert_work_item_v2({
+            "work_id": work_id, "tenant_id": tenant_id,
+            "customer_id": attr_customer, "project_id": attr_project,
+            "run_id": biz_run_id, "status": "running",
+            "owner_type": "agent", "owner_id": agent_id,
+            "title": f"Agent {agent_id} 调用",
+            "business_summary": text[:120],
+            "subject_type": "agent_run", "subject_id": run_id})
+        self.store.emit_event(
+            event_id=_new_id("evt"), event_type="command.accepted",
+            run_id=biz_run_id, work_id=work_id, correlation_id=corr,
+            actor_type=initiator_type, actor_id=actor,
+            payload={"command_kind": "agent.invoke",
+                     "agent_id": agent_id})
+        self.store.set_business_run_status(biz_run_id, "running",
+                                           current_node=agent_id)
 
         tools = self._plan(d, text)
         trace: list[dict] = []
         resp: dict[str, Any] = {
             "agent": agent_id, "run_id": run_id,
+            "business_run_id": biz_run_id, "work_id": work_id,
+            "correlation_id": corr,
             "provider": d["provider"],
             "degraded": degraded,
             "message": "", "evidence_refs": [], "ui_intents": [],
@@ -466,99 +507,133 @@ class AgentRuntime:
         allow = set(d["tool_allowlist"])
         max_calls = int(d["budget"].get("max_tool_calls_per_turn", 4))
         summaries: list[str] = []
-        for tool_id, params in tools[:max_calls]:
-            if tool_id not in allow:
-                trace.append({"tool": tool_id, "status": "denied",
-                              "reason": "不在 allowlist（fail-closed）"})
-                continue
-            try:
-                out = self._exec_tool(tool_id, params, actor=actor,
-                                      customer_id=customer_id)
-                trace.append({"tool": tool_id, "status": "ok",
-                              "elapsed_ms": round(
-                                  (time.time() - t0) * 1000, 1)})
-                kind = TOOL_META.get(tool_id, {}).get("kind")
-                if kind == "write_approval":
-                    cmd = out.get("command") or {}
-                    cmd_id = "cmd-" + uuid.uuid4().hex[:8]
-                    self.store._conn.execute(
-                        "INSERT INTO agent_command_v1 (command_id,"
-                        " kind, params_json, status, created_by,"
-                        " created_at) VALUES (?,?,?,?,?,?)",
-                        (cmd_id, cmd.get("kind", ""),
-                         json.dumps(cmd.get("params", {})),
-                         "pending_approval", actor, _now()))
-                    self.store._conn.commit()
-                    resp["command_previews"].append({
-                        "command_id": cmd_id, **cmd,
-                        "idempotency_key": "agent-" + uuid.uuid4().hex[:8],
-                        "status": "pending_approval"})
-                    resp["requires_approval"] = True
-                    summaries.append(f"已生成待批准命令 {cmd_id}")
-                else:
-                    if kind == "write_draft":
-                        summaries.append(
-                            f"{tool_id} 已创建 draft"
-                            f"（{json.dumps({k: v for k, v in out.items() if k in ('draft_definition_id', 'draft_spec_id')}, ensure_ascii=False)}）")
+        hard_error = ""
+        try:
+            for tool_id, params in tools[:max_calls]:
+                if tool_id not in allow:
+                    trace.append({"tool": tool_id, "status": "denied",
+                                  "reason": "不在 allowlist（fail-closed）"})
+                    continue
+                try:
+                    out = self._exec_tool(tool_id, params, actor=actor,
+                                          customer_id=attr_customer
+                                          if attr_customer != "unattributed"
+                                          else "")
+                    trace.append({"tool": tool_id, "status": "ok",
+                                  "elapsed_ms": round(
+                                      (time.time() - t0) * 1000, 1)})
+                    kind = TOOL_META.get(tool_id, {}).get("kind")
+                    if kind == "write_approval":
+                        cmd = out.get("command") or {}
+                        cmd_id = "cmd-" + uuid.uuid4().hex[:8]
+                        self.store._conn.execute(
+                            "INSERT INTO agent_command_v1 (command_id,"
+                            " kind, params_json, status, created_by,"
+                            " created_at) VALUES (?,?,?,?,?,?)",
+                            (cmd_id, cmd.get("kind", ""),
+                             json.dumps(cmd.get("params", {})),
+                             "pending_approval", actor, _now()))
+                        self.store._conn.commit()
+                        resp["command_previews"].append({
+                            "command_id": cmd_id, **cmd,
+                            "idempotency_key":
+                            "agent-" + uuid.uuid4().hex[:8],
+                            "status": "pending_approval"})
+                        resp["requires_approval"] = True
+                        summaries.append(f"已生成待批准命令 {cmd_id}")
                     else:
-                        summaries.append(
-                            f"{tool_id}：" + json.dumps(
-                                out, ensure_ascii=False)[:220])
-                    ui = out.get("ui_intent")
-                    if ui:
-                        resp["ui_intents"].append(ui)
-                resp["evidence_refs"].append(
-                    {"kind": "tool", "ref": f"{tool_id}@{run_id}"})
-            except Exception as e:
-                trace.append({"tool": tool_id, "status": "error",
-                              "error": str(e)[:200]})
-                summaries.append(f"{tool_id} 失败：{str(e)[:120]}")
+                        if kind == "write_draft":
+                            summaries.append(
+                                f"{tool_id} 已创建 draft"
+                                f"（{json.dumps({k: v for k, v in out.items() if k in ('draft_definition_id', 'draft_spec_id')}, ensure_ascii=False)}）")
+                        else:
+                            summaries.append(
+                                f"{tool_id}：" + json.dumps(
+                                    out, ensure_ascii=False)[:220])
+                        ui = out.get("ui_intent")
+                        if ui:
+                            resp["ui_intents"].append(ui)
+                    resp["evidence_refs"].append(
+                        {"kind": "tool", "ref": f"{tool_id}@{run_id}"})
+                except Exception as e:
+                    trace.append({"tool": tool_id, "status": "error",
+                                  "error": str(e)[:200]})
+                    summaries.append(f"{tool_id} 失败：{str(e)[:120]}")
 
-        if not tools:
-            resp["message"] = (
-                f"（{agent_id}）未匹配到 allowlist 内的工具意图。"
-                "可用工具：" + "、".join(allow) if allow else
-                "该 Agent 暂无工具。")
-        else:
-            resp["message"] = "\n".join(summaries)
-        if degraded:
-            resp["provider"] = "degraded_rules_fallback"
-            resp["message"] = ("（定义未发布，降级运行）" + resp["message"])
+            if not tools:
+                resp["message"] = (
+                    f"（{agent_id}）未匹配到 allowlist 内的工具意图。"
+                    "可用工具：" + "、".join(allow) if allow else
+                    "该 Agent 暂无工具。")
+            else:
+                resp["message"] = "\n".join(summaries)
+            if degraded:
+                resp["provider"] = "degraded_rules_fallback"
+                resp["message"] = ("（定义未发布，降级运行）"
+                                   + resp["message"])
 
-        # LLM 合成（可选）：不可用时诚实保持规则输出
-        llm = self._llm_compose(d, text, resp["message"])
-        if llm:
-            resp["message"] = llm
-            resp["provider"] = "llm+tool_loop"
+            # LLM 合成（可选）：不可用时诚实保持规则输出
+            llm = self._llm_compose(d, text, resp["message"])
+            if llm:
+                resp["message"] = llm
+                resp["provider"] = "llm+tool_loop"
+        except Exception as e:  # 工具循环外层的意外错误 → 失败 run
+            hard_error = str(e)[:300]
 
-        # 写 Run/Event/Evidence/Usage
+        # UATCC T2：写 Run/Event/Evidence/Usage（失败也写失败 run、
+        # evidence 与实际已消耗 Usage；账本写失败 fail-closed，
+        # 不 except: pass 吞错）。
+        ok = not hard_error
+        trace_json = json.dumps(trace, ensure_ascii=False)
+        cas_hash = hashlib.sha256(trace_json.encode()).hexdigest()
         self.store._conn.execute(
-            "UPDATE agent_run_v1 SET status='succeeded',"
-            " tool_trace_json=?, provider=?, ended_at=?"
+            "UPDATE agent_run_v1 SET status=?,"
+            " tool_trace_json=?, provider=?, ended_at=?,"
+            " business_run_id=?, evidence_bundle_id=?"
             " WHERE run_id=?",
-            (json.dumps(trace, ensure_ascii=False), resp["provider"],
-             _now(), run_id))
+            ("succeeded" if ok else "failed", trace_json,
+             resp["provider"], _now(), biz_run_id, evid_id, run_id))
         self.store._conn.commit()
         try:
-            self.store.emit_event(
-                event_id=_new_id("evt"), event_type="agent.invoked",
-                actor_type="agent", actor_id=agent_id,
-                subject_type="agent_run", subject_id=run_id,
-                payload={"intent": text[:200],
-                         "tools": [t[0] for t in tools]})
-            self.store.insert_usage_event_v2(
-                usage_id=_new_id("usage"), unit="agent_call",
-                quantity=1, capability=f"agent.{agent_id}.invoke",
-                customer_id=customer_id, project_id=project_id,
-                source_evidence=f"agent_run:{run_id}")
-            self.store.insert_evidence_bundle(
-                evidence_id=_new_id("evid"), kind="agent_run",
-                source_uri=f"agent_run:{run_id}",
+            evid = self.store.insert_evidence_bundle(
+                evidence_id=evid_id, kind="agent_run",
+                run_id=biz_run_id, work_id=work_id,
+                source_uri=f"agent_run:{run_id}", cas_hash=cas_hash,
                 content_type="application/json",
                 producer=f"agent:{agent_id}",
                 config_version=f"def@v{d['version']}")
-        except Exception:
-            pass
+            self.store.set_business_run_status(
+                biz_run_id, "succeeded" if ok else "failed",
+                error=hard_error,
+                evidence_bundle_id=evid["evidence_id"])
+            self.store.set_work_item_v2_status(
+                work_id, "done" if ok else "blocked",
+                blockers=[] if ok else [hard_error[:120] or "agent 失败"])
+            self.store.emit_event(
+                event_id=_new_id("evt"),
+                event_type="run.succeeded" if ok else "run.failed",
+                run_id=biz_run_id, work_id=work_id,
+                correlation_id=corr,
+                actor_type="agent", actor_id=agent_id,
+                payload={"agent_run_id": run_id,
+                         "tools": [t[0] for t in tools],
+                         "error": hard_error})
+            self.store.insert_usage_event_v2(
+                usage_id=_new_id("usage"), unit="agent_call",
+                quantity=1, run_id=biz_run_id, work_id=work_id,
+                node=branch_id or agent_id,
+                capability=f"agent.{agent_id}.invoke",
+                customer_id=attr_customer, project_id=attr_project,
+                source_evidence=f"evidence_bundle:{evid_id}")
+        except Exception as e:
+            # 账本写失败 → fail-closed：不得静默吞错
+            raise AgentRuntimeError(
+                f"Agent 账本/证据写入失败（fail-closed）: {e}") from e
+        resp["evidence_bundle_id"] = evid_id
+        if not ok:
+            resp["error"] = hard_error
+            raise AgentRuntimeError(
+                f"Agent 调用失败: {hard_error}")
         return resp
 
     def _plan(self, definition: dict, text: str

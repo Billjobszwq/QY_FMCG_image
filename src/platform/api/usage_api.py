@@ -8,6 +8,8 @@ from __future__ import annotations
 
 import csv
 import io
+import uuid
+from datetime import datetime, timezone
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Request
@@ -15,6 +17,10 @@ from fastapi.responses import Response
 
 from ..auth import AuthService, require_principal
 from ..iam import IAMService
+
+
+def _now() -> str:
+    return datetime.now(timezone.utc).isoformat()
 
 
 def _platform(iam: IAMService, actor: str, session_role: str) -> bool:
@@ -102,7 +108,16 @@ def create_usage_router(store: Any, iam: IAMService,
             r["run_status"] = run["status"] if run else None
             r["evidence_bundle_id"] = (run["evidence_bundle_id"]
                                        if run else None)
-        return {"count": len(rs), "rows": rs}
+            # UATCC T2：无 run/work 的历史 Agent 调用诚实标记，
+            # 不得当作已对账正常记录。
+            if not r["run_id"] and not r["work_id"]:
+                r["lineage"] = "legacy_unattributed"
+            else:
+                r["lineage"] = "attributed"
+        legacy_n = sum(1 for r in rs
+                       if r["lineage"] == "legacy_unattributed")
+        return {"count": len(rs), "rows": rs,
+                "legacy_unattributed": legacy_n}
 
     @router.get("/api/v1/usage/export.csv")
     def export_csv(request: Request, customer_id: str = "") -> Response:
@@ -160,5 +175,68 @@ def create_usage_router(store: Any, iam: IAMService,
                         "usage_events": spent,
                         "note": "spent 为事件计数口径（非金额）"})
         return {"count": len(out), "budgets": out}
+
+    @router.post("/api/v1/usage/reconcile-legacy")
+    def reconcile_legacy(request: Request) -> dict:
+        """UATCC T2：历史无链 Agent Usage 追加式归属账本。
+
+        不篡改不可变 Usage；不猜测客户/项目；能确定的只补确定
+        关系（agent_run 引用），其余保持 legacy_unattributed。
+        幂等：已入账的 usage_id 不重复追加。"""
+        p = require_principal(auth, request, csrf=True)
+        if not _platform(iam, p["actor"], p["role"]):
+            raise HTTPException(403, "仅平台管理员可执行归属对账")
+        conn = store._conn
+        rows = conn.execute(
+            "SELECT usage_id, source_evidence, customer_id, project_id"
+            " FROM usage_event_v2 WHERE unit='agent_call'"
+            " AND (run_id='' OR run_id IS NULL)").fetchall()
+        done_ids = {r["usage_id"] for r in conn.execute(
+            "SELECT usage_id FROM usage_attribution_v1")}
+        added = 0
+        for r in rows:
+            if r["usage_id"] in done_ids:
+                continue
+            ref = r["source_evidence"] or ""
+            agent_run_id = (ref.split(":", 1)[1]
+                            if ref.startswith("agent_run:") else "")
+            note = "历史 agent_call，无统一 BusinessRun；仅存"
+            run_row = None
+            if agent_run_id:
+                run_row = conn.execute(
+                    "SELECT agent_id FROM agent_run_v1 WHERE run_id=?",
+                    (agent_run_id,)).fetchone()
+                if run_row:
+                    note += (f" agent_run={agent_run_id}"
+                             f"（agent={run_row['agent_id']}）")
+            conn.execute(
+                "INSERT INTO usage_attribution_v1 (attribution_id,"
+                " usage_id, attribution_status, customer_id,"
+                " project_id, note, created_by, created_at)"
+                " VALUES (?,?,?,?,?,?,?,?)",
+                ("attr-" + uuid.uuid4().hex[:12], r["usage_id"],
+                 "legacy_unattributed",
+                 r["customer_id"] or "",
+                 r["project_id"] or "", note, p["actor"], _now()))
+            added += 1
+        conn.commit()
+        total = conn.execute(
+            "SELECT count(*) c FROM usage_attribution_v1"
+        ).fetchone()["c"]
+        return {"added": added, "legacy_total": total,
+                "policy": "append-only；不篡改不可变 Usage；"
+                          "不猜测客户/项目"}
+
+    @router.get("/api/v1/usage/legacy")
+    def legacy_list(request: Request) -> dict:
+        p = require_principal(auth, request, csrf=False)
+        _check(p, "")
+        rows = [dict(r) for r in store._conn.execute(
+            "SELECT attribution_id, usage_id, attribution_status,"
+            " customer_id, project_id, note, created_by, created_at"
+            " FROM usage_attribution_v1 ORDER BY created_at DESC")
+            .fetchall()]
+        return {"count": len(rows), "attributions": rows,
+                "note": "历史未归属账本（追加式，不可变 Usage 未改）"}
 
     return router
