@@ -242,3 +242,20 @@ def test_cream_page_keeps_offline_logo_and_mobile_flow() -> None:
     assert re.search(r"\.hero-flow-svg\s*\{[^{}]*\bdisplay\s*:\s*none\s*;", mobile_rules)
     assert re.search(r"\.hero-flow-mobile\s*\{[^{}]*\bdisplay\s*:\s*block\s*;", mobile_rules)
     assert not re.search(r"\.hero-map\s*\{[^{}]*\btransform\s*:\s*scale\s*\(", html)
+
+
+def test_tablet_workspace_stops_sticking_below_980px() -> None:
+    tablet_rules = extract_css_block(load_html(), "@media (max-width: 980px)")
+    workspace_rule = re.search(r"\.workspace-bar\s*\{([^{}]*)\}", tablet_rules)
+    assert workspace_rule
+    assert re.search(r"\bposition\s*:\s*static\s*;", workspace_rule.group(1))
+    assert not re.search(r"\btop\s*:", workspace_rule.group(1))
+
+
+def test_document_metadata_leads_with_taas() -> None:
+    html = load_html()
+    assert "<title>TaaS｜词元即服务｜AI 原生业务操作系统</title>" in html
+    assert re.search(
+        r'<meta name="description" content="[^"]*TaaS[^\"]*词元即服务[^\"]*">',
+        html,
+    )
