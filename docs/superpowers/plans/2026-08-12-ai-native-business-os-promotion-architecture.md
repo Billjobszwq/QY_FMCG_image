@@ -21,7 +21,7 @@
 **Files:**
 - Create: `docs/promotion/ai-native-business-os-architecture-narrative.md`
 
-- [ ] **Step 1: Write the eight-section narrative**
+- [x] **Step 1: Write the eight-section narrative**
 
 Create the document with these exact section titles and intended messages:
 
@@ -55,7 +55,7 @@ Create the document with these exact section titles and intended messages:
 
 Under every section add exactly three short subsections: `它解决什么`、`它如何工作`、`它带来什么`. Add a final `对外披露边界` section that names both allowed product-level concepts and prohibited implementation details.
 
-- [ ] **Step 2: Run vocabulary protection checks**
+- [x] **Step 2: Run vocabulary protection checks**
 
 Run:
 
@@ -65,7 +65,7 @@ rg -n 'Qwen|YOLO|SAM|DeepSeek|PostgreSQL|Redis|MinIO|Label Studio|FastAPI|React 
 
 Expected: no output.
 
-- [ ] **Step 3: Check the narrative for placeholders and diff errors**
+- [x] **Step 3: Check the narrative for placeholders and diff errors**
 
 Run:
 
@@ -76,7 +76,7 @@ git diff --check -- docs/promotion/ai-native-business-os-architecture-narrative.
 
 Expected: no output from either command.
 
-- [ ] **Step 4: Commit the narrative**
+- [x] **Step 4: Commit the narrative**
 
 ```bash
 git add docs/promotion/ai-native-business-os-architecture-narrative.md
@@ -88,11 +88,11 @@ git commit -m "docs: add AI native business OS promotion narrative"
 **Files:**
 - Create: `/Users/zhangweiqi/.codex/visualizations/2026/08/12/019ff54f-37e2-7631-a034-9764f153b65b/ai-native-business-os-architecture.html`
 
-- [ ] **Step 1: Create the visualization shell**
+- [x] **Step 1: Create the visualization shell**
 
 Create an HTML fragment rooted at `#abos-architecture`. Add scoped CSS with `light-dark()` surfaces, a deep-indigo intelligent-execution color, teal trusted-foundation color, and warm-gold human-decision color. Include a concise header, an eight-item progress navigator using native buttons, and eight semantic `<section>` elements. The navigator must set `aria-current="true"` on the selected section and call `scrollIntoView({behavior:'smooth', block:'start'})`.
 
-- [ ] **Step 2: Add diagram 1 — new experience overview**
+- [x] **Step 2: Add diagram 1 — new experience overview**
 
 Draw a left-to-right SVG sequence:
 
@@ -104,7 +104,7 @@ Draw a left-to-right SVG sequence:
 
 Use the headline `从提出目标，到获得可验证结果` and the supporting line `目标成为入口，系统承担组织、推进与反馈。` Do not mention competing product categories in this diagram.
 
-- [ ] **Step 3: Add diagram 2 — overall architecture**
+- [x] **Step 3: Add diagram 2 — overall architecture**
 
 Draw a four-level responsive architecture:
 
@@ -120,7 +120,7 @@ Draw a four-level responsive architecture:
 
 Place `生态连接` and `灵活部署` as side rails rather than core layers. Show the eight public domain capabilities: 智能识别、外勤与位置、调研与问卷、分析与经营、客户与主数据、流程与协作、财务与结算、行业能力扩展.
 
-- [ ] **Step 4: Validate structure and forbidden vocabulary**
+- [x] **Step 4: Validate structure and forbidden vocabulary**
 
 Run:
 
@@ -136,23 +136,23 @@ Expected: the first command finds the required structure; the second command ret
 **Files:**
 - Modify: `/Users/zhangweiqi/.codex/visualizations/2026/08/12/019ff54f-37e2-7631-a034-9764f153b65b/ai-native-business-os-architecture.html`
 
-- [ ] **Step 1: Add diagram 3 — intelligent execution loop**
+- [x] **Step 1: Add diagram 3 — intelligent execution loop**
 
 Use an eight-stage circular SVG flow: 理解目标、形成计划、组织能力、执行任务、观察结果、判断调整、人机协同、交付评估. Put `权限 · 预算 · 证据 · 审批` in the center. Add the presenter line `能行动，也知道何时停下并请求人类决定。`
 
-- [ ] **Step 2: Add diagram 4 — composable capability network**
+- [x] **Step 2: Add diagram 4 — composable capability network**
 
 Put `智能执行内核` at the center and the eight public domain capabilities around it. Add three visible outcomes: `一个目标跨域完成`、`新能力快速接入`、`能力独立升级组合`.
 
-- [ ] **Step 3: Add diagram 5 — trusted business foundation**
+- [x] **Step 3: Add diagram 5 — trusted business foundation**
 
 Build a supporting-platform diagram with six blocks: 身份与边界、业务事实、证据链、任务与事件、用量与价值、安全与审计. Above it place three supported properties: 可控、可追溯、可恢复.
 
-- [ ] **Step 4: Add diagram 6 — controlled evolution**
+- [x] **Step 4: Add diagram 6 — controlled evolution**
 
 Draw two connected loops: `业务运行闭环` and `能力升级闭环`. The only connection from feedback to active capability must pass through `评估 → 验证 → 人工批准 → 新版本`. Add `不直接改写业务事实` as a boundary annotation.
 
-- [ ] **Step 5: Run detail-diagram content checks**
+- [x] **Step 5: Run detail-diagram content checks**
 
 Run:
 
@@ -167,19 +167,19 @@ Expected: exit code 0.
 **Files:**
 - Modify: `/Users/zhangweiqi/.codex/visualizations/2026/08/12/019ff54f-37e2-7631-a034-9764f153b65b/ai-native-business-os-architecture.html`
 
-- [ ] **Step 1: Add diagram 7 — industry closed-loop example**
+- [x] **Step 1: Add diagram 7 — industry closed-loop example**
 
 Create an eight-stage journey: 经营目标、任务规划、现场执行、智能识别、调研核验、异常分析、持续追踪、结果与核算. Mark task approval, exception review, and result publication as warm-gold human checkpoints. Show four outputs: 问题清单、执行证据、改进进度、经营洞察与可核对成本.
 
-- [ ] **Step 2: Add diagram 8 — experience leap**
+- [x] **Step 2: Add diagram 8 — experience leap**
 
 Use a two-state transformation without making the old state the headline. The muted state contains 找入口、搬数据、催流程、难追溯、定制孤岛. The dominant state contains 目标即入口、系统主动组织、跨域能力组合、人机共同决策、全程有证据、持续进化. Title it `从使用软件，走向运营一套会工作的系统`.
 
-- [ ] **Step 3: Add concise presenter notes**
+- [x] **Step 3: Add concise presenter notes**
 
 For every one of the eight sections, add a three-line note with the labels `解决`、`机制`、`价值`. Each note must fit within 90 Chinese characters per line and must not repeat the full diagram labels.
 
-- [ ] **Step 4: Add accessible text alternatives**
+- [x] **Step 4: Add accessible text alternatives**
 
 Every SVG must have `role="img"`, a unique `aria-labelledby`, and matching `<title>` plus `<desc>`. Every navigation control must be a native `<button type="button">`.
 
@@ -189,7 +189,7 @@ Every SVG must have `role="img"`, a unique `aria-labelledby`, and matching `<tit
 - Modify: `/Users/zhangweiqi/.codex/visualizations/2026/08/12/019ff54f-37e2-7631-a034-9764f153b65b/ai-native-business-os-architecture.html`
 - Modify: `docs/superpowers/plans/2026-08-12-ai-native-business-os-promotion-architecture.md`
 
-- [ ] **Step 1: Validate HTML fragment rules**
+- [x] **Step 1: Validate HTML fragment rules**
 
 Run:
 
@@ -199,7 +199,7 @@ rg -n '<!doctype|<html|<head|<body|fetch\(|XMLHttpRequest|WebSocket|document\.cu
 
 Expected: no output.
 
-- [ ] **Step 2: Render a standalone inspection copy**
+- [x] **Step 2: Render a standalone inspection copy**
 
 Run:
 
@@ -209,11 +209,11 @@ python3 /Users/zhangweiqi/.codex/plugins/cache/openai-bundled/visualize/1.0.20/s
 
 Expected: the renderer reports a successfully written standalone HTML file.
 
-- [ ] **Step 3: Inspect at desktop and mobile widths**
+- [x] **Step 3: Inspect at desktop and mobile widths**
 
 Open the rendered copy at 736px and 360px. Verify: no clipped Chinese labels, no horizontal scrolling, arrows point in the intended direction, all eight diagrams are visible, navigator buttons work, selected navigation state updates, and notes remain readable. Fix any violation in the source fragment and repeat the render.
 
-- [ ] **Step 4: Re-run disclosure and completeness checks**
+- [x] **Step 4: Re-run disclosure and completeness checks**
 
 Run:
 
@@ -224,7 +224,7 @@ rg -n 'Qwen|YOLO|SAM|DeepSeek|PostgreSQL|Redis|MinIO|Label Studio|FastAPI|React 
 
 Expected: the loop exits 0 and the final `rg` returns no output.
 
-- [ ] **Step 5: Mark the plan complete and commit durable documentation**
+- [x] **Step 5: Mark the plan complete and commit durable documentation**
 
 Check every completed checkbox in this plan, then run:
 
