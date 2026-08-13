@@ -1,31 +1,40 @@
 """ABOSV3 T3：Import Center API（统一导入中心）。
+OSV5（指令第六节）：全端点接入 IAMService 与结构化作用域。
 
 - GET  /api/v1/import/templates：14 套模板清单；
-- GET  /api/v1/import/templates/{tid}/download?fmt=csv|xlsx：模板下载
-  （下载后必须能被同一系统重新解析，round-trip 测试强制）；
-- POST /api/v1/import/upload：上传（multipart，template_id 字段）；
-- GET  /api/v1/import/batches / /batches/{id}：批次与逐行错误；
-- POST /batches/{id}/dry-run：预检（新增/跳过/冲突/错误分类）；
-- POST /batches/{id}/commit：提交（幂等、证据、审计）；
-- GET  /batches/{id}/errors.csv：错误报告下载。
+- GET  /api/v1/import/templates/{tid}/download?fmt=csv|xlsx：模板下载；
+- POST /api/v1/import/upload：上传（multipart；模板权限矩阵 +
+  逐客户整批授权 fail-closed；可选 test_run_id 同事务写 fixture）；
+- GET  /api/v1/import/batches：默认 effective operational ∩ 调用者
+  客户作用域；view=mine|history|quarantine；include_fixture 需授权；
+- GET  /batches/{id}：批次作用域授权 + 显式 DTO（无原始 payload）；
+- GET  /batches/{id}/preview：原始行预览（创建者/data.import.audit，
+  脱敏 + 行数上限）；
+- POST /batches/{id}/dry-run、/commit：权限 + 作用域 + 归档守卫；
+- GET  /batches/{id}/errors.csv：批次作用域授权。
 """
 from __future__ import annotations
 
 import csv
 import io
-from typing import Any
 
 from fastapi import (APIRouter, File, Form, HTTPException, Request,
                      UploadFile)
 from fastapi.responses import Response
 
 from ..auth import AuthService, require_principal
-from ..import_center import ImportError_, ImportCenter
+from ..import_center import (ImportAuthError, ImportCenter, ImportError_,
+                             TEMPLATE_SCOPE)
+from ..scope import ScopeViolation
 
 
 def create_import_router(center: ImportCenter,
                          auth: AuthService | None) -> APIRouter:
     router = APIRouter(tags=["import-center"])
+
+    def _principal(request: Request, *, csrf: bool) -> dict:
+        p = require_principal(auth, request, csrf=csrf)
+        return p
 
     @router.get("/api/v1/import/templates")
     def templates(request: Request) -> dict:
@@ -51,8 +60,9 @@ def create_import_router(center: ImportCenter,
     @router.post("/api/v1/import/upload")
     async def upload(request: Request,
                      template_id: str = Form(...),
+                     test_run_id: str = Form(""),
                      file: UploadFile = File(...)) -> dict:
-        p = require_principal(auth, request, csrf=True)
+        p = _principal(request, csrf=True)
         from ..rate_limit import enforce
         enforce(request, "import.upload", p["actor"])
         data = await file.read()
@@ -61,59 +71,90 @@ def create_import_router(center: ImportCenter,
         try:
             return {"batch": center.upload(
                 template_id=template_id, filename=file.filename or "",
-                data=data, actor=p["actor"])}
+                data=data, actor=p["actor"], session_role=p["role"],
+                test_run_id=test_run_id)}
+        except ImportAuthError as e:
+            raise HTTPException(403, str(e))
+        except ScopeViolation as e:
+            # archived/不存在 test_run → fail-closed 409
+            raise HTTPException(409, str(e))
         except ImportError_ as e:
             raise HTTPException(409, str(e))
 
     @router.get("/api/v1/import/batches")
-    def batches(request: Request) -> dict:
-        require_principal(auth, request, csrf=False)
-        rows = center.list_batches()
-        # 列表只回摘要（不返回全部行/回执）
-        slim = [{k: b[k] for k in
-                 ("batch_id", "template_id", "filename", "file_format",
-                  "status", "actor", "row_count", "created_at",
-                  "updated_at")} | {"errors": len(b["errors"])}
-                for b in rows]
-        return {"count": len(slim), "batches": slim}
+    def batches(request: Request, view: str = "operational",
+                include_fixture: str = "") -> dict:
+        p = _principal(request, csrf=False)
+        if view not in ("operational", "mine", "history", "quarantine"):
+            raise HTTPException(422, f"非法 view: {view}")
+        try:
+            rows = center.list_batches(
+                actor=p["actor"], session_role=p["role"], view=view,
+                include_fixture=include_fixture in ("1", "true"))
+        except ImportAuthError as e:
+            raise HTTPException(403, str(e))
+        return {"count": len(rows), "batches": rows, "view": view}
 
     @router.get("/api/v1/import/batches/{batch_id}")
     def batch(batch_id: str, request: Request) -> dict:
-        require_principal(auth, request, csrf=False)
+        p = _principal(request, csrf=False)
+        try:
+            b = center.get_batch(batch_id)
+            center.authorize_batch(p["actor"], p["role"], b)
+        except ImportAuthError as e:
+            raise HTTPException(403, str(e))
+        except ImportError_ as e:
+            raise HTTPException(404, str(e))
+        return {"batch": center.batch_dto(b)}
+
+    @router.get("/api/v1/import/batches/{batch_id}/preview")
+    def preview(batch_id: str, request: Request) -> dict:
+        """原始行预览：仅创建者或 data.import.audit（脱敏+行数上限）。"""
+        p = _principal(request, csrf=False)
         try:
             b = center.get_batch(batch_id)
         except ImportError_ as e:
             raise HTTPException(404, str(e))
-        b.pop("mapping", None)  # 行内容经 errors/dry_run 呈现
-        return {"batch": b}
+        platform = center._platform_actor(p["actor"], p["role"])
+        if p["actor"] != b.get("actor") and not platform and \
+                not center.iam.authorize(p["actor"], "data.import.audit"):
+            raise HTTPException(
+                403, "IMPORT_PREVIEW_DENIED: 原始预览需创建者或"
+                " data.import.audit")
+        return center.preview_rows(batch_id)
 
     @router.post("/api/v1/import/batches/{batch_id}/dry-run")
     def dry_run(batch_id: str, request: Request) -> dict:
-        p = require_principal(auth, request, csrf=True)
+        p = _principal(request, csrf=True)
         try:
-            b = center.dry_run(batch_id)
+            return {"batch": center.dry_run(
+                batch_id, actor=p["actor"], session_role=p["role"])}
+        except ImportAuthError as e:
+            raise HTTPException(403, str(e))
         except ImportError_ as e:
             raise HTTPException(409, str(e))
-        b.pop("mapping", None)
-        return {"batch": b}
 
     @router.post("/api/v1/import/batches/{batch_id}/commit")
     def commit(batch_id: str, request: Request) -> dict:
-        p = require_principal(auth, request, csrf=True)
+        p = _principal(request, csrf=True)
         from ..rate_limit import enforce
         enforce(request, "import.commit", p["actor"])
         try:
-            b = center.commit(batch_id, actor=p["actor"])
+            return {"batch": center.commit(
+                batch_id, actor=p["actor"], session_role=p["role"])}
+        except ImportAuthError as e:
+            raise HTTPException(403, str(e))
         except ImportError_ as e:
             raise HTTPException(409, str(e))
-        b.pop("mapping", None)
-        return {"batch": b}
 
     @router.get("/api/v1/import/batches/{batch_id}/errors.csv")
     def errors_csv(batch_id: str, request: Request):
-        require_principal(auth, request, csrf=False)
+        p = _principal(request, csrf=False)
         try:
             b = center.get_batch(batch_id)
+            center.authorize_batch(p["actor"], p["role"], b)
+        except ImportAuthError as e:
+            raise HTTPException(403, str(e))
         except ImportError_ as e:
             raise HTTPException(404, str(e))
         buf = io.StringIO()

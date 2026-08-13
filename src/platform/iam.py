@@ -51,8 +51,8 @@ SCOPES = (
     "master.read", "master.manage",
     "iam.read", "iam.manage",
     "analytics.read", "survey.read", "survey.manage",
-    "geo.read", "finance.read",
-    "agent.query", "home.read", "data.read",
+    "geo.read", "finance.read", "finance.manage",
+    "agent.query", "home.read", "data.read", "data.import.audit",
     "system.read", "reference.read",
 )
 
@@ -82,6 +82,9 @@ BUILTIN_ROLES: tuple[tuple[str, str, tuple[str, ...]], ...] = (
     ("analyst", "分析师", ("analytics.read", "master.read", "agent.query")),
     ("finance_operator", "财务操作员", ("finance.read", "master.read")),
     ("read_only", "只读", ("vision.read", "master.read", "workflow.read")),
+    # OSV5：审计/测试证据角色（导入历史/隔离区/原始预览只读）。
+    ("auditor", "审计员/测试证据", ("data.import.audit", "master.read",
+                                  "analytics.read", "iam.read")),
     ("agent_service", "Agent 服务身份", ("agent.query", "master.read")),
 )
 

@@ -244,6 +244,12 @@ class FixtureTestDataService:
             " test_run_id=? WHERE invoice_id IN (SELECT invoice_id"
             " FROM fin_invoice_v1 WHERE test_run_id=?)",
             (namespace, namespace))
+        # 2g) OSV5：导入批次随 Test Run 归档（追加式：visibility=
+        # history，不删行；幂等，二次归档不漂移）。
+        conn.execute(
+            "UPDATE import_batch_v1 SET data_scope='uat_fixture',"
+            " visibility='history', archived_at=? WHERE test_run_id=?",
+            (now, namespace))
         # node/timer/branch 随 run 归档（审计可见）
         for table in ("workflow_node_execution_v1", "workflow_timer_v1",
                       "workflow_branch_v1"):
@@ -289,6 +295,8 @@ class FixtureTestDataService:
             "agent_runs": ("agent_run_v1", None),
             "recognition_tasks": ("recognition_task", None),
             "bi_reports": ("bi_report_spec_v1", None),
+            # OSV5：导入批次进测试中心统计（指令 P1-002）。
+            "import_batches": ("import_batch_v1", None),
         }
         for r in runs:
             r["customer_ids"] = _json.loads(r.get(

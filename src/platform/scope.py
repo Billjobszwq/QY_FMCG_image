@@ -21,8 +21,10 @@ from datetime import datetime, timezone
 from typing import Any
 
 DATA_SCOPES = ("operational", "uat_fixture", "demo_fixture", "system",
-               "archived")
+               "archived", "quarantine")
 FIXTURE_SCOPES = ("uat_fixture", "demo_fixture")
+# OSV5：quarantine 为非运营隔离态（不可唯一归属的历史批次
+# fail-closed 落此；不计入 operational，仅管理员纠偏面可见）。
 
 # 自身列口径（仅用于无需父链的简单过滤；运营查询与 Gate 必须优先
 # 使用 ScopedQuery 的 effective 口径）。

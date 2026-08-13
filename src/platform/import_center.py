@@ -25,6 +25,56 @@ class ImportError_(Exception):
     """导入中心错误（诚实失败）。"""
 
 
+class ImportAuthError(ImportError_):
+    """OSV5：导入授权失败（fail-closed，API 映射 403）。"""
+
+
+# OSV5（指令 5.2）：模板 → capability scope 矩阵（版本化 permission
+# policy，不得只判断是否登录；全局模板不得因无 customer_id 绕过）。
+TEMPLATE_SCOPE: dict[str, str] = {
+    "customers_v1": "master.manage",
+    "projects_v1": "master.manage",
+    "skus_v1": "master.manage",
+    "stores_addresses_v1": "master.manage",
+    "employees_v1": "master.manage",
+    "route_constraints_v1": "master.manage",
+    "knowledge_documents_v1": "master.manage",
+    "users_v1": "iam.manage",
+    "roles_permissions_v1": "iam.manage",
+    "memberships_v1": "iam.manage",
+    "survey_definition_v1": "survey.manage",
+    "survey_questions_v1": "survey.manage",
+    "survey_logic_v1": "survey.manage",
+    "usage_rate_cards_v1": "finance.manage",
+}
+
+# 模板 → 行内客户列（用于批次客户作用域推导；无客户列的模板为 None）。
+TEMPLATE_CUSTOMER_COL: dict[str, str | None] = {
+    "customers_v1": "customer_id",
+    "projects_v1": "customer_id",
+    "stores_addresses_v1": "customer_id",
+    "employees_v1": "customer_id",
+    "route_constraints_v1": "customer_id",
+    "memberships_v1": "customer_id",
+    "knowledge_documents_v1": "customer_id",
+    "skus_v1": None, "users_v1": None, "roles_permissions_v1": None,
+    "survey_definition_v1": None, "survey_questions_v1": None,
+    "survey_logic_v1": None, "usage_rate_cards_v1": None,
+}
+
+# fixture 批次提交后作用域继承（自然键 → 目标表）。
+_SCOPE_INHERIT_NATURAL: dict[str, tuple[str, str]] = {
+    "customers_v1": ("md_customer_v1", "customer_id"),
+    "projects_v1": ("md_project_v1", "project_id"),
+    "skus_v1": ("md_sku_v1", "sku_id"),
+    "users_v1": ("iam_principal_v1", "username"),
+}
+_SCOPE_INHERIT_RECEIPT: dict[str, tuple[str, str]] = {
+    "stores_addresses_v1": ("geo_address_v1", "address_id"),
+    "employees_v1": ("geo_employee_v1", "employee_id"),
+}
+
+
 def _new_id(prefix: str) -> str:
     return f"{prefix}-" + uuid.uuid4().hex[:12]
 
@@ -330,22 +380,106 @@ class ImportCenter:
         wb.save(buf)
         return buf.getvalue(), f"{template_id}.xlsx"
 
+    # ---------- 授权（OSV5 指令 5.2/六；fail-closed） ----------
+
+    def _platform_actor(self, actor: str, session_role: str) -> bool:
+        if session_role == "admin":
+            return True
+        roles = self.iam.roles_of(actor)
+        return "owner" in roles or "platform_admin" in roles
+
+    def authorize_template(self, actor: str, session_role: str,
+                           template_id: str) -> None:
+        if template_id not in TEMPLATE_SCOPE:
+            raise ImportError_(f"模板不存在: {template_id}")
+        if self._platform_actor(actor, session_role):
+            return
+        scope = TEMPLATE_SCOPE[template_id]
+        if not self.iam.authorize(actor, scope):
+            raise ImportAuthError(
+                f"IMPORT_PERMISSION_DENIED: 模板 {template_id} 需要"
+                f" {scope}")
+
+    def authorize_customers(self, actor: str, session_role: str,
+                            customer_ids: list[str]) -> None:
+        """逐客户授权：任一客户无权 → 整批拒绝（指令 5.2）。"""
+        if not customer_ids or self._platform_actor(actor, session_role):
+            return
+        visible = self.iam.visible_customers(actor)
+        if visible is None:
+            return
+        denied = sorted(set(customer_ids) - set(visible))
+        if denied:
+            raise ImportAuthError(
+                "IMPORT_CUSTOMER_DENIED: 无权客户 "
+                f"{denied[:5]}（整批 fail-closed）")
+
+    def authorize_batch(self, actor: str, session_role: str,
+                        batch: dict, *, write: bool = False) -> None:
+        """批次作用域授权：平台角色放行；否则批次客户集 ⊆ 调用者
+        可见客户；无客户作用域的全局批次需 data.import.audit。"""
+        if actor == batch.get("actor"):
+            return  # 创建者本人
+        if self._platform_actor(actor, session_role):
+            return
+        cids = [r["customer_id"] for r in
+                self.customer_scopes(batch["batch_id"])]
+        if cids:
+            visible = self.iam.visible_customers(actor)
+            if visible is None:
+                return
+            if set(cids) - set(visible):
+                raise ImportAuthError(
+                    "IMPORT_BATCH_SCOPE_DENIED: 批次客户作用域超出"
+                    "授权范围")
+            if write and not self.iam.authorize(actor,
+                    TEMPLATE_SCOPE.get(batch["template_id"],
+                                       "master.manage")):
+                raise ImportAuthError(
+                    "IMPORT_PERMISSION_DENIED: 无写入权限")
+            return
+        if not self.iam.authorize(actor, "data.import.audit"):
+            raise ImportAuthError(
+                "IMPORT_BATCH_SCOPE_DENIED: 全局批次需"
+                " data.import.audit")
+
+    def customer_scopes(self, batch_id: str) -> list[dict]:
+        rows = self.store._conn.execute(
+            "SELECT customer_id, project_id, scope_source,"
+            " authorization_decision FROM"
+            " import_batch_customer_scope_v1 WHERE batch_id=?"
+            " ORDER BY customer_id", (batch_id,)).fetchall()
+        return [dict(r) for r in rows]
+
     # ---------- 上传 / 解析 ----------
 
     def upload(self, *, template_id: str, filename: str, data: bytes,
-               actor: str) -> dict:
+               actor: str, session_role: str = "admin",
+               test_run_id: str = "", correlation_id: str = "") -> dict:
+        """OSV5：批次 = 冻结执行上下文。授权先于落库（整批
+        fail-closed）；携带 test_run_id 时同事务写 uat_fixture。"""
         if template_id not in TEMPLATES:
             raise ImportError_(f"模板不存在: {template_id}")
+        self.authorize_template(actor, session_role, template_id)
         batch_id = _new_id("imp")
         fhash = hashlib.sha256(data).hexdigest()
         fmt = "xlsx" if filename.lower().endswith(
             (".xlsx", ".xlsm")) else "csv"
+        # 作用域解析（fail-closed：archived/不存在 test_run 拒绝）
+        data_scope = "operational"
+        if test_run_id:
+            from .scope import ScopeResolver
+            ScopeResolver(self.store).assert_test_run_current(test_run_id)
+            data_scope = "uat_fixture"
         try:
             header, rows = self._parse(fmt, data)
         except ImportError_:
             self._save_batch(batch_id, template_id, filename, fmt, fhash,
                              actor, "parse_failed", 0,
-                             {"header": [], "rows": []}, [], {})
+                             {"header": [], "rows": []}, [], {},
+                             data_scope=data_scope,
+                             test_run_id=test_run_id,
+                             correlation_id=correlation_id)
             raise
         # 行内容随批次落库（dry-run/提交可重读；不依赖临时文件）
         mapping: dict[str, Any] = {"header": header, "rows": rows}
@@ -353,16 +487,35 @@ class ImportCenter:
         mapping["column_map"] = mapped_cols
         missing = [c["field"] for c in TEMPLATES[template_id]["columns"]
                    if c["required"] and c["field"] not in mapped_cols]
+        # 批次客户作用域推导 + 逐客户整批授权（落库前）
+        customers = self._customers_of(template_id, mapped_cols, rows)
+        self.authorize_customers(actor, session_role, customers)
         status = "parsed" if not missing else "parse_failed"
         self._save_batch(batch_id, template_id, filename, fmt, fhash,
                          actor, status, len(rows), mapping,
                          [{"row": 0, "error": f"缺少必填列: {missing}"}]
-                         if missing else [], {})
-        b = self.get_batch(batch_id)
-        b["header"] = header
-        b["rows"] = rows[:50]
-        b["missing_required"] = missing
-        return b
+                         if missing else [], {},
+                         data_scope=data_scope,
+                         test_run_id=test_run_id,
+                         correlation_id=correlation_id,
+                         customers=customers)
+        return self.batch_dto(self._must(batch_id))
+
+    def _customers_of(self, template_id: str,
+                      mapping: dict[str, int],
+                      rows: list[list[str]]) -> list[str]:
+        col = TEMPLATE_CUSTOMER_COL.get(template_id)
+        if col is None:
+            return []
+        idx = mapping.get(col)
+        if idx is None:
+            return []
+        out: list[str] = []
+        for row in rows:
+            v = row[idx].strip() if idx < len(row) else ""
+            if v and v not in out:
+                out.append(v)
+        return out
 
     def _parse(self, fmt: str, data: bytes
                ) -> tuple[list[str], list[list[str]]]:
@@ -390,8 +543,12 @@ class ImportCenter:
 
     # ---------- dry-run / 校验 ----------
 
-    def dry_run(self, batch_id: str) -> dict:
+    def dry_run(self, batch_id: str, *, actor: str = "",
+                session_role: str = "admin") -> dict:
         b = self._must(batch_id)
+        self._guard_active(b)
+        if actor:
+            self.authorize_batch(actor, session_role, b, write=True)
         if b["status"] == "parse_failed":
             raise ImportError_("批次解析失败，无法 dry-run（请重新上传）")
         header, rows = self._reread(b)
@@ -415,7 +572,15 @@ class ImportCenter:
                            mapping={**b["mapping"], "column_map": mapping},
                            dry_run={"plan": plan, "rows": len(rows)},
                            errors=errors)
-        return self.get_batch(batch_id)
+        return self.batch_dto(self._must(batch_id))
+
+    def _guard_active(self, b: dict) -> None:
+        """OSV5：已归档批次不得再次 dry-run/commit（409）。"""
+        if b.get("visibility") == "history" or \
+                b.get("data_scope") in ("archived",):
+            raise ImportError_(
+                f"批次已归档，不得再次操作（visibility="
+                f"{b.get('visibility')}）")
 
     def _map_columns(self, t: dict, header: list[str]) -> dict[str, int]:
         mapping: dict[str, int] = {}
@@ -581,8 +746,11 @@ class ImportCenter:
 
     # ---------- 提交 ----------
 
-    def commit(self, batch_id: str, *, actor: str) -> dict:
+    def commit(self, batch_id: str, *, actor: str,
+               session_role: str = "admin") -> dict:
         b = self._must(batch_id)
+        self._guard_active(b)
+        self.authorize_batch(actor, session_role, b, write=True)
         if b["status"] not in ("dry_run_passed", "committed"):
             raise ImportError_(
                 f"只有 dry_run_passed 可提交（当前 {b['status']}）；"
@@ -626,6 +794,9 @@ class ImportCenter:
                 errors.append({"row": 0, "error": f"批量写入失败: {e}"})
         status = "committed" if stats["failed"] == 0 else "partial_failed"
         commit_result = {"stats": stats, "receipts": receipts[:50]}
+        # OSV5：fixture 批次的导入对象继承批次作用域（同事务）。
+        if b.get("data_scope") == "uat_fixture" and b.get("test_run_id"):
+            self._inherit_batch_scope(b, receipts)
         self._update_batch(batch_id, status=status, errors=errors,
                            commit=commit_result)
         # 证据 + 审计（原文件 hash/actor/结果留痕）
@@ -643,7 +814,35 @@ class ImportCenter:
                            customer_id="")
         except Exception:
             pass
-        return self.get_batch(batch_id)
+        return self.batch_dto(self._must(batch_id))
+
+    def _inherit_batch_scope(self, b: dict, receipts: list) -> None:
+        """fixture 批次提交对象作用域继承（自然键/回执键）。"""
+        conn = self.store._conn
+        trid, ds = b["test_run_id"], "uat_fixture"
+        tpl = b["template_id"]
+        if tpl in _SCOPE_INHERIT_NATURAL:
+            table, idcol = _SCOPE_INHERIT_NATURAL[tpl]
+            header, rows = self._reread(b)
+            mapping = self._map_columns(TEMPLATES[tpl], header)
+            idx = mapping.get(idcol)
+            if idx is not None:
+                keys = sorted({row[idx].strip() for row in rows
+                               if idx < len(row) and row[idx].strip()})
+                for k in keys:
+                    conn.execute(
+                        f"UPDATE {table} SET data_scope=?, test_run_id=?"
+                        f" WHERE {idcol}=? AND COALESCE(test_run_id,'')"
+                        "=''", (ds, trid, k))
+        if tpl in _SCOPE_INHERIT_RECEIPT:
+            table, idcol = _SCOPE_INHERIT_RECEIPT[tpl]
+            ids = sorted({r[idcol] for r in receipts if r.get(idcol)})
+            for oid in ids:
+                conn.execute(
+                    f"UPDATE {table} SET data_scope=?, test_run_id=?"
+                    f" WHERE {idcol}=? AND COALESCE(test_run_id,'')=''",
+                    (ds, trid, oid))
+        conn.commit()
 
     def _commit_row(self, template_id: str, rec: dict, actor: str,
                     pending_survey: list, receipts: list
@@ -848,13 +1047,98 @@ class ImportCenter:
             spec["questions"] = questions
             self.survey.update_draft(hit["survey_id"], spec=spec)
 
-    # ---------- 查询 ----------
+    # ---------- 查询（OSV5：DTO 白名单 + 作用域过滤） ----------
 
-    def list_batches(self) -> list[dict]:
-        rows = self.store._conn.execute(
-            "SELECT batch_id FROM import_batch_v1"
+    _DTO_KEYS = ("batch_id", "template_id", "filename", "file_format",
+                 "file_hash", "status", "actor", "row_count",
+                 "data_scope", "test_run_id", "visibility",
+                 "archived_at", "source", "correlation_id",
+                 "created_at", "updated_at")
+
+    def batch_dto(self, b: dict) -> dict:
+        """显式响应 DTO：绝不返回 mapping_json/dry_run_json/
+        error_report_json/commit_json 等原始 payload（指令 P0-004）。"""
+        d = {k: b.get(k) for k in self._DTO_KEYS}
+        d["customer_scopes"] = [
+            {"customer_id": r["customer_id"],
+             "project_id": r["project_id"],
+             "authorization_decision": r["authorization_decision"]}
+            for r in self.customer_scopes(b["batch_id"])]
+        d["dry_run"] = {k: b.get("dry_run", {}).get(k)
+                        for k in ("plan", "rows")}
+        d["errors"] = [dict(e) for e in (b.get("errors") or [])]
+        d["error_count"] = len(d["errors"])
+        c = b.get("commit") or {}
+        d["commit"] = {"stats": c.get("stats"),
+                       "receipts": c.get("receipts")}
+        return d
+
+    def preview_rows(self, batch_id: str, *, limit: int = 50) -> dict:
+        """原始行预览（仅创建者/data.import.audit，API 层鉴权）；
+        显式脱敏标记 + 行数上限。"""
+        b = self._must(batch_id)
+        header, rows = self._reread(b)
+        return {"batch_id": batch_id, "redacted": True,
+                "header": header, "rows": rows[:limit],
+                "truncated": len(rows) > limit,
+                "total_rows": len(rows)}
+
+    def list_batches(self, *, actor: str = "", session_role: str = "admin",
+                     view: str = "operational",
+                     include_fixture: bool = False) -> list[dict]:
+        """OSV5 列表口径：默认 effective operational ∩ 调用者客户
+        作用域；history/quarantine 仅平台/auditor；include_fixture
+        需授权（fail-closed）。"""
+        conn = self.store._conn
+        platform = (not actor) or self._platform_actor(actor, session_role)
+        if view == "quarantine":
+            if not (platform or self.iam.authorize(
+                    actor, "data.import.audit")):
+                raise ImportAuthError(
+                    "IMPORT_VIEW_DENIED: 隔离区仅管理员/审计可见")
+            rows = conn.execute(
+                "SELECT batch_id FROM import_batch_v1 WHERE"
+                " COALESCE(data_scope,'operational')='quarantine'"
+                " ORDER BY created_at DESC LIMIT 200").fetchall()
+            return [self.batch_dto(self._must(r["batch_id"]))
+                    for r in rows]
+        if view == "history":
+            if not (platform or (include_fixture and self.iam.authorize(
+                    actor, "data.import.audit"))):
+                raise ImportAuthError(
+                    "IMPORT_VIEW_DENIED: 历史视图需授权")
+            rows = conn.execute(
+                "SELECT batch_id FROM import_batch_v1 WHERE"
+                " COALESCE(visibility,'current')='history' OR"
+                " COALESCE(data_scope,'operational') IN"
+                " ('uat_fixture','demo_fixture')"
+                " ORDER BY created_at DESC LIMIT 200").fetchall()
+            return [self.batch_dto(self._must(r["batch_id"]))
+                    for r in rows]
+        if view == "mine":
+            rows = conn.execute(
+                "SELECT batch_id FROM import_batch_v1 WHERE actor=?"
+                " ORDER BY created_at DESC LIMIT 200", (actor,)
+            ).fetchall()
+            return [self.batch_dto(self._must(r["batch_id"]))
+                    for r in rows]
+        # 默认：effective operational（排除 fixture/quarantine/history）
+        rows = conn.execute(
+            "SELECT batch_id FROM import_batch_v1 WHERE"
+            " COALESCE(data_scope,'operational')='operational' AND"
+            " COALESCE(visibility,'current')='current' AND"
+            " COALESCE(test_run_id,'')=''"
             " ORDER BY created_at DESC LIMIT 200").fetchall()
-        return [self.get_batch(r["batch_id"]) for r in rows]
+        out = []
+        visible = None if platform else self.iam.visible_customers(actor)
+        for r in rows:
+            dto = self.batch_dto(self._must(r["batch_id"]))
+            cids = [c["customer_id"] for c in dto["customer_scopes"]]
+            if visible is not None and cids and \
+                    set(cids) - set(visible):
+                continue  # 客户作用域外批次对非平台角色不可见
+            out.append(dto)
+        return out
 
     def get_batch(self, batch_id: str) -> dict:
         b = self._must(batch_id)
@@ -885,19 +1169,32 @@ class ImportCenter:
     def _save_batch(self, batch_id: str, template_id: str, filename: str,
                     fmt: str, fhash: str, actor: str, status: str,
                     row_count: int, mapping: dict, errors: list,
-                    dry_run: dict) -> None:
-        self.store._conn.execute(
+                    dry_run: dict, *, data_scope: str = "operational",
+                    test_run_id: str = "", correlation_id: str = "",
+                    customers: list[str] | None = None) -> None:
+        conn = self.store._conn
+        conn.execute(
             "INSERT INTO import_batch_v1 (batch_id, template_id, filename,"
             " file_format, file_hash, status, actor, row_count,"
             " mapping_json, dry_run_json, error_report_json, commit_json,"
-            " created_at, updated_at)"
-            " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            " created_at, updated_at, data_scope, test_run_id, source,"
+            " correlation_id)"
+            " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
             (batch_id, template_id, filename, fmt, fhash, status, actor,
              row_count, json.dumps(mapping, ensure_ascii=False),
              json.dumps(dry_run, ensure_ascii=False),
              json.dumps(errors, ensure_ascii=False), "{}",
-             _now(), _now()))
-        self.store._conn.commit()
+             _now(), _now(), data_scope, test_run_id, "import_center",
+             correlation_id))
+        # OSV5：多客户作用域关联（不得压成单 customer_id）。
+        for cid in (customers or []):
+            conn.execute(
+                "INSERT OR IGNORE INTO import_batch_customer_scope_v1"
+                " (batch_id, customer_id, project_id, scope_source,"
+                " authorization_decision, created_at)"
+                " VALUES (?,?,?,?,?,?)",
+                (batch_id, cid, "", "row", "granted", _now()))
+        conn.commit()
 
     def _update_batch(self, batch_id: str, *, status: str | None = None,
                       mapping: dict | None = None,

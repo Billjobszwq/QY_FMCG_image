@@ -2222,6 +2222,26 @@ ALTER TABLE import_batch_v1 ADD COLUMN data_scope TEXT NOT NULL DEFAULT 'operati
 ALTER TABLE import_batch_v1 ADD COLUMN test_run_id TEXT NOT NULL DEFAULT '';
 """
 
+# OSV5 T2：导入批次生命周期 + 多客户作用域关联表（指令 5.1；
+# 批次=冻结执行上下文；多客户不得压成单 customer_id）。
+_M059 = """
+ALTER TABLE import_batch_v1 ADD COLUMN visibility TEXT NOT NULL DEFAULT 'current';
+ALTER TABLE import_batch_v1 ADD COLUMN archived_at TEXT NOT NULL DEFAULT '';
+ALTER TABLE import_batch_v1 ADD COLUMN source TEXT NOT NULL DEFAULT 'import_center';
+ALTER TABLE import_batch_v1 ADD COLUMN correlation_id TEXT NOT NULL DEFAULT '';
+CREATE TABLE IF NOT EXISTS import_batch_customer_scope_v1 (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  batch_id TEXT NOT NULL,
+  customer_id TEXT NOT NULL,
+  project_id TEXT NOT NULL DEFAULT '',
+  scope_source TEXT NOT NULL DEFAULT 'row',
+  authorization_decision TEXT NOT NULL DEFAULT 'granted',
+  created_at TEXT NOT NULL
+);
+CREATE UNIQUE INDEX IF NOT EXISTS ux_import_batch_cust_scope
+  ON import_batch_customer_scope_v1 (batch_id, customer_id, project_id);
+"""
+
 MIGRATIONS: tuple[tuple[str, str], ...] = (
     ("001_platform_init", _M001),
     ("002_labeling_inbox", _M002),
@@ -2281,6 +2301,7 @@ MIGRATIONS: tuple[tuple[str, str], ...] = (
     ("056_geofence_scope_v1", _M056),
     ("057_iam_identity_lifecycle_v1", _M057),
     ("058_bi_registry_lifecycle_v1", _M058),
+    ("059_import_scope_lineage_v1", _M059),
 )
 
 
