@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { CapabilityInfo, fetchCapabilities, fetchVersion, HealthBody,
   iamGet } from "../api";
+import { PageHeader } from "../platform/components";
 
 export default function SystemStatus({ health }: { health: HealthBody | null }) {
   const [version, setVersion] = useState<{ platform: string; version: string } | null>(null);
@@ -33,7 +34,8 @@ export default function SystemStatus({ health }: { health: HealthBody | null }) 
 
   return (
     <section>
-      <h2>系统状态</h2>
+      <PageHeader title="系统状态"
+        desc="服务健康 / 能力 / 限流 / 测试与证据中心 / 机器 Gate（实时复评）" />
       {/* SI3（指令七.10）：可信 Gate 与阻断原因首屏展示；检查明细
           默认折叠。Gate 为实时 freshness 复评结果，非静态文件。 */}
       <div className="card">
