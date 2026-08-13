@@ -16,6 +16,8 @@
 10 Browser 运营页显示 fixture（证据缺失/视图未分离）
 11 BI 将 fixture import 计入运营
 12 Gate evidence 使用旧 HEAD / 旧 DB fingerprint → STALE
+13 OSV51 quarantine 批次执行逃逸（commit/dry-run 必须 409 + 零写入）
+14 OSV51 隔离后被改写的 quarantine 批次 → Gate quarantine_execution_escape 拦截
 """
 from __future__ import annotations
 
@@ -248,6 +250,49 @@ def main() -> int:
         neg("stale_head_binding_detected",
             good["gate"] == "STALE_GATE_EVIDENCE",
             f"gate={good['gate']}")
+
+        # 13) OSV51 C-1：quarantine 批次执行逃逸——API 写路径必须 409
+        conn.execute(
+            "INSERT INTO import_batch_v1 (batch_id, template_id,"
+            " filename, file_format, file_hash, status, actor,"
+            " row_count, mapping_json, dry_run_json, error_report_json,"
+            " commit_json, created_at, updated_at, data_scope,"
+            " visibility, archived_at) VALUES ('neg13','customers_v1',"
+            "'q.csv','csv','h','dry_run_passed','admin',0,"
+            "'{\"rows\": []}','{}','[]','{}',"
+            "'2026-08-11T00:00:00+00:00','2026-08-11T00:00:00+00:00',"
+            "'quarantine','current','2026-08-13T05:28:36+00:00')")
+        conn.commit()
+        before_cust = conn.execute(
+            "SELECT count(*) c FROM md_customer_v1").fetchone()["c"]
+        rcm = client.post("/api/v1/import/batches/neg13/commit",
+                          headers=h)
+        rdm = client.post("/api/v1/import/batches/neg13/dry-run",
+                          headers=h)
+        after_cust = conn.execute(
+            "SELECT count(*) c FROM md_customer_v1").fetchone()["c"]
+        code = "IMPORT_BATCH_WRITE_BLOCKED"
+        neg("quarantine_execution_escape",
+            rcm.status_code == 409 and rdm.status_code == 409
+            and code in str(rcm.json().get("detail", ""))
+            and code in str(rdm.json().get("detail", ""))
+            and after_cust == before_cust,
+            f"commit={rcm.status_code} dry_run={rdm.status_code}"
+            f" writes={after_cust - before_cust}")
+        # 14) OSV51 C-1：隔离后被改写的 quarantine 批次 → Gate 必须拦
+        conn.execute(
+            "UPDATE import_batch_v1 SET"
+            " updated_at='2026-08-13T08:07:41+00:00'"
+            " WHERE batch_id='neg13'")
+        conn.commit()
+        res = _eval(store)
+        neg("quarantine_post_isolation_mutation_detected",
+            "quarantine_execution_escape" in _failed_checks(res)
+            and res["gate"] != "READY_FOR_REAL_DATA_UAT",
+            f"gate={res['gate']}")
+        conn.execute("DELETE FROM import_batch_v1"
+                     " WHERE batch_id='neg13'")
+        conn.commit()
 
     OUT.parent.mkdir(parents=True, exist_ok=True)
     OUT.write_text(json.dumps(

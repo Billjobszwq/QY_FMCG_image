@@ -210,16 +210,41 @@ export default function ImportCenter() {
             <p className="v">预检：新增 {detail.dry_run.plan.insert ?? 0}
               {" "}· 跳过 {detail.dry_run.plan.skip ?? 0}
               {" "}· 冲突 {detail.dry_run.plan.conflict ?? 0}</p>)}
-          <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
-            <button className="btn" disabled={busy}
-              onClick={() => act(detail.batch_id, "dry-run")}>dry-run
-            </button>
-            <button className="btn primary" disabled={busy}
-              onClick={() => act(detail.batch_id, "commit")}>提交</button>
-            <a className="btn"
-              href={`/api/v1/import/batches/${detail.batch_id}/errors.csv`}
-            >下载错误报告</a>
-          </div>
+          {(() => {
+            // OSV51 C-1：隔离/归档/历史批次写冻结——不渲染误导性提交按钮
+            const writable = !(detail.data_scope === "quarantine"
+              || detail.data_scope === "archived"
+              || detail.visibility === "history");
+            return writable ? (
+              <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+                <button className="btn" disabled={busy}
+                  onClick={() => act(detail.batch_id, "dry-run")}>dry-run
+                </button>
+                <button className="btn primary" disabled={busy}
+                  onClick={() => act(detail.batch_id, "commit")}>提交
+                </button>
+                <a className="btn"
+                  href={`/api/v1/import/batches/${detail.batch_id}/errors.csv`}
+                >下载错误报告</a>
+              </div>
+            ) : (
+              <div style={{ marginTop: 8 }}>
+                <p className="v" data-testid="batch-write-frozen"
+                  style={{ color: "var(--warn)", border:
+                    "1px solid var(--warn)", borderRadius: 6,
+                    padding: "6px 10px" }}>
+                  ⚠ 该批次作用域为 <code>{detail.data_scope}</code>
+                  {detail.visibility === "history" ? "（已归档历史）" : ""}
+                  ，已写冻结：不得执行 dry-run/提交。
+                  {detail.data_scope === "quarantine"
+                    ? "请在隔离区走人工裁决流程。" : ""}
+                </p>
+                <a className="btn"
+                  href={`/api/v1/import/batches/${detail.batch_id}/errors.csv`}
+                >下载错误报告</a>
+              </div>
+            );
+          })()}
           {detail.errors.length > 0 && (
             <>
               <h3 style={{ marginTop: 12 }}>逐行错误（{detail.errors.length}）

@@ -546,7 +546,7 @@ class ImportCenter:
     def dry_run(self, batch_id: str, *, actor: str = "",
                 session_role: str = "admin") -> dict:
         b = self._must(batch_id)
-        self._guard_active(b)
+        self._assert_batch_writable(b)
         if actor:
             self.authorize_batch(actor, session_role, b, write=True)
         if b["status"] == "parse_failed":
@@ -574,13 +574,29 @@ class ImportCenter:
                            errors=errors)
         return self.batch_dto(self._must(batch_id))
 
-    def _guard_active(self, b: dict) -> None:
-        """OSV5：已归档批次不得再次 dry-run/commit（409）。"""
-        if b.get("visibility") == "history" or \
-                b.get("data_scope") in ("archived",):
+    def _assert_batch_writable(self, b: dict) -> None:
+        """OSV51 C-1：作用域写冻结守卫（不可绕过的唯一强制点）。
+
+        data_scope ∈ {quarantine, archived} 或 visibility=='history' 的
+        批次一律禁止 dry-run/commit/重放：
+        - quarantine：隔离裁决闭环（03-QUARANTINE-STATE-MACHINE.md）之前
+          不得产生任何写入；只读分析走裁决证据（追加式，不改原批次）；
+        - archived/history：已归档证据不得再次操作（OSV5 原语义并入）。
+        稳定错误码 IMPORT_BATCH_WRITE_BLOCKED → API 映射 409。
+        守卫只读 DB 行（b 来自 _must），请求参数无法覆盖。
+        """
+        if b.get("data_scope") in ("quarantine", "archived") or \
+                b.get("visibility") == "history":
             raise ImportError_(
-                f"批次已归档，不得再次操作（visibility="
-                f"{b.get('visibility')}）")
+                "IMPORT_BATCH_WRITE_BLOCKED: "
+                f"data_scope={b.get('data_scope')} "
+                f"visibility={b.get('visibility')}；"
+                "隔离/归档批次不得执行 dry-run/commit，"
+                "请走隔离区裁决流程")
+
+    def _guard_active(self, b: dict) -> None:
+        """OSV5 旧入口：统一委托 C-1 守卫（语义并入，保留兼容）。"""
+        self._assert_batch_writable(b)
 
     def _map_columns(self, t: dict, header: list[str]) -> dict[str, int]:
         mapping: dict[str, int] = {}
@@ -749,7 +765,7 @@ class ImportCenter:
     def commit(self, batch_id: str, *, actor: str,
                session_role: str = "admin") -> dict:
         b = self._must(batch_id)
-        self._guard_active(b)
+        self._assert_batch_writable(b)
         self.authorize_batch(actor, session_role, b, write=True)
         if b["status"] not in ("dry_run_passed", "committed"):
             raise ImportError_(

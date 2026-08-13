@@ -20,8 +20,12 @@ READY = "READY_FOR_REAL_DATA_UAT"
 STALE = "STALE_GATE_EVIDENCE"
 # OSV5（指令 P1-004）：版本一处定义，gate.json/API/Web/文档/
 # validator/负例全部引用，禁止漂移。
-EVALUATOR_VERSION = "3.2.0"
+# OSV51：3.3.0 = 证据新鲜度绑定 + 导入安全（quarantine 写逃逸/
+# 递归 secret 扫描/血缘完整性）检查族。
+EVALUATOR_VERSION = "3.3.0"
 BLOCKED_IMPORT_LINEAGE = "BLOCKED_BY_IMPORT_SCOPE_LINEAGE"
+# OSV51 C-1/C-2：导入安全阻断码（quarantine 写逃逸、secret 泄漏）
+BLOCKED_IMPORT_SECURITY = "BLOCKED_BY_IMPORT_SECURITY"
 
 # UAT 主工作流必备节点类型；model/command 任一即可作为 capability
 # 节点（指令："model或command/capability"）。
@@ -463,6 +467,29 @@ def evaluate_gate_from_evidence(*, store=None,
                     "'quarantine')").fetchone()["c"]
                 chk("import_batch_unknown_scope_zero", unknown == 0,
                     str(unknown), BLOCKED_IMPORT_LINEAGE)
+                # OSV51 C-1：quarantine 批次写逃逸检测——隔离后
+                # （archived_at 之后）仍被改写的 quarantine 批次即违规；
+                # 已进入裁决状态机（quarantine_adjudication_v1 有行）
+                # 的批次视为已受治理，豁免（W3 引入该表前豁免集为空）。
+                try:
+                    esc = conn.execute(
+                        "SELECT count(*) c FROM import_batch_v1 b WHERE"
+                        " COALESCE(b.data_scope,'')='quarantine' AND"
+                        " COALESCE(b.archived_at,'')!='' AND"
+                        " b.updated_at > b.archived_at AND NOT EXISTS"
+                        " (SELECT 1 FROM quarantine_adjudication_v1 a"
+                        "  WHERE a.batch_id=b.batch_id)"
+                    ).fetchone()["c"]
+                except Exception:
+                    esc = conn.execute(
+                        "SELECT count(*) c FROM import_batch_v1 b WHERE"
+                        " COALESCE(b.data_scope,'')='quarantine' AND"
+                        " COALESCE(b.archived_at,'')!='' AND"
+                        " b.updated_at > b.archived_at"
+                    ).fetchone()["c"]
+                chk("quarantine_execution_escape", esc == 0,
+                    f"post_quarantine_modified={esc}",
+                    BLOCKED_IMPORT_SECURITY)
                 from .analytics import bi_effective_counts as _eff2
                 eff_imp = _eff2(conn)["import_batch_v1"]
                 db_eff = conn.execute(
@@ -603,7 +630,7 @@ def evaluate_gate_from_evidence(*, store=None,
                 chk("data_products_all_effective_consistent", False,
                     f"对账异常: {e}", "BLOCKED_BY_BI_EFFECTIVE")
             chk("evaluator_version_consistent",
-                EVALUATOR_VERSION == "3.2.0",
+                EVALUATOR_VERSION == "3.3.0",
                 f"evaluator_version={EVALUATOR_VERSION}",
                 "BLOCKED_BY_GATE_EVIDENCE")
         except Exception as e:
