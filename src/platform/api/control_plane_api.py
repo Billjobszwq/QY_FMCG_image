@@ -203,7 +203,8 @@ def create_control_plane_router(store: Any, gateway: CommandGateway,
             return {"gate": None,
                     "note": "尚未生成 gate.json（运行 UAT --gate）"}
         latest = candidates[-1]
-        # git HEAD 短缓存（5s）：freshness 判定保持同步且便宜
+        # git HEAD/树/迁移/worktree 短缓存（5s）：freshness 判定保持
+        # 同步且便宜（OSV51 C-6：实时路径复核代码状态，不只 HEAD+DB）
         cache = _gate_cache
         now = _time.monotonic()
         if cache["head"] is None or now - cache["ts"] > 5:
@@ -214,9 +215,20 @@ def create_control_plane_router(store: Any, gateway: CommandGateway,
                 ).stdout.strip()
             except Exception:  # noqa: BLE001
                 head = ""
-            cache.update({"head": head, "ts": now})
+            from .. import binding_core as _bc
+            try:
+                tree = _bc.tree_hash(root)
+                wclean = _bc.worktree_clean(root)
+                mig = _bc.migration_hash(store._conn)
+            except Exception:  # noqa: BLE001
+                tree, wclean, mig = "", None, ""
+            cache.update({"head": head, "ts": now, "tree": tree,
+                          "worktree_clean": wclean, "mig": mig})
         return evaluate_gate_from_evidence(
             store=store, recorded_gate_path=latest,
-            current_head=cache["head"] or "")
+            current_head=cache["head"] or "",
+            current_tree_hash=cache.get("tree", ""),
+            current_migration_hash=cache.get("mig", ""),
+            worktree_clean=cache.get("worktree_clean"))
 
     return router

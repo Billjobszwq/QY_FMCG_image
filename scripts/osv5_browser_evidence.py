@@ -169,6 +169,7 @@ NO_FX_STATUS_JS = ("(()=>{const t=(document.body.innerText||'');"
 
 
 async def main_async() -> int:
+    started_iso = datetime.now(timezone.utc).isoformat()
     owner, csrf = login_cookie(OWNER, OWNER_PW)
     gate = api("/api/v1/control/gate", owner)
     gate_val = str(gate.get("gate") or "")
@@ -254,6 +255,10 @@ async def main_async() -> int:
         CONSOLE_ISSUES.clear()  # 登录/首屏稳定后清空再收集
 
         # ---- Import Center 四视图（owner，对象级对账） ----
+        # OSV51：修复四视图截图表层字节相同的采集缺陷——切换视图后
+        # 强制滚动归零 + 重排/重绘同步 + 超越视口捕获；若与上一视图
+        # sha 相同则强制重载重试一次。
+        prev_sha = ""
         for view, tab_text, n_api, want_ids in (
                 ("operational", "运营导入", n_op, []),
                 ("mine", "我的批次", n_mine, []),
@@ -269,7 +274,27 @@ async def main_async() -> int:
             n_dom = await jseval(ws, msg_id, IMPORT_ROWS_JS)
             ids_dom = await jseval(ws, msg_id, IMPORT_IDS_JS)
             ids_ok = all(i in ids_dom for i in want_ids)
+            await jseval(ws, msg_id,
+                         "window.scrollTo(0,0);"
+                         "void document.body.offsetHeight;1")
+            await asyncio.sleep(0.5)
             fn, sha = await shot(ws, msg_id, 1440, f"import_{view}")
+            if prev_sha and sha == prev_sha:
+                # 同字节 = 渲染未生效：强制重载后重取一次
+                await goto(ws, msg_id, owner, "/#/data/import")
+                await jseval(ws, msg_id,
+                             "(()=>{const b=[...document.querySelectorAll("
+                             "'button[role=tab]')].find(x=>x.innerText"
+                             f".includes('{tab_text}'));if(b)b.click();"
+                             "return !!b;})()")
+                await asyncio.sleep(3.0)
+                await jseval(ws, msg_id,
+                             "window.scrollTo(0,0);"
+                             "void document.body.offsetHeight;1")
+                await asyncio.sleep(0.5)
+                fn, sha = await shot(ws, msg_id, 1440,
+                                     f"import_{view}")
+            prev_sha = sha
             files.append(fn)
             p = page("/#/data/import", 1440,
                      f"import_view_{view}_count_api_reconciled",
@@ -409,6 +434,7 @@ async def main_async() -> int:
                 "404", "ERR_NAME_NOT_RESOLVED", "net::")
     unexplained = [c for c in CONSOLE_ISSUES
                    if not any(k in c for k in declared)]
+    ok_n = sum(1 for p in pages if p["assertion"])
     evidence = {"status": "verified_object_level_v5",
                 "method": "CDP headless Chrome（真实 CSS 视口；"
                           "owner/read_only/auditor 真实角色驱动；"
@@ -425,6 +451,27 @@ async def main_async() -> int:
                 "note": "OSV5：四视图分离 + 对象级 batch_id 对账；"
                         "低权限零批次；BI/运营 API 同值；Gate pill "
                         "实时一致"}
+    # OSV51 C-6：浏览器证据 binding 块（生成时代码/DB 状态）
+    try:
+        import sys as _sys
+        from pathlib import Path as _Path
+        _ROOT = _Path(__file__).resolve().parents[1]
+        _sys.path.insert(0, str(_ROOT))
+        from src.platform import binding_core as _bc
+        from src.platform.data.store import PlatformStore
+        from src.platform.gate_evaluator import db_fingerprint
+        _store = PlatformStore(_ROOT / ".platform" / "platform.sqlite")
+        evidence["binding"] = _bc.make_binding(
+            root=_ROOT, conn=_store._conn,
+            argv=[_sys.executable, "scripts/osv5_browser_evidence.py"],
+            result_payload={"pages": len(pages),
+                            "assertions_ok": ok_n,
+                            "browser_test_run": NS},
+            started_at=started_iso,
+            finished_at=datetime.now(timezone.utc).isoformat(),
+            database_fingerprint=db_fingerprint(_store))
+    except Exception as _e:  # noqa: BLE001
+        evidence["binding_error"] = str(_e)[:200]
     (OUT / "browser_evidence.json").write_text(
         json.dumps(evidence, ensure_ascii=False, indent=2),
         encoding="utf-8")

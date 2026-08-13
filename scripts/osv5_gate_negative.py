@@ -21,6 +21,9 @@
 15 OSV51 批次 JSON 列嵌套明文密码 → Gate recursive_secret_scan 拦截
 16 OSV51 quarantine 批次可归因的 operational 对象写入 →
    Gate quarantine_no_operational_writes 拦截
+17 OSV51 证据缺 binding 块 → Gate 不得 READY（missing_binding）
+18-20 OSV51 代码/DB/前端变化后不重跑测试/UAT/浏览器证据 → STALE
+21 OSV51 自比较注入（recorded==current 且证据无 binding）→ 不得放行
 """
 from __future__ import annotations
 
@@ -81,6 +84,8 @@ def neg(name: str, ok: bool, evidence: str) -> None:
 def main() -> int:
     import os
     import tempfile
+    from datetime import datetime, timezone
+    started_at = datetime.now(timezone.utc).isoformat()
     os.environ["PLATFORM_ADMIN_PASSWORD"] = PW
     with tempfile.TemporaryDirectory() as td:
         tmp = Path(td)
@@ -345,11 +350,92 @@ def main() -> int:
                      " WHERE customer_id='neg16-cust'")
         conn.commit()
 
+        # 17) OSV51 C-6：证据缺 binding 块 → 不得 READY
+        res = evaluate_gate_from_evidence(
+            store=store, evidence_bindings={
+                "uat": None, "test": None, "browser": None,
+                "negative": None})
+        bad = _failed_checks(res)
+        neg("missing_binding_detected",
+            all(f"{k}_evidence_binding_fresh" in bad
+                for k in ("uat", "test", "browser", "negative"))
+            and res["gate"] != "READY_FOR_REAL_DATA_UAT",
+            f"gate={res['gate']}")
+
+        # 18-20) OSV51 C-6：代码/DB/前端变化后不重跑对应证据 → STALE
+        from src.platform import binding_core as _bc
+        cur_tree = _bc.tree_hash(ROOT)
+        cur_head = _bc.git_head(ROOT) or "x"
+        cur_mig = _bc.migration_hash(conn)
+        res = evaluate_gate_from_evidence(
+            store=store, current_head=cur_head,
+            current_tree_hash=cur_tree,
+            current_migration_hash=cur_mig,
+            evidence_bindings={"test": {
+                "source_commit": cur_head,
+                "code_tree_hash": "stale0stale0stale0",
+                "migration_hash": cur_mig}})
+        neg("stale_code_without_rerun_tests",
+            res["gate"] == "STALE_GATE_EVIDENCE",
+            f"gate={res['gate']}")
+        from src.platform.gate_evaluator import db_fingerprint
+        fp = db_fingerprint(store)
+        stale_fp = dict(fp)
+        stale_fp["event_watermark"] = int(fp.get("event_watermark",
+                                                  0)) + 999
+        res = evaluate_gate_from_evidence(
+            store=store, current_head=cur_head,
+            current_tree_hash=cur_tree,
+            current_migration_hash=cur_mig,
+            evidence_bindings={"uat": {
+                "source_commit": cur_head,
+                "code_tree_hash": cur_tree,
+                "migration_hash": cur_mig,
+                "database_fingerprint": stale_fp}})
+        neg("stale_db_without_rerun_uat",
+            res["gate"] == "STALE_GATE_EVIDENCE",
+            f"gate={res['gate']}")
+        res = evaluate_gate_from_evidence(
+            store=store, current_head=cur_head,
+            current_tree_hash=cur_tree,
+            current_migration_hash=cur_mig,
+            evidence_bindings={"browser": {
+                "source_commit": cur_head,
+                "code_tree_hash": "stale1stale1stale1",
+                "migration_hash": cur_mig}})
+        neg("stale_frontend_without_rerun_browser",
+            res["gate"] == "STALE_GATE_EVIDENCE",
+            f"gate={res['gate']}")
+
+        # 21) OSV51 C-6：自比较注入——recorded==current 但证据无
+        # binding 块时不得放行（旧行为是恒真）
+        res = evaluate_gate_from_evidence(
+            store=store, source_commit=cur_head, current_head=cur_head,
+            recorded_tree_hash=cur_tree, current_tree_hash=cur_tree,
+            recorded_migration_hash=cur_mig,
+            current_migration_hash=cur_mig,
+            evidence_bindings={"uat": None, "test": None,
+                               "browser": None, "negative": None})
+        neg("self_compare_injection_still_blocked",
+            res["gate"] != "READY_FOR_REAL_DATA_UAT",
+            f"gate={res['gate']}")
+
+    from datetime import datetime as _dt, timezone as _tz
+    from src.platform import binding_core as _bc2
+    from src.platform.gate_evaluator import db_fingerprint as _dbfp
+    finished_at = _dt.now(_tz.utc).isoformat()
+    payload = {"gate_negative_tests": results,
+               "all_blocked": all(r["blocked"] for r in results)}
+    payload["binding"] = _bc2.make_binding(
+        root=ROOT, conn=conn,
+        argv=[sys.executable, "scripts/osv5_gate_negative.py"],
+        result_payload={"all_blocked": payload["all_blocked"],
+                        "count": len(results)},
+        started_at=started_at, finished_at=finished_at,
+        database_fingerprint=_dbfp(store))
     OUT.parent.mkdir(parents=True, exist_ok=True)
-    OUT.write_text(json.dumps(
-        {"gate_negative_tests": results,
-         "all_blocked": all(r["blocked"] for r in results)},
-        ensure_ascii=False, indent=2), encoding="utf-8")
+    OUT.write_text(json.dumps(payload, ensure_ascii=False, indent=2),
+                   encoding="utf-8")
     ok = all(r["blocked"] for r in results)
     print("ALL_BLOCKED:", ok)
     return 0 if ok else 1

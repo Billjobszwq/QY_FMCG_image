@@ -365,6 +365,7 @@ def evaluate_gate_from_evidence(*, store=None,
                                 browser_report_path=None,
                                 issue_ledger_path=None,
                                 test_report_path=None,
+                                negative_report_path=None,
                                 service_health=None,
                                 source_commit: str = "",
                                 current_head: str = "",
@@ -373,14 +374,21 @@ def evaluate_gate_from_evidence(*, store=None,
                                 recorded_migration_hash: str = "",
                                 current_migration_hash: str = "",
                                 worktree_clean: bool | None = None,
+                                evidence_bindings: dict | None = None,
                                 recorded_gate_path=None,
                                 out_path=None) -> dict:
-    """从证据自动计算 Gate（3.0）。任一证据缺失/失败 → BLOCKED_BY_*；
-    Gate 生成后代码/数据变化 → STALE_GATE_EVIDENCE。
+    """从证据自动计算 Gate（OSV51 3.3）。任一证据缺失/失败 →
+    BLOCKED_BY_*；Gate 生成后代码/数据变化 → STALE_GATE_EVIDENCE。
+
+    OSV51 C-6：每份证据（UAT/test/browser/negative）必须携带 binding
+    块（source_commit/code_tree_hash/migration_hash/
+    database_fingerprint/suite_config_hash/command_hash/result_hash/
+    started_at/finished_at）；recorded 侧只来自证据文件，current 侧
+    现场独立计算——禁止自比较。evidence_bindings: {kind: binding|None}。
 
     SI3：传 recorded_gate_path 时执行 **freshness 复评**（指令九.4）：
-    实时重算 DB fingerprint/HEAD 绑定，与已记录 Gate 比对；不一致
-    即 STALE，绝不允许 DB 已变化仍返回 READY。
+    实时重算 DB fingerprint/HEAD/树/迁移/worktree 绑定，与已记录
+    Gate 比对；不一致即 STALE，绝不允许已变化仍返回 READY。
     判定优先级：STALE > 浏览器语义 > scope lineage > fixture 泄漏 >
     状态投影 > 其余证据缺失。"""
     # ---- SI3 T7：freshness 复评路径（不重跑全量证据，只验绑定） ----
@@ -399,6 +407,18 @@ def evaluate_gate_from_evidence(*, store=None,
             stale.append(
                 f"head 已变化: {recorded['source_commit']} →"
                 f" {current_head}")
+        # OSV51 C-6：实时路径同时复核代码树/迁移/worktree
+        if current_tree_hash and recorded.get("code_tree_hash") \
+                and recorded["code_tree_hash"] != current_tree_hash:
+            stale.append(
+                f"code_tree_hash 已变化: {recorded['code_tree_hash']}"
+                f" → {current_tree_hash}")
+        if current_migration_hash and recorded.get("migration_hash") \
+                and recorded["migration_hash"] \
+                != current_migration_hash:
+            stale.append("migration_hash 已变化")
+        if worktree_clean is False:
+            stale.append("tracked worktree 非 clean")
         if store is not None:
             rec_fp = recorded.get("db_fingerprint") or {}
             cur_fp = db_fingerprint(store)
@@ -460,6 +480,56 @@ def evaluate_gate_from_evidence(*, store=None,
         chk("tracked_worktree_clean", worktree_clean,
             "clean" if worktree_clean else "tracked 文件存在未提交变更",
             "BLOCKED_BY_GATE_EVIDENCE")
+
+    # ---- OSV51 C-6：每份证据必须绑定生成时的代码/DB 状态 ----
+    # recorded 侧只来自证据文件 binding 块；current 侧为本次现场值。
+    if evidence_bindings is not None:
+        _cur_fp_cache: dict = {}
+
+        def _cur_fp():
+            if "fp" not in _cur_fp_cache:
+                try:
+                    _cur_fp_cache["fp"] = db_fingerprint(store) \
+                        if store is not None else {}
+                except Exception as e:  # noqa: BLE001
+                    _cur_fp_cache["fp"] = {"error": str(e)}
+            return _cur_fp_cache["fp"]
+
+        for kind in ("uat", "test", "browser", "negative"):
+            b = evidence_bindings.get(kind)
+            name = f"{kind}_evidence_binding_fresh"
+            if not b:
+                chk(name, False, f"{kind} 证据缺少 binding 块",
+                    "BLOCKED_BY_GATE_EVIDENCE")
+                continue
+            problems: list[str] = []
+            if current_head and b.get("source_commit") \
+                    and b["source_commit"] != current_head:
+                problems.append(
+                    f"source_commit={str(b['source_commit'])[:12]}"
+                    f"≠head={current_head[:12]}")
+            if current_tree_hash and b.get("code_tree_hash") \
+                    and b["code_tree_hash"] != current_tree_hash:
+                problems.append(
+                    f"code_tree_hash={b['code_tree_hash']}"
+                    f"≠current={current_tree_hash}")
+            if current_migration_hash and b.get("migration_hash") \
+                    and b["migration_hash"] != current_migration_hash:
+                problems.append(
+                    f"migration_hash={b['migration_hash']}"
+                    f"≠current={current_migration_hash}")
+            rec_fp = b.get("database_fingerprint") or {}
+            if store is not None and rec_fp:
+                cur_fp = _cur_fp()
+                for key in ("scope_graph", "event_watermark",
+                            "outbox_pending", "projection_hash",
+                            "counts"):
+                    if rec_fp.get(key) != cur_fp.get(key):
+                        problems.append(
+                            f"db_fingerprint.{key}≠current")
+            chk(name, not problems,
+                "; ".join(problems)[:280] if problems else
+                "binding 与当前 HEAD/树/迁移/DB 一致", STALE)
 
     # ---- SI2 T6：全 Domain scope lineage（直接重算，不信自报） ----
     if store is not None:
@@ -982,6 +1052,24 @@ def evaluate_gate_from_evidence(*, store=None,
         chk("test_report_present", False, "测试报告缺失",
             "BLOCKED_BY_GATE_EVIDENCE")
 
+    # ---- OSV51 C-6/C-8：负例账本由机器生成且全部阻断 ----
+    negr = _load_json(negative_report_path) \
+        if negative_report_path else None
+    if negative_report_path:
+        evidence_hashes["negative_report"] = _file_sha(
+            Path(negative_report_path))
+    if negative_report_path is not None:
+        if negr is None:
+            chk("gate_negative_ledger_present", False, "负例账本缺失",
+                "BLOCKED_BY_GATE_EVIDENCE")
+        else:
+            blocked = bool(negr.get("all_blocked"))
+            n_items = len(negr.get("gate_negative_tests") or [])
+            chk("gate_negative_all_blocked",
+                blocked and n_items >= 16,
+                f"all_blocked={blocked} negatives={n_items}",
+                "BLOCKED_BY_GATE_EVIDENCE")
+
     # ---- 浏览器证据（文件必须存在，不接受纯文字；SI2 T7：语义断言） ----
     brow = _load_json(browser_report_path) if browser_report_path else None
     if browser_report_path:
@@ -1033,6 +1121,17 @@ def evaluate_gate_from_evidence(*, store=None,
         chk("browser_import_current_history_separated", _imp_ok,
             f"import 页 views={sorted(imp_views)}",
             "BLOCKED_BY_BROWSER_SEMANTICS")
+        # OSV51（OSV51-010）：四视图截图像素必须互不相同——字节级
+        # 相同说明采集未反映真实渲染（视图分离不得仅靠 DOM 数字）。
+        _imp_shas = [str(p.get("screenshot_sha256", ""))
+                     for p in (brow.get("pages") or [])
+                     if p.get("route") == "/#/data/import"
+                     and p.get("view")]
+        if len(_imp_shas) >= 2:
+            chk("browser_import_views_distinct",
+                len(set(_imp_shas)) == len(_imp_shas),
+                f"shas={len(_imp_shas)} unique={len(set(_imp_shas))}",
+                "BLOCKED_BY_BROWSER_SEMANTICS")
         # SI2 T7：实际对象 ID/文本必须与预期一致（不得只看截图存在）；
         # 无语义断言页面 = 证据缺失（GATE_EVIDENCE），断言失败 =
         # 语义不一致（BROWSER_SEMANTICS）。
@@ -1090,7 +1189,11 @@ def evaluate_gate_from_evidence(*, store=None,
               "evidence_hashes": evidence_hashes,
               "evaluated_at": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
               "evaluator_version": EVALUATOR_VERSION,
-              "source_commit": source_commit}
+              "source_commit": source_commit,
+              # OSV51 C-6：实时 freshness 复评的 recorded 基准
+              "code_tree_hash": current_tree_hash,
+              "migration_hash": current_migration_hash,
+              "worktree_clean": worktree_clean}
     # SI3：绑定数据库 fingerprint（freshness 复评依据，指令九.2）
     if store is not None:
         try:

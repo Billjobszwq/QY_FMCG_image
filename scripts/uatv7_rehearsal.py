@@ -397,6 +397,30 @@ def main() -> int:
         "operational_residue": residue,
         "projection": {"operational_residue": residue},
     }
+    # OSV51 C-6：证据 binding 块（生成时刻的代码/DB 状态，Gate 以
+    # 此为 recorded 基准，禁止评估时回填当前值自比较）
+    try:
+        import sys as _sys
+        from pathlib import Path as _Path
+        _ROOT = _Path(__file__).resolve().parents[1]
+        _sys.path.insert(0, str(_ROOT))
+        from src.platform import binding_core as _bc
+        from src.platform.data.store import PlatformStore
+        from src.platform.gate_evaluator import db_fingerprint
+        _store = PlatformStore(_ROOT / ".platform" / "platform.sqlite")
+        _res_payload = {"total": report["total"],
+                        "failed": report["failed"],
+                        "namespace": NS, "ids": IDS}
+        report["binding"] = _bc.make_binding(
+            root=_ROOT, conn=_store._conn,
+            argv=[_sys.executable, "scripts/uatv7_rehearsal.py"],
+            result_payload=_res_payload,
+            started_at=datetime.fromtimestamp(
+                t0, tz=timezone.utc).isoformat(),
+            finished_at=report["generated_at"],
+            database_fingerprint=db_fingerprint(_store))
+    except Exception as _e:  # noqa: BLE001
+        report["binding_error"] = str(_e)[:200]
     REPORT.write_text(json.dumps(report, ensure_ascii=False, indent=2),
                       encoding="utf-8")
     print(f"\nUAT V7: {len(checks) - len(failed)}/{len(checks)} passed;"
