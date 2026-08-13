@@ -238,3 +238,154 @@ class TestApiGuard:
                               headers=env["h"])
         assert r.status_code == 200
         assert r.json()["batch"]["data_scope"] == "quarantine"
+
+
+# --------------------------------------------------------------------
+# 14 模板参数化 HTTP 表面：真实 upload → 隔离 → 409 + 稳定码（C-1 §7）
+# --------------------------------------------------------------------
+
+# 每个模板的最小合法行（仅必填列；守卫先于任何分类/写入触发）
+_MIN_ROWS: dict[str, str] = {
+    "customers_v1": "customer_id,name\nosv51-cust,隔离客户\n",
+    "projects_v1":
+        "project_id,customer_id,name\nosv51-prj,osv51-cust,隔离项目\n",
+    "skus_v1": "sku_id,canonical_name\nosv51-sku,隔离SKU\n",
+    "stores_addresses_v1":
+        "customer_id,store_name,raw_address\n"
+        "osv51-cust,隔离门店,隔离路1号\n",
+    "employees_v1": "customer_id,name\nosv51-cust,隔离员工\n",
+    "users_v1": "username\nosv51_user\n",
+    "roles_permissions_v1": "role_name,scopes\n隔离角色,survey.read\n",
+    "memberships_v1": "username,role\nosv51_user,隔离角色\n",
+    "survey_definition_v1": "survey_name\n隔离问卷\n",
+    "survey_questions_v1":
+        "survey_name,question_id,qtype,title\n隔离问卷,q1,text,隔离题目\n",
+    "survey_logic_v1":
+        "survey_name,from_question,op,value,to_question\n"
+        "隔离问卷,q1,eq,是,q2\n",
+    "route_constraints_v1":
+        "customer_id,preset_name\nosv51-cust,隔离预设\n",
+    "usage_rate_cards_v1":
+        "rate_card_id,unit,price\nosv51-rc,recognition_photo,0.1\n",
+    "knowledge_documents_v1": "kb_name,title\n隔离kb,隔离文档\n",
+}
+
+
+class TestAllTemplatesHttpGuard:
+    """真实上传路径（multipart upload）+ reconcile 式隔离 → HTTP 双
+    端点 409 + 稳定码 + 零批次行写入；全部 14 模板参数化。"""
+
+    @pytest.mark.parametrize("tid", ALL_TEMPLATES)
+    def test_uploaded_then_quarantined_http_blocked(self, env, tid):
+        r = _upload(env["client"], env["h"], tid,
+                    _MIN_ROWS[tid].encode("utf-8-sig"))
+        assert r.status_code == 200, f"{tid}: {r.text[:300]}"
+        bid = r.json()["batch"]["batch_id"]
+        _quarantine(env, bid)
+        row = env["store"]._conn.execute(
+            "SELECT data_scope, visibility, status, mapping_json,"
+            " dry_run_json, error_report_json, commit_json, updated_at"
+            " FROM import_batch_v1 WHERE batch_id=?", (bid,)).fetchone()
+        assert row["data_scope"] == "quarantine"
+        assert row["visibility"] == "current"  # 现场形态：未设 history
+
+        for ep in ("dry-run", "commit"):
+            resp = env["client"].post(
+                f"/api/v1/import/batches/{bid}/{ep}", headers=env["h"])
+            assert resp.status_code == 409, \
+                f"{tid} {ep}: quarantine 批次必须 409，实际 " \
+                f"{resp.status_code}: {resp.text[:200]}"
+            assert CODE in str(resp.json().get("detail")), \
+                f"{tid} {ep}: 409 detail 必须原样携带 {CODE}"
+
+        # 零写入：批次 JSON 列与状态逐字节不变（dry-run 也不得覆写证据）
+        after = env["store"]._conn.execute(
+            "SELECT status, mapping_json, dry_run_json,"
+            " error_report_json, commit_json, updated_at"
+            " FROM import_batch_v1 WHERE batch_id=?", (bid,)).fetchone()
+        for col in ("status", "mapping_json", "dry_run_json",
+                    "error_report_json", "commit_json", "updated_at"):
+            assert after[col] == row[col], \
+                f"{tid}: quarantine 后尝试不得写批次行 {col}"
+
+
+# --------------------------------------------------------------------
+# 现场复现：已 committed 批次被隔离后重放（状态门接受 'committed'）
+# --------------------------------------------------------------------
+
+class TestReplayProductionVector:
+    """imp-bf333d101db6 复现：operational 提交成功 → reconcile 隔离 →
+    status='committed' 绕过状态门的重放必须被稳定码拦截，且不得覆写
+    commit_json 证据（现场 inserted:1 → skipped:1 覆写）。"""
+
+    def test_replay_of_committed_quarantine_batch_blocked(self, env):
+        r = _upload(env["client"], env["h"], "stores_addresses_v1",
+                    ("customer_id,store_name,raw_address\n"
+                     "osv51-rp-cust,重放门店,重放路1号\n")
+                    .encode("utf-8-sig"))
+        assert r.status_code == 200, r.text
+        bid = r.json()["batch"]["batch_id"]
+        # 先建客户使地址提交可真正插入（复刻运营面真实提交）
+        env["client"].post("/api/v1/master/customers", headers=env["h"],
+                           json={"customer_id": "osv51-rp-cust",
+                                 "name": "重放客户"})
+        rd = env["client"].post(f"/api/v1/import/batches/{bid}/dry-run",
+                                headers=env["h"])
+        assert rd.status_code == 200, rd.text
+        rc = env["client"].post(f"/api/v1/import/batches/{bid}/commit",
+                                headers=env["h"])
+        assert rc.status_code == 200, rc.text
+        assert rc.json()["batch"]["commit"]["stats"]["inserted"] == 1
+        orig = env["store"]._conn.execute(
+            "SELECT status, commit_json, dry_run_json FROM"
+            " import_batch_v1 WHERE batch_id=?", (bid,)).fetchone()
+        assert orig["status"] == "committed"
+        addr_n = env["store"]._conn.execute(
+            "SELECT count(*) c FROM geo_address_v1").fetchone()["c"]
+        assert addr_n == 1
+
+        _quarantine(env, bid)
+
+        # 重放：HTTP 表面 409 + 稳定码
+        rr = env["client"].post(f"/api/v1/import/batches/{bid}/commit",
+                                headers=env["h"])
+        assert rr.status_code == 409, \
+            f"隔离后重放必须 409，实际 {rr.status_code}: {rr.text[:200]}"
+        assert CODE in str(rr.json().get("detail"))
+        # 重放：直接 service 调用同样被拦（绕过 API 无效）
+        with pytest.raises(ImportError_) as ei:
+            _mk_center(env["store"]).commit(
+                bid, actor="admin", session_role="admin")
+        assert CODE in str(ei.value)
+
+        # 证据冻结：commit_json/status 不变；运营表零新增
+        after = env["store"]._conn.execute(
+            "SELECT status, commit_json, dry_run_json FROM"
+            " import_batch_v1 WHERE batch_id=?", (bid,)).fetchone()
+        assert after["commit_json"] == orig["commit_json"], \
+            "quarantine 重放不得覆写 commit_json 证据"
+        assert after["status"] == "committed"
+        assert env["store"]._conn.execute(
+            "SELECT count(*) c FROM geo_address_v1").fetchone()["c"] \
+            == addr_n
+
+
+class TestArchivedHistorySameCode:
+    """C-1 §2：archived/history 已终态批次与 quarantine 同一稳定码。"""
+
+    @pytest.mark.parametrize("mutate", (
+        "visibility='history'",
+        "data_scope='archived'",
+    ))
+    def test_archived_or_history_same_stable_code(self, env, mutate):
+        r = _upload(env["client"], env["h"], "customers_v1",
+                    _cust_csv(f"{NS}_ah1"))
+        bid = r.json()["batch"]["batch_id"]
+        env["store"]._conn.execute(
+            f"UPDATE import_batch_v1 SET {mutate} WHERE batch_id=?",
+            (bid,))
+        env["store"]._conn.commit()
+        rc = env["client"].post(f"/api/v1/import/batches/{bid}/commit",
+                                headers=env["h"])
+        assert rc.status_code == 409
+        assert CODE in str(rc.json().get("detail"))
