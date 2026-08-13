@@ -408,6 +408,20 @@ SCOPE_REGISTRY: dict[str, dict[str, Any]] = {
         parent="import_batch_v1.batch_id",
         op="批次客户作用域唯一事实源（effective 授权/列表过滤消费）",
         archive="随批次生命周期（不单独归档）", gate="parent_edge"),
+    # OSV51 C-3：隔离区人工裁决状态机（迁移 060）
+    "quarantine_adjudication_v1": _e(
+        "audit_only", pk="batch_id",
+        parent="import_batch_v1.batch_id",
+        op="隔离批次裁决状态（CAS version；release 双人审批；"
+           "revsion 经 import_batch_v1.source=quarantine_release）",
+        archive="随隔离批次生命周期（不单独归档；禁 DELETE）",
+        gate="parent_edge"),
+    "quarantine_adjudication_evidence_v1": _e(
+        "audit_only", pk="id", immutable=True,
+        parent="quarantine_adjudication_v1.batch_id",
+        op="裁决动作追加式证据（只读分析产物；禁 UPDATE/DELETE）",
+        archive="随隔离批次生命周期（不单独归档）",
+        gate="parent_edge"),
 
     # ---------- 训练 / 模型治理（非业务运营投影） ----------
     "training_run": _e("scoped_business_object", pk="run_id",
