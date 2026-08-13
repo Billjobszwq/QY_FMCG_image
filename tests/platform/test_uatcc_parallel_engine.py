@@ -6,6 +6,7 @@
 """
 from __future__ import annotations
 
+import threading
 import time
 from pathlib import Path
 
@@ -80,6 +81,21 @@ def _publish_run(env, name, spec, inputs=None):
     return out["run"]
 
 
+def _drain_branch_workers(timeout: float = 12.0) -> None:
+    """OSV51 C-5：有界等待被放弃的并行分支 worker 线程（线程池
+    前缀 wfbr）全部退出。超时/取消后 ex.shutdown(wait=False) 会遗留
+    仍在 sleep 的 worker，它们退出前可能发出迟到回写；先 drain 再断
+    言，使终态断言不再依赖 SELECT 落点的时序运气（确定性前置条件，
+    有界等待，非 sleep 计时断言）。"""
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        alive = [t for t in threading.enumerate()
+                 if t.name.startswith("wfbr")]
+        if not alive:
+            return
+        time.sleep(0.02)
+
+
 class TestParallelEngine:
     def test_walltime_two_branches(self, env):
         """两个各 2s 分支：串行≈4s；真并行≈2s（<3.5s 判定）。"""
@@ -124,7 +140,13 @@ class TestParallelEngine:
         assert run["error"]
 
     def test_branch_timeout(self, env):
-        """branch_timeout_seconds=1：分支等 3s → timeout → run failed。"""
+        """branch_timeout_seconds=1：分支等 3s → timeout → run failed。
+
+        OSV51 C-5 确定性版：先有界 drain 被放弃的 worker（其心跳发现
+        run 终态后会迟到回写 cancelled/completed），再断言 durable 终
+        态。timeout 是最高优先级终态之一，绝不允许被降级覆盖——断言
+        两支均严格保持 timeout。
+        """
         spec = _par_spec([_wait_branch("b1", 3), _wait_branch("b2", 3)],
                          {"mode": "all"},
                          par_cfg={"max_concurrency": 2,
@@ -134,12 +156,61 @@ class TestParallelEngine:
         wall = time.monotonic() - t0
         assert run["status"] == "failed"
         assert wall < 3, "超时未生效（等满 3s）"
+        _drain_branch_workers()
         rows = env["store"]._conn.execute(
             "SELECT status, count(*) c FROM workflow_branch_v1"
             " WHERE run_id=? GROUP BY status",
             (run["run_id"],)).fetchall()
         statuses = {r["status"] for r in rows}
         assert "timeout" in statuses
+        assert statuses == {"timeout"}, (
+            f"timeout 终态被迟到写覆盖/降级：{statuses}（C-5 终态"
+            "优先级：先到且合法者赢，后到者无条件放弃）")
+
+    def test_branch_terminal_state_never_overwritten(self, env):
+        """OSV51 C-5 终态优先级（直接契约）：分支一旦进入终态
+        （timeout/failed/completed/cancelled），任何后到写者必须被条
+        件 UPDATE 拒绝（rowcount=0，返回 False），durable 状态不变。"""
+        store, svc = env["store"], env["service"]
+        conn = store._conn
+        now = "2026-01-01T00:00:00+00:00"
+        conn.execute(
+            "INSERT INTO workflow_branch_v1 (branch_id, run_id,"
+            " node_id, branch_index, status, output_json,"
+            " created_at, updated_at) VALUES (?,?,?,?,?,?,?,?)",
+            ("br-guard-t", "run-guard", "par", 0, "timeout",
+             "{}", now, now))
+        conn.commit()
+        # 迟到 cancelled（run 收敛/取消路径）不得覆盖 timeout
+        ok = svc._branch_row("br-guard-t", "cancelled",
+                             error="late cancel")
+        st = conn.execute(
+            "SELECT status FROM workflow_branch_v1 WHERE branch_id=?",
+            ("br-guard-t",)).fetchone()["status"]
+        assert st == "timeout", f"timeout 被 cancelled 覆盖：{st}"
+        assert not ok, "迟到写必须被 rowcount=0 拒绝"
+        # 迟到 completed（worker 迟到完成）不得覆盖 timeout
+        ok = svc._branch_row("br-guard-t", "completed", output={})
+        st = conn.execute(
+            "SELECT status FROM workflow_branch_v1 WHERE branch_id=?",
+            ("br-guard-t",)).fetchone()["status"]
+        assert st == "timeout", f"timeout 被 completed 覆盖：{st}"
+        assert not ok
+        # 反向：completed 终态同样不可被 timeout/cancelled 覆盖
+        conn.execute(
+            "INSERT INTO workflow_branch_v1 (branch_id, run_id,"
+            " node_id, branch_index, status, output_json,"
+            " created_at, updated_at) VALUES (?,?,?,?,?,?,?,?)",
+            ("br-guard-c", "run-guard", "par", 1, "completed",
+             "{}", now, now))
+        conn.commit()
+        for late in ("timeout", "cancelled", "failed"):
+            ok = svc._branch_row("br-guard-c", late, error="late")
+            st = conn.execute(
+                "SELECT status FROM workflow_branch_v1"
+                " WHERE branch_id=?", ("br-guard-c",)).fetchone()["status"]
+            assert st == "completed", f"completed 被 {late} 覆盖"
+            assert not ok
 
     def test_restart_recovery_branch_level(self, env):
         """重启恢复：未完成分支（running）经 recover 分支粒度重跑。"""
