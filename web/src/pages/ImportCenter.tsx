@@ -1,6 +1,7 @@
-// ABOSV3 T3：Import Center（全模块共用导入中心）。
-// 14 套 CSV/XLSX 模板下载；上传 → dry-run（逐行新增/跳过/冲突/错误）
-// → 提交（幂等、证据、审计）。全部真实 API，不硬编码。
+// ABOSV3 T3 + OSV5：Import Center（全模块共用导入中心）。
+// OSV5（指令第六节/P1-001）：批次列表显示 文件名/模板/操作人/客户范围/
+// data_scope/Test Run/状态/行数/时间；四视图（运营/我的/历史/隔离）；
+// 详情为显式 DTO（无原始 payload），原始预览需授权（preview 端点）。
 import { useCallback, useEffect, useState } from "react";
 import { csrfToken } from "../api";
 import { EmptyState, ErrorState, Loading, PageHeader, StatusBadge }
@@ -14,14 +15,27 @@ interface TemplateView {
   template_id: string; name: string; idempotency: string; note: string;
   columns: TemplateCol[];
 }
+interface CustomerScope {
+  customer_id: string; project_id: string;
+  authorization_decision: string;
+}
 interface BatchView {
   batch_id: string; template_id: string; filename: string;
   file_format: string; status: string; actor: string; row_count: number;
-  dry_run: { plan?: Record<string, number>; rows?: number };
+  data_scope: string; test_run_id: string; visibility?: string;
+  archived_at?: string; customer_scopes: CustomerScope[];
+  dry_run?: { plan?: Record<string, number>; rows?: number };
   errors: { row: number; error: string }[];
-  commit: { stats?: Record<string, number>; receipts?: any[] };
+  commit?: { stats?: Record<string, number>; receipts?: any[] };
   created_at: string;
 }
+
+const VIEWS = [
+  { key: "operational", label: "运营导入" },
+  { key: "mine", label: "我的批次" },
+  { key: "history", label: "Test Run / 历史证据" },
+  { key: "quarantine", label: "隔离待处理" },
+] as const;
 
 async function api(path: string, opts?: RequestInit) {
   const r = await fetch(`/api/v1${path}`, opts);
@@ -42,20 +56,23 @@ async function apiPost(path: string) {
 export default function ImportCenter() {
   const [templates, setTemplates] = useState<TemplateView[] | null>(null);
   const [batches, setBatches] = useState<BatchView[] | null>(null);
+  const [view, setView] = useState<string>("operational");
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [selTpl, setSelTpl] = useState("");
   const [detail, setDetail] = useState<BatchView | null>(null);
 
-  const load = useCallback(() => {
+  const load = useCallback((v: string) => {
     api("/import/templates").then(
       (d) => { setTemplates(d.templates);
         if (!selTpl && d.templates.length) setSelTpl(d.templates[0].template_id);
       }).catch((e) => setErr(String(e.message ?? e)));
-    api("/import/batches").then((d) => setBatches(d.batches)).catch(
-      (e) => setErr(String(e.message ?? e)));
+    const qs = v === "history" ? "?view=history&include_fixture=1"
+      : `?view=${v}`;
+    api(`/import/batches${qs}`).then((d) => setBatches(d.batches))
+      .catch((e) => { setBatches([]); setErr(String(e.message ?? e)); });
   }, [selTpl]);
-  useEffect(() => { load(); }, []);
+  useEffect(() => { load(view); }, [view]);
 
   const download = (tid: string, fmt: string) => {
     window.open(`/api/v1/import/templates/${tid}/download?fmt=${fmt}`,
@@ -76,7 +93,7 @@ export default function ImportCenter() {
       const d = await r.json().catch(() => ({}));
       if (!r.ok) throw new Error(d.detail ?? `上传失败 HTTP ${r.status}`);
       setDetail(d.batch);
-      load();
+      load(view);
     } catch (e) {
       setErr(e instanceof Error ? e.message : String(e));
     } finally { setBusy(false); }
@@ -86,7 +103,7 @@ export default function ImportCenter() {
     setBusy(true); setErr(null);
     try {
       const d = await apiPost(`/import/batches/${batchId}/${action}`);
-      setDetail(d.batch); load();
+      setDetail(d.batch); load(view);
     } catch (e) {
       setErr(e instanceof Error ? e.message : String(e));
     } finally { setBusy(false); }
@@ -97,9 +114,9 @@ export default function ImportCenter() {
   return (
     <>
       <PageHeader title="Import Center"
-        desc="全模块共用导入：模板下载 → 上传 → dry-run → 逐行错误修复 → 幂等提交（证据与审计留痕）" />
+        desc="全模块共用导入：模板下载 → 上传 → dry-run → 逐行错误修复 → 幂等提交；批次携带作用域/Test Run/客户授权（证据与审计留痕）" />
       {err && <ErrorState message={err} onRetry={() => {
-        setErr(null); load(); }} />}
+        setErr(null); load(view); }} />}
 
       <div className="card">
         <h3>模板（14 套 · CSV/XLSX · 下载后可重新上传解析）</h3>
@@ -153,7 +170,7 @@ export default function ImportCenter() {
       </div>
 
       <div className="card">
-        <h3>上传文件</h3>
+        <h3>上传文件（运营导入）</h3>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap",
           alignItems: "center" }}>
           <select value={selTpl} aria-label="选择模板"
@@ -171,14 +188,24 @@ export default function ImportCenter() {
           {busy && <span className="v">处理中…</span>}
         </div>
         <p className="v" style={{ marginTop: 6 }}>
-          上传后先预览与 dry-run，不直接写业务表；提交使用自然键幂等。</p>
+          上传后先预览与 dry-run，不直接写业务表；提交使用自然键幂等。
+          UAT/Test Run 导入必须经受信路径显式携带 test_run_id。</p>
       </div>
 
       {detail && (
         <div className="card">
-          <h3>批次 {detail.batch_id}（{detail.template_id}）</h3>
+          <h3>批次 {detail.filename}（{detail.template_id}）</h3>
           <p className="v">状态：<StatusBadge status={detail.status} />
-            {" "}· 行数 {detail.row_count} · {detail.filename}</p>
+            {" "}· 作用域：<code data-testid="batch-scope">
+              {detail.data_scope}</code>
+            {detail.test_run_id ? <> · Test Run：<code
+              data-testid="batch-test-run">{detail.test_run_id}</code>
+            </> : null}
+            {" "}· 行数 {detail.row_count} · 操作人 {detail.actor}</p>
+          {detail.customer_scopes?.length > 0 && (
+            <p className="v">客户范围：{detail.customer_scopes.map(
+              (c) => `${c.customer_id}（${c.authorization_decision}）`)
+              .join("；")}</p>)}
           {detail.dry_run?.plan && (
             <p className="v">预检：新增 {detail.dry_run.plan.insert ?? 0}
               {" "}· 跳过 {detail.dry_run.plan.skip ?? 0}
@@ -228,25 +255,50 @@ export default function ImportCenter() {
 
       <div className="card">
         <h3>导入批次</h3>
+        <div style={{ display: "flex", gap: 8, marginBottom: 8 }}
+          role="tablist" aria-label="批次视图">
+          {VIEWS.map((v) => (
+            <button key={v.key} role="tab"
+              aria-selected={view === v.key}
+              className={`btn small${view === v.key ? " primary" : ""}`}
+              onClick={() => { setView(v.key); setErr(null); }}>
+              {v.label}</button>))}
+        </div>
         {!batches && !err && <Loading />}
         {batches && batches.length === 0
-          ? <EmptyState title="尚无导入批次" />
+          ? <EmptyState title={view === "operational"
+            ? "运营面无导入批次" : "该视图暂无批次（或无权查看）"} />
           : batches && (
             <table className="table">
-              <thead><tr><th>批次</th><th>模板</th><th>状态</th><th>行数</th>
-                <th>错误</th><th>时间</th></tr></thead>
+              <thead><tr><th>文件名</th><th>模板</th><th>操作人</th>
+                <th>客户范围</th><th>作用域</th><th>Test Run</th>
+                <th>状态</th><th>行数</th><th>时间</th></tr></thead>
               <tbody>
                 {batches.map((b) => (
-                  <tr key={b.batch_id} onClick={async () => {
-                    const d = await api(`/import/batches/${b.batch_id}`);
-                    setDetail(d.batch);
-                  }} style={{ cursor: "pointer" }}>
-                    <td data-label="批次">{b.batch_id.slice(0, 14)}…</td>
+                  <tr key={b.batch_id} data-batch-id={b.batch_id}
+                    onClick={async () => {
+                      try {
+                        const d = await api(
+                          `/import/batches/${b.batch_id}`);
+                        setDetail(d.batch);
+                      } catch (e) {
+                        setErr(String((e as Error).message ?? e));
+                      }
+                    }} style={{ cursor: "pointer" }}>
+                    <td data-label="文件名">{b.filename}
+                      <div className="meta">{b.batch_id}</div></td>
                     <td data-label="模板">{b.template_id}</td>
-                    <td data-label="状态"><StatusBadge status={b.status} /></td>
+                    <td data-label="操作人">{b.actor}</td>
+                    <td data-label="客户范围" className="v">
+                      {(b.customer_scopes ?? []).map(
+                        (c) => c.customer_id).join("；") || "全局"}</td>
+                    <td data-label="作用域" data-scope={b.data_scope}>
+                      <code>{b.data_scope}</code></td>
+                    <td data-label="Test Run" className="v">
+                      {b.test_run_id || "—"}</td>
+                    <td data-label="状态"><StatusBadge status={b.status} />
+                    </td>
                     <td data-label="行数">{b.row_count}</td>
-                    <td data-label="错误">{Array.isArray(b.errors)
-                      ? b.errors.length : b.errors}</td>
                     <td data-label="时间" className="v">
                       {String(b.created_at).slice(0, 16)}</td>
                   </tr>))}
