@@ -289,7 +289,7 @@ export default function ImportCenter() {
                 : (st === "quarantined" || st === "retained_for_evidence"
                   || (a === "retain" && st === "release_requested")));
             return (
-              <div style={{ marginTop: 10, border: "1px solid var(--line)",
+              <div style={{ marginTop: 10, border: "1px solid var(--border)",
                 borderRadius: 8, padding: 10 }}
                 data-testid="quarantine-adjudication">
                 <h3 style={{ marginTop: 0 }}>隔离区裁决
