@@ -34,11 +34,13 @@ def _utcnow() -> str:
 
 
 def parse_summary(text: str) -> dict:
-    """解析 pytest -q 末行摘要。"""
-    m = re.search(r"(\d+) failed", text)
-    failed = int(m.group(1)) if m else -1
+    """解析 pytest -q 末行摘要。全绿时 pytest 不输出 “0 failed”，
+    此时 failed=0；若连 passed 行都没有（进程异常）则 failed=-1，
+    Gate 必须阻断（诚实失败，不得猜测）。"""
     m = re.search(r"(\d+) passed", text)
     passed = int(m.group(1)) if m else -1
+    m = re.search(r"(\d+) failed", text)
+    failed = int(m.group(1)) if m else (0 if passed >= 0 else -1)
     m = re.search(r"(\d+) skipped", text)
     skipped = int(m.group(1)) if m else 0
     m = re.search(r"(\d+) deselected", text)

@@ -188,5 +188,9 @@ class TestTestReportGenerator:
         c = parse_summary(t)
         assert c == {"failed": 1, "passed": 1478, "skipped": 1,
                      "deselected": 6}
+        # 全绿时 pytest 不输出 “0 failed” → failed 必须为 0
         c2 = parse_summary("1479 passed, 1 skipped, 6 deselected")
-        assert c2["failed"] == -1 and c2["passed"] == 1479
+        assert c2["failed"] == 0 and c2["passed"] == 1479
+        # 无摘要（进程异常）→ failed=-1，Gate 必须阻断
+        c3 = parse_summary("internal error")
+        assert c3["failed"] == -1 and c3["passed"] == -1
