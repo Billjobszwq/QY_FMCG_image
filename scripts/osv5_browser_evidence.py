@@ -399,6 +399,49 @@ async def main_async() -> int:
                 pages.append(page(route, width, "responsive_no_overflow",
                                   "True", "True" if no_ov else "False",
                                   fn, sha))
+
+        # ---- OSV51 C-7：导航滚动连续性（四视口；须在 proc.terminate
+        # 之前执行，复用 CDP 会话） ----
+        # Import Center 深滚 → 主导航进入系统管理：新页面必须
+        # scrollY=0 且焦点落在 h1（读屏/键盘可感知页面切换）。
+        for width in (1440, 1280, 1024, 768):
+            await goto(ws, msg_id, owner, "/#/data/import",
+                       width=width)
+            await jseval(ws, msg_id, "window.scrollTo(0, 2124);"
+                                     "window.scrollY")
+            await asyncio.sleep(0.5)
+            deep_y = await jseval(ws, msg_id, "String(window.scrollY)")
+            clicked = await jseval(ws, msg_id,
+                                   "(()=>{const a=[...document.querySelectorAll("
+                                   "'.pnav a, nav a')].find(x=>(x.innerText||'')"
+                                   ".includes('系统管理'));if(a){a.click();"
+                                   "return '1';}return '0';})()")
+            if clicked != "1":
+                await jseval(ws, msg_id, "location.hash='#/status'")
+            await asyncio.sleep(2.5)
+            new_y = await jseval(ws, msg_id, "String(window.scrollY)")
+            focus_tag = await jseval(ws, msg_id,
+                                     "(document.activeElement&&"
+                                     "document.activeElement.tagName)||''")
+            on_status = await jseval(ws, msg_id,
+                                     "String(location.hash).includes("
+                                     "'/status')")
+            okk = (new_y == "0" and focus_tag.upper() == "H1"
+                   and on_status == "true" and int(deep_y or 0) > 0)
+            pages.append({
+                "route": "/#/status", "viewport": width,
+                "expected_object_type": "nav_scroll_continuity",
+                "expected_object_id": "scrollY=0&h1_focused",
+                "actual_object_id": "scrollY=0&h1_focused" if okk
+                else f"scrollY={new_y}&focus={focus_tag}"
+                     f"&hash={on_status}",
+                "expected_text": "scrollY=0&h1_focused",
+                "actual_text": f"deep_y={deep_y} new_y={new_y} "
+                               f"focus={focus_tag} hash={on_status}",
+                "selector": "window + document.activeElement",
+                "assertion": okk, "screenshot": "",
+                "screenshot_sha256": "",
+                "console_errors": len(CONSOLE_ISSUES)})
     proc.terminate()
 
     # ---- 角色矩阵补充（customer_admin/project_manager：API 对象级） ----
@@ -426,45 +469,6 @@ async def main_async() -> int:
                   "assertion": matrix_ok,
                   "screenshot": "", "screenshot_sha256": "",
                   "console_errors": len(CONSOLE_ISSUES)})
-
-    # ---- OSV51 C-7：导航滚动连续性（四视口） ----
-    # Import Center 深滚 → 主导航进入系统管理：新页面必须 scrollY=0
-    # 且焦点落在 h1（读屏/键盘可感知页面切换）。
-    for width in (1440, 1280, 1024, 768):
-        await goto(ws, msg_id, owner, "/#/data/import", width=width)
-        await jseval(ws, msg_id, "window.scrollTo(0, 2124);"
-                                 "window.scrollY")
-        await asyncio.sleep(0.5)
-        deep_y = await jseval(ws, msg_id, "String(window.scrollY)")
-        clicked = await jseval(ws, msg_id,
-                               "(()=>{const a=[...document.querySelectorAll("
-                               "'.pnav a, nav a')].find(x=>(x.innerText||'')"
-                               ".includes('系统管理'));if(a){a.click();"
-                               "return '1';}return '0';})()")
-        if clicked != "1":
-            await jseval(ws, msg_id, "location.hash='#/status'")
-        await asyncio.sleep(2.5)
-        new_y = await jseval(ws, msg_id, "String(window.scrollY)")
-        focus_tag = await jseval(ws, msg_id,
-                                 "(document.activeElement&&"
-                                 "document.activeElement.tagName)||''")
-        on_status = await jseval(ws, msg_id,
-                                 "String(location.hash).includes('/status')")
-        okk = (new_y == "0" and focus_tag.upper() == "H1"
-               and on_status == "true" and int(deep_y or 0) > 0)
-        pages.append({
-            "route": "/#/status", "viewport": width,
-            "expected_object_type": "nav_scroll_continuity",
-            "expected_object_id": "scrollY=0&h1_focused",
-            "actual_object_id": "scrollY=0&h1_focused" if okk else
-            f"scrollY={new_y}&focus={focus_tag}&hash={on_status}",
-            "expected_text": "scrollY=0&h1_focused",
-            "actual_text": f"deep_y={deep_y} new_y={new_y} "
-                           f"focus={focus_tag} hash={on_status}",
-            "selector": "window + document.activeElement",
-            "assertion": okk, "screenshot": "",
-            "screenshot_sha256": "",
-            "console_errors": len(CONSOLE_ISSUES)})
 
     # ---- 归档浏览器 fixture 身份（验收后运营面清零） ----
     post("/api/v1/test-data/archive", {"namespace": NS})
