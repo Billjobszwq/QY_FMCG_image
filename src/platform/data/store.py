@@ -3970,13 +3970,24 @@ class PlatformStore:
                                 subject_id: str | None = None,
                                 evidence_bundle_id: str | None = None,
                                 ) -> dict[str, Any]:
-        """状态机：failed 不得直接变成功；终态不可回退。"""
+        """状态机：failed 不得直接变成功；终态不可回退。
+
+        OSV52（OSV51-013 结构性关闭）：写路径为条件 UPDATE（CAS：
+        WHERE status=读取时的 cur），消灭 SELECT-then-UPDATE 竞态
+        （实证：旧实现 1500 轮并发 1301 轮双写覆盖终态）。
+        - CAS 失败且当前态已是目标态 → 幂等返回（不重复 version+1）；
+        - CAS 失败且当前态非目标态 → 冲突（迟到写/并发输家），拒绝；
+        - succeeded/cancelled 绝对终态（RUN_TRANSITIONS 无出边）。
+        """
         row = self._conn.execute(
             "SELECT status FROM business_run_v1 WHERE run_id=?",
             (run_id,)).fetchone()
         if row is None:
             raise StoreError(f"run 不存在: {run_id}")
         cur = row["status"]
+        if cur == status:
+            # 幂等：重复写同一目标态（含终态重复确认）
+            return self.get_business_run(run_id)
         if status not in self.RUN_TRANSITIONS.get(cur, set()):
             raise StoreError(f"run {cur}→{status} 非法跃迁")
         sets = ["status=?", "version=version+1", "updated_at=?"]
@@ -3999,10 +4010,21 @@ class PlatformStore:
         if evidence_bundle_id is not None:
             sets.append("evidence_bundle_id=?")
             vals.append(evidence_bundle_id)
-        self._conn.execute(
+        rc = self._conn.execute(
             f"UPDATE business_run_v1 SET {', '.join(sets)}"
-            " WHERE run_id=?", (*vals, run_id))
+            " WHERE run_id=? AND status=?",
+            (*vals, run_id, cur)).rowcount
         self._conn.commit()
+        if rc == 0:
+            now_row = self._conn.execute(
+                "SELECT status FROM business_run_v1 WHERE run_id=?",
+                (run_id,)).fetchone()
+            now_status = now_row["status"] if now_row else ""
+            if now_status == status:
+                return self.get_business_run(run_id)  # 幂等
+            raise StoreError(
+                f"run 状态迁移冲突 {cur}→{status}：当前 "
+                f"{now_status}（迟到写/并发输家，拒绝覆盖）")
         return self.get_business_run(run_id)
 
     def insert_work_item_v2(self, row: dict[str, Any]) -> dict[str, Any]:
