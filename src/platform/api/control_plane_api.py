@@ -186,25 +186,55 @@ def create_control_plane_router(store: Any, gateway: CommandGateway,
 
     @router.get("/api/v1/control/gate")
     def gate_current() -> dict:
-        """SI3 Gate 3.0：机器 Gate 实时 freshness 复评（指令九.4）。
+        """OSV52 Active Gate：实时 Gate 只读 gate_run_v1 中显式
+        active 的 gate run（废除 .eval/*/gate.json mtime 选择）。
 
-        不再只读静态 gate.json：读最新记录后立即重算 DB
-        fingerprint/HEAD 绑定；数据已变化 → STALE_GATE_EVIDENCE，
-        绝不继续返回旧 READY。"""
+        fail-closed：无 active run / gate 文件缺失 / 文件哈希与
+        registry 不一致 → BLOCKED_BY_GATE_EVIDENCE。随后执行
+        freshness 复评（HEAD/树/迁移/worktree/DB + 证据 manifest
+        实时重读重算）。"""
+        import hashlib
         import json as _json
         import subprocess
         import time as _time
         from pathlib import Path as _Path
         from ..gate_evaluator import evaluate_gate_from_evidence
+        from ..gate_registry import get_active_gate_run
         root = _Path(__file__).resolve().parents[3]
-        candidates = sorted(root.glob(".eval/*/gate.json"),
-                            key=lambda p: p.stat().st_mtime)
-        if not candidates:
-            return {"gate": None,
-                    "note": "尚未生成 gate.json（运行 UAT --gate）"}
-        latest = candidates[-1]
-        # git HEAD/树/迁移/worktree 短缓存（5s）：freshness 判定保持
-        # 同步且便宜（OSV51 C-6：实时路径复核代码状态，不只 HEAD+DB）
+
+        def _blocked(reasons: list[str]) -> dict:
+            return {"gate": "BLOCKED_BY_GATE_EVIDENCE",
+                    "reasons": reasons,
+                    "checks": [{"check": "active_gate_present",
+                                "ok": False,
+                                "evidence": "; ".join(reasons)[:300],
+                                "block": "BLOCKED_BY_GATE_EVIDENCE"}],
+                    "evidence_hashes": {},
+                    "evaluated_at": _time.strftime(
+                        "%Y-%m-%dT%H:%M:%S%z"),
+                    "evaluator_version": "3.4.0"}
+
+        active = get_active_gate_run(store, protocol="scope_v5")
+        if active is None:
+            return _blocked(["无 active gate run（gate_run_v1 中无"
+                             " status=active；运行 gate 评估并经人工"
+                             " 批准激活）"])
+        gate_path = _Path(active["gate_path"])
+        if not gate_path.is_absolute():
+            gate_path = root / gate_path
+        if not gate_path.exists():
+            return _blocked([f"active gate 文件缺失: {gate_path}"])
+        try:
+            cur_sha = hashlib.sha256(
+                gate_path.read_bytes()).hexdigest()
+        except Exception:  # noqa: BLE001
+            return _blocked(["active gate 文件不可读"])
+        if active.get("gate_file_sha256") \
+                and cur_sha != active["gate_file_sha256"]:
+            return _blocked([
+                "active gate 文件哈希与 registry 不一致: "
+                f"{active['gate_file_sha256'][:12]}→{cur_sha[:12]}"])
+        # git HEAD/树/迁移/worktree 短缓存（5s）
         cache = _gate_cache
         now = _time.monotonic()
         if cache["head"] is None or now - cache["ts"] > 5:
@@ -224,11 +254,60 @@ def create_control_plane_router(store: Any, gateway: CommandGateway,
                 tree, wclean, mig = "", None, ""
             cache.update({"head": head, "ts": now, "tree": tree,
                           "worktree_clean": wclean, "mig": mig})
-        return evaluate_gate_from_evidence(
-            store=store, recorded_gate_path=latest,
+        res = evaluate_gate_from_evidence(
+            store=store, recorded_gate_path=gate_path,
             current_head=cache["head"] or "",
             current_tree_hash=cache.get("tree", ""),
             current_migration_hash=cache.get("mig", ""),
-            worktree_clean=cache.get("worktree_clean"))
+            worktree_clean=cache.get("worktree_clean"),
+            evidence_root=root)
+        res["active_gate_run"] = {
+            "gate_run_id": active["gate_run_id"],
+            "protocol": active["protocol"],
+            "activated_by": active["activated_by"],
+            "activated_at": active["activated_at"],
+            "supersedes": active["supersedes"],
+            "evidence_manifest_hash": active["evidence_manifest_hash"],
+        }
+        return res
+
+    @router.get("/api/v1/control/gate/runs")
+    def gate_runs(limit: int = 20) -> dict:
+        """OSV52：gate run 账本（只读；Web 状态页展示）。"""
+        rows = store._conn.execute(
+            "SELECT gate_run_id, protocol, gate_path, source_commit,"
+            " evaluator_version, evidence_manifest_hash, status,"
+            " requested_by, activated_by, activated_at, supersedes,"
+            " created_at FROM gate_run_v1 ORDER BY created_at DESC"
+            " LIMIT ?", (int(limit),)).fetchall()
+        return {"count": len(rows), "runs": [dict(r) for r in rows]}
+
+    @router.post("/api/v1/control/gate/activate")
+    async def gate_activate(request) -> dict:
+        """OSV52：激活 gate run（平台角色 + 人工批准 + CAS）。"""
+        from fastapi import HTTPException
+        from ..gate_registry import (GateRegistryError,
+                                     activate_gate_run)
+        p = require_principal(auth, request, csrf=True)
+        if p["role"] not in ("admin", "owner", "platform_admin"):
+            raise HTTPException(
+                403, "GATE_ACTIVATION_PERMISSION_DENIED: 需平台角色")
+        try:
+            body = await request.json()
+        except Exception:  # noqa: BLE001
+            raise HTTPException(422, "请求体必须是 JSON")
+        gid = str(body.get("gate_run_id") or "")
+        if not gid:
+            raise HTTPException(422, "缺少 gate_run_id")
+        try:
+            row = activate_gate_run(
+                store, gate_run_id=gid, actor=p["actor"],
+                approved=bool(body.get("approved")),
+                session_role=p["role"],
+                expected_protocol=str(body.get("expected_protocol")
+                                      or "scope_v5"))
+        except GateRegistryError as e:
+            raise HTTPException(409, str(e))
+        return {"activated": row}
 
     return router

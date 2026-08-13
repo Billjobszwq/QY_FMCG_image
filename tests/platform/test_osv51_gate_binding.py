@@ -1,6 +1,7 @@
 """OSV51 C-6 测试：Gate 证据新鲜度绑定（binding 块/去自比较/STALE）。"""
 from __future__ import annotations
 
+import hashlib
 import json
 from pathlib import Path
 
@@ -31,6 +32,36 @@ def env(tmp_path: Path, monkeypatch):
 
 
 ROOT = Path(__file__).resolve().parents[2]
+
+
+def _manifest5(tmp_path: Path) -> dict:
+    """OSV52：五份真实证据文件 + manifest（freshness 复评必需）。
+    JSON 证据携带 binding 块（无 result_hash 时该层跳过）。"""
+    man = {}
+    for kind, name in (("uat_report", "uat.json"),
+                       ("test_report", "test.json"),
+                       ("browser_report", "browser.json"),
+                       ("negative_report", "negative.json")):
+        f = tmp_path / name
+        f.write_text(json.dumps(
+            {"kind": kind,
+             "binding": {"source_commit": "abc123",
+                         "code_tree_hash": "",
+                         "migration_hash": ""}},
+            ensure_ascii=False), encoding="utf-8")
+        man[kind] = {"path": str(f),
+                     "sha256": hashlib.sha256(
+                         f.read_bytes()).hexdigest(),
+                     "size": f.stat().st_size,
+                     "generated_at": "2026-08-14T00:00:00+00:00"}
+    led = tmp_path / "ISSUES.md"
+    led.write_text("# none\n", encoding="utf-8")
+    man["issue_ledger"] = {"path": str(led),
+                           "sha256": hashlib.sha256(
+                               led.read_bytes()).hexdigest(),
+                           "size": led.stat().st_size,
+                           "generated_at": "2026-08-14T00:00:00+00:00"}
+    return man
 
 
 class TestBindingCore:
@@ -128,19 +159,21 @@ class TestFreshnessReevalPath:
         fp = db_fingerprint(env["store"])
         rec = {"gate": "READY_FOR_REAL_DATA_UAT", "reasons": [],
                "checks": [], "evidence_hashes": {},
-               "evaluator_version": "3.3.0",
+               "evaluator_version": "3.4.0",
                "source_commit": "abc123",
                "code_tree_hash": "oldtree0oldtree0",
                "migration_hash": bc.migration_hash(
                    env["store"]._conn),
-               "db_fingerprint": fp}
+               "db_fingerprint": fp,
+               "evidence_manifest": _manifest5(tmp_path)}
         p = tmp_path / "gate.json"
         p.write_text(json.dumps(rec), encoding="utf-8")
         res = evaluate_gate_from_evidence(
             store=env["store"], recorded_gate_path=p,
             current_head="abc123",
             current_tree_hash="newtree1newtree1",
-            current_migration_hash=rec["migration_hash"])
+            current_migration_hash=rec["migration_hash"],
+            evidence_root=tmp_path)
         assert res["gate"] == "STALE_GATE_EVIDENCE"
 
     def test_recorded_gate_clean_passes_with_stamp(self, env, tmp_path):
@@ -149,16 +182,18 @@ class TestFreshnessReevalPath:
         mig = bc.migration_hash(env["store"]._conn)
         rec = {"gate": "READY_FOR_REAL_DATA_UAT", "reasons": [],
                "checks": [], "evidence_hashes": {},
-               "evaluator_version": "3.3.0",
+               "evaluator_version": "3.4.0",
                "source_commit": "abc123",
                "code_tree_hash": tree, "migration_hash": mig,
-               "db_fingerprint": fp}
+               "db_fingerprint": fp,
+               "evidence_manifest": _manifest5(tmp_path)}
         p = tmp_path / "gate.json"
         p.write_text(json.dumps(rec), encoding="utf-8")
         res = evaluate_gate_from_evidence(
             store=env["store"], recorded_gate_path=p,
             current_head="abc123", current_tree_hash=tree,
-            current_migration_hash=mig, worktree_clean=True)
+            current_migration_hash=mig, worktree_clean=True,
+            evidence_root=tmp_path)
         assert res["gate"] == "READY_FOR_REAL_DATA_UAT"
         assert res.get("freshness_verified_at")
 
@@ -168,16 +203,18 @@ class TestFreshnessReevalPath:
         mig = bc.migration_hash(env["store"]._conn)
         rec = {"gate": "READY_FOR_REAL_DATA_UAT", "reasons": [],
                "checks": [], "evidence_hashes": {},
-               "evaluator_version": "3.3.0",
+               "evaluator_version": "3.4.0",
                "source_commit": "abc123",
                "code_tree_hash": tree, "migration_hash": mig,
-               "db_fingerprint": fp}
+               "db_fingerprint": fp,
+               "evidence_manifest": _manifest5(tmp_path)}
         p = tmp_path / "gate.json"
         p.write_text(json.dumps(rec), encoding="utf-8")
         res = evaluate_gate_from_evidence(
             store=env["store"], recorded_gate_path=p,
             current_head="abc123", current_tree_hash=tree,
-            current_migration_hash=mig, worktree_clean=False)
+            current_migration_hash=mig, worktree_clean=False,
+            evidence_root=tmp_path)
         assert res["gate"] == "STALE_GATE_EVIDENCE"
 
 

@@ -22,10 +22,12 @@ STALE = "STALE_GATE_EVIDENCE"
 # validator/负例全部引用，禁止漂移。
 # OSV51：3.3.0 = 证据新鲜度绑定 + 导入安全（quarantine 写逃逸/
 # 递归 secret 扫描/血缘完整性）检查族。
-EVALUATOR_VERSION = "3.3.0"
+EVALUATOR_VERSION = "3.4.0"
 BLOCKED_IMPORT_LINEAGE = "BLOCKED_BY_IMPORT_SCOPE_LINEAGE"
 # OSV51 C-1/C-2：导入安全阻断码（quarantine 写逃逸、secret 泄漏）
 BLOCKED_IMPORT_SECURITY = "BLOCKED_BY_IMPORT_SECURITY"
+# OSV52：Gate 后证据文件被重写/替换/尺寸不符 → 哈希断链（不得 READY）
+BLOCKED_HASH_DRIFT = "BLOCKED_BY_GATE_EVIDENCE_HASH_DRIFT"
 
 # UAT 主工作流必备节点类型；model/command 任一即可作为 capability
 # 节点（指令："model或command/capability"）。
@@ -100,6 +102,161 @@ def _load_json(path) -> dict | None:
         return json.loads(p.read_text(encoding="utf-8"))
     except Exception:
         return None
+
+
+# --------------------------------------------------------------------
+# OSV52：证据 manifest 实时重校验（整文件哈希/尺寸/可解析性/路径
+# 安全；result_hash 与 binding 分层）。
+# --------------------------------------------------------------------
+
+EVIDENCE_KINDS = ("uat_report", "test_report", "browser_report",
+                  "negative_report", "issue_ledger")
+
+
+def _resolve_evidence_path(root: Path, raw: str):
+    """路径安全解析：禁绝对路径越界/.. 穿越/符号链接逃逸。"""
+    rp = str(raw or "")
+    if not rp:
+        return None, "空路径"
+    try:
+        root_r = root.resolve()
+        p = Path(rp)
+        cand = p if p.is_absolute() else (root / p)
+        resolved = cand.resolve()
+        resolved.relative_to(root_r)
+    except Exception:  # noqa: BLE001
+        return None, f"路径越界: {rp[:60]}"
+    if cand.is_symlink():
+        try:
+            cand.resolve().relative_to(root.resolve())
+        except Exception:  # noqa: BLE001
+            return None, f"符号链接逃逸: {rp[:60]}"
+    return cand, ""
+
+
+def _result_payload_for(kind: str, parsed: dict) -> dict | None:
+    """与生成器一致的 result_hash 载荷重建（分层校验层）。"""
+    try:
+        if kind == "uat_report":
+            return {"total": parsed.get("total"),
+                    "failed": parsed.get("failed"),
+                    "namespace": parsed.get("namespace"),
+                    "ids": parsed.get("ids")}
+        if kind == "test_report":
+            return {"suite": parsed.get("suite"),
+                    "failed": parsed.get("failed"),
+                    "passed": parsed.get("passed"),
+                    "skipped": parsed.get("skipped"),
+                    "deselected": parsed.get("deselected"),
+                    "marker": parsed.get("marker"),
+                    "generated_by": parsed.get("generated_by")}
+        if kind == "browser_report":
+            pages = parsed.get("pages") or []
+            return {"pages": len(pages),
+                    "assertions_ok": sum(1 for p in pages
+                                         if p.get("assertion")),
+                    "browser_test_run":
+                        parsed.get("browser_test_run")}
+        if kind == "negative_report":
+            items = parsed.get("gate_negative_tests") or []
+            return {"all_blocked": parsed.get("all_blocked"),
+                    "count": len(items)}
+    except Exception:  # noqa: BLE001
+        return None
+    return None
+
+
+def _verify_evidence_manifest(recorded: dict, evidence_root,
+                              current_head: str) -> dict:
+    """实时重读重算全部证据文件（整文件哈希/尺寸/可解析/路径安全；
+    binding 与 result_hash 分层）。返回
+    {"drift": [...], "stale": [...], "checks": [chk dicts]}。"""
+    from . import binding_core as _bc
+    drift: list[str] = []
+    stale: list[str] = []
+    file_rows: list[str] = []
+    bind_rows: list[str] = []
+    res_rows: list[str] = []
+    manifest = recorded.get("evidence_manifest")
+    if not manifest or not isinstance(manifest, dict):
+        stale.append("gate.json 缺少 evidence_manifest")
+        return {"drift": drift, "stale": stale,
+                "checks": [{
+                    "check": "evidence_manifest_present", "ok": False,
+                    "evidence": "evidence_manifest 缺失",
+                    "block": STALE}]}
+    root = Path(evidence_root) if evidence_root else \
+        Path(__file__).resolve().parents[2]
+    for kind in EVIDENCE_KINDS:
+        entry = manifest.get(kind)
+        if not entry:
+            stale.append(f"{kind}: manifest 缺少条目")
+            file_rows.append(f"{kind}=missing_entry")
+            continue
+        p, why = _resolve_evidence_path(root, entry.get("path", ""))
+        if p is None:
+            stale.append(f"{kind}: {why}")
+            file_rows.append(f"{kind}=unsafe_path")
+            continue
+        if not p.exists():
+            stale.append(f"{kind}: 证据文件缺失 {p.name}")
+            file_rows.append(f"{kind}=absent")
+            continue
+        blob = p.read_bytes()
+        cur_sha = hashlib.sha256(blob).hexdigest()
+        rec_sha = str(entry.get("sha256") or "")
+        rec_size = entry.get("size")
+        if rec_size is not None and int(rec_size) != len(blob):
+            drift.append(f"{kind}: size {rec_size}≠{len(blob)}")
+            file_rows.append(f"{kind}=size_drift")
+            continue
+        if rec_sha and cur_sha != rec_sha:
+            drift.append(
+                f"{kind}: sha256 {rec_sha[:12]}→{cur_sha[:12]}")
+            file_rows.append(f"{kind}=sha_drift")
+            continue
+        file_rows.append(f"{kind}=ok")
+        if p.suffix == ".json":
+            try:
+                parsed = json.loads(blob.decode("utf-8"))
+            except Exception:  # noqa: BLE001
+                stale.append(f"{kind}: JSON 无法解析")
+                continue
+            b = parsed.get("binding") or {}
+            if not b:
+                stale.append(f"{kind}: binding 块缺失")
+                bind_rows.append(f"{kind}=no_binding")
+            else:
+                if current_head and b.get("source_commit") \
+                        and b["source_commit"] != current_head:
+                    stale.append(
+                        f"{kind}: binding.source_commit≠current head")
+                    bind_rows.append(f"{kind}=head_stale")
+                else:
+                    bind_rows.append(f"{kind}=ok")
+                payload = _result_payload_for(kind, parsed)
+                if payload is not None and b.get("result_hash"):
+                    if _bc.result_hash(payload) != b["result_hash"]:
+                        drift.append(f"{kind}: result_hash 不一致")
+                        res_rows.append(f"{kind}=result_drift")
+                    else:
+                        res_rows.append(f"{kind}=ok")
+    checks = [
+        {"check": "evidence_file_hashes_fresh",
+         "ok": not any("drift" in r for r in file_rows),
+         "evidence": "; ".join(file_rows)[:300],
+         "block": BLOCKED_HASH_DRIFT},
+        {"check": "evidence_binding_fresh_live",
+         "ok": bool(bind_rows)
+         and all(r.endswith("ok") for r in bind_rows),
+         "evidence": "; ".join(bind_rows)[:300] or "无 JSON 证据",
+         "block": STALE},
+        {"check": "evidence_result_hash_fresh",
+         "ok": not any("drift" in r for r in res_rows),
+         "evidence": "; ".join(res_rows)[:300] or "无 result_hash 层",
+         "block": BLOCKED_HASH_DRIFT},
+    ]
+    return {"drift": drift, "stale": stale, "checks": checks}
 
 
 def scan_terminal_drift(store) -> list[dict]:
@@ -375,6 +532,7 @@ def evaluate_gate_from_evidence(*, store=None,
                                 current_migration_hash: str = "",
                                 worktree_clean: bool | None = None,
                                 evidence_bindings: dict | None = None,
+                                evidence_root=None,
                                 recorded_gate_path=None,
                                 out_path=None) -> dict:
     """从证据自动计算 Gate（OSV51 3.3）。任一证据缺失/失败 →
@@ -430,11 +588,30 @@ def evaluate_gate_from_evidence(*, store=None,
                         stale.append(f"db_fingerprint.{key} 已变化")
             else:
                 stale.append("recorded gate 无 db_fingerprint 绑定")
+        # ---- OSV52：证据 manifest 实时重读重算（哈希/尺寸/可解析/
+        # 路径安全；binding 与 result_hash 分层） ----
+        man = _verify_evidence_manifest(recorded, evidence_root,
+                                        current_head)
+        stale.extend(man["stale"])
+        drift = man["drift"]
         if stale:
-            return {"gate": STALE, "reasons": stale,
+            return {"gate": STALE,
+                    "reasons": stale[:8],
                     "checks": [{"check": "gate_freshness", "ok": False,
                                 "evidence": "; ".join(stale)[:300],
-                                "block": STALE}],
+                                "block": STALE}] + man["checks"],
+                    "evidence_hashes": recorded.get("evidence_hashes", {}),
+                    "evaluated_at": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
+                    "evaluator_version": EVALUATOR_VERSION,
+                    "source_commit": recorded.get("source_commit", "")}
+        if drift:
+            return {"gate": BLOCKED_HASH_DRIFT,
+                    "reasons": drift[:8],
+                    "checks": [{"check": "gate_evidence_hash_drift",
+                                "ok": False,
+                                "evidence": "; ".join(drift)[:300],
+                                "block": BLOCKED_HASH_DRIFT}]
+                    + man["checks"],
                     "evidence_hashes": recorded.get("evidence_hashes", {}),
                     "evaluated_at": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
                     "evaluator_version": EVALUATOR_VERSION,

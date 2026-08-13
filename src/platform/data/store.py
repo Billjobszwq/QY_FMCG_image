@@ -2284,6 +2284,31 @@ CREATE TRIGGER IF NOT EXISTS quarantine_adjudication_evidence_v1_no_delete
   END;
 """
 
+_M061 = """
+CREATE TABLE IF NOT EXISTS gate_run_v1 (
+  gate_run_id TEXT PRIMARY KEY,
+  protocol TEXT NOT NULL DEFAULT 'scope_v5',
+  gate_path TEXT NOT NULL,
+  gate_file_sha256 TEXT NOT NULL DEFAULT '',
+  source_commit TEXT NOT NULL DEFAULT '',
+  evaluator_version TEXT NOT NULL DEFAULT '',
+  evidence_manifest_hash TEXT NOT NULL DEFAULT '',
+  status TEXT NOT NULL DEFAULT 'candidate',
+  requested_by TEXT NOT NULL DEFAULT '',
+  activated_by TEXT NOT NULL DEFAULT '',
+  activated_at TEXT NOT NULL DEFAULT '',
+  supersedes TEXT NOT NULL DEFAULT '',
+  note TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+CREATE TRIGGER IF NOT EXISTS gate_run_v1_no_delete
+  BEFORE DELETE ON gate_run_v1
+  BEGIN
+    SELECT RAISE(ABORT, 'gate_run_v1 append-only：禁止 DELETE');
+  END;
+"""
+
 MIGRATIONS: tuple[tuple[str, str], ...] = (
     ("001_platform_init", _M001),
     ("002_labeling_inbox", _M002),
@@ -2345,6 +2370,7 @@ MIGRATIONS: tuple[tuple[str, str], ...] = (
     ("058_bi_registry_lifecycle_v1", _M058),
     ("059_import_scope_lineage_v1", _M059),
     ("060_quarantine_adjudication_v1", _M060),
+    ("061_gate_run_v1", _M061),
 )
 
 

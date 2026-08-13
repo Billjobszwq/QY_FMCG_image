@@ -27,6 +27,7 @@
 """
 from __future__ import annotations
 
+import hashlib
 import io
 import json
 import sys
@@ -419,6 +420,175 @@ def main() -> int:
         neg("self_compare_injection_still_blocked",
             res["gate"] != "READY_FOR_REAL_DATA_UAT",
             f"gate={res['gate']}")
+
+        # ---- OSV52 负例 22-27：证据文件篡改必须被实时 freshness
+        # 复评（与 live /api/v1/control/gate 同一代码路径）阻断 ----
+        from src.platform import binding_core as _bc3
+        from src.platform.gate_evaluator import (
+            BLOCKED_HASH_DRIFT, _result_payload_for)
+        evdir = tmp / "osv52_ev"
+        evdir.mkdir(exist_ok=True)
+
+        def _mk_ev(name, kind, payload, head):
+            d = dict(payload)
+            rp = _result_payload_for(kind, payload)
+            d["binding"] = {"source_commit": head,
+                            "code_tree_hash": "",
+                            "migration_hash": "",
+                            "result_hash": _bc3.result_hash(rp)
+                            if rp is not None else ""}
+            p = evdir / name
+            p.write_text(json.dumps(d, ensure_ascii=False),
+                         encoding="utf-8")
+            return p
+
+        def _mk_gate(manifest, head):
+            gp = evdir / "gate.json"
+            gp.write_text(json.dumps({
+                "gate": "READY_FOR_REAL_DATA_UAT", "reasons": [],
+                "checks": [], "evidence_hashes": {},
+                "evaluator_version": "3.4.0", "source_commit": head,
+                "code_tree_hash": "", "migration_hash": "",
+                "db_fingerprint": db_fingerprint(store),
+                "evidence_manifest": manifest}), encoding="utf-8")
+            return gp
+
+        def _man(files):
+            return {k: {"path": str(p),
+                        "sha256": hashlib.sha256(
+                            p.read_bytes()).hexdigest(),
+                        "size": p.stat().st_size,
+                        "generated_at": "2026-08-14T00:00:00+00:00"}
+                    for k, p in files.items()}
+
+        def _fresh2(gate_path):
+            return evaluate_gate_from_evidence(
+                store=store, recorded_gate_path=gate_path,
+                current_head=cur_head,
+                evidence_root=evdir)
+
+        cur_head = _bc.git_head(ROOT) or "hcur"
+        base_files = {
+            "uat_report": _mk_ev("uat.json", "uat_report",
+                                 {"protocol": "uatv7", "total": 23,
+                                  "failed": 0, "namespace": "ns",
+                                  "ids": {}}, cur_head),
+            "test_report": _mk_ev("test.json", "test_report",
+                                  {"suite": "hermetic", "failed": 0,
+                                   "passed": 1, "skipped": 0,
+                                   "deselected": 0,
+                                   "marker": "not host_mps",
+                                   "generated_by": "x"}, cur_head),
+            "browser_report": _mk_ev("browser.json", "browser_report",
+                                     {"pages": [],
+                                      "browser_test_run": "nsb"},
+                                     cur_head),
+            "negative_report": _mk_ev("negative.json",
+                                      "negative_report",
+                                      {"gate_negative_tests": [],
+                                       "all_blocked": True}, cur_head),
+        }
+        led = evdir / "ISSUES.md"
+        led.write_text("# none\n", encoding="utf-8")
+        base_files["issue_ledger"] = led
+        base = _mk_gate(_man(base_files), cur_head)
+        base_res = _fresh2(base)
+        base_ok = base_res["gate"] == "READY_FOR_REAL_DATA_UAT"
+
+        def _restore_base():
+            # 从载荷重建全部基线证据（上一次篡改可能删除/替换文件）
+            base_files["uat_report"] = _mk_ev(
+                "uat.json", "uat_report",
+                {"protocol": "uatv7", "total": 23, "failed": 0,
+                 "namespace": "ns", "ids": {}}, cur_head)
+            base_files["test_report"] = _mk_ev(
+                "test.json", "test_report",
+                {"suite": "hermetic", "failed": 0, "passed": 1,
+                 "skipped": 0, "deselected": 0,
+                 "marker": "not host_mps", "generated_by": "x"},
+                cur_head)
+            base_files["browser_report"] = _mk_ev(
+                "browser.json", "browser_report",
+                {"pages": [], "browser_test_run": "nsb"}, cur_head)
+            base_files["negative_report"] = _mk_ev(
+                "negative.json", "negative_report",
+                {"gate_negative_tests": [], "all_blocked": True},
+                cur_head)
+            led.write_text("# none\n", encoding="utf-8")
+            link = evdir / "neg_link.json"
+            if link.is_symlink() or link.exists():
+                link.unlink()
+            _mk_gate(_man(base_files), cur_head)
+
+        def _tamper_reset(mutate):
+            _restore_base()
+            mutate()
+
+        if base_ok:
+            _tamper_reset(lambda: base_files["negative_report"]
+                          .write_text(json.dumps(
+                              {"gate_negative_tests": [],
+                               "all_blocked": True, "x": 1}),
+                              encoding="utf-8"))
+            neg("tamper_rewrite_negative_report_after_gate",
+                _fresh2(base)["gate"] == BLOCKED_HASH_DRIFT,
+                f"gate={_fresh2(base)['gate']}")
+            _tamper_reset(lambda: base_files["test_report"]
+                          .write_text(json.dumps(
+                              {"suite": "hermetic", "failed": 0,
+                               "passed": 999999}), encoding="utf-8"))
+            neg("tamper_rewrite_test_report_after_gate",
+                _fresh2(base)["gate"] == BLOCKED_HASH_DRIFT,
+                f"gate={_fresh2(base)['gate']}")
+            _tamper_reset(lambda: base_files["browser_report"]
+                          .write_bytes(b'{"pages":[1,2,3]}'))
+            neg("tamper_replace_browser_evidence_after_gate",
+                _fresh2(base)["gate"] == BLOCKED_HASH_DRIFT,
+                f"gate={_fresh2(base)['gate']}")
+            _tamper_reset(lambda: base_files["uat_report"].unlink())
+            neg("tamper_delete_uat_report_after_gate",
+                _fresh2(base)["gate"] == "STALE_GATE_EVIDENCE",
+                f"gate={_fresh2(base)['gate']}")
+
+            def _keep_binding_tamper_body():
+                p = base_files["negative_report"]
+                d = json.loads(p.read_text(encoding="utf-8"))
+                d["all_blocked"] = False
+                p.write_text(json.dumps(d, ensure_ascii=False),
+                             encoding="utf-8")
+            _tamper_reset(_keep_binding_tamper_body)
+            neg("tamper_body_keep_binding_after_gate",
+                _fresh2(base)["gate"] == BLOCKED_HASH_DRIFT,
+                f"gate={_fresh2(base)['gate']}")
+
+            def _symlink_escape():
+                outside = tmp / "outside_ev.json"
+                outside.write_text(
+                    base_files["negative_report"].read_text(),
+                    encoding="utf-8")
+                link = evdir / "neg_link.json"
+                try:
+                    import os as _os
+                    if link.exists() or link.is_symlink():
+                        link.unlink()
+                    _os.symlink(outside, link)
+                    man = _man(base_files)
+                    man["negative_report"] = {
+                        "path": str(link),
+                        "sha256": hashlib.sha256(
+                            link.read_bytes()).hexdigest(),
+                        "size": link.stat().st_size,
+                        "generated_at": "2026-08-14T00:00:00+00:00"}
+                    _mk_gate(man, cur_head)
+                except OSError:
+                    pass
+            _tamper_reset(_symlink_escape)
+            neg("tamper_symlink_escape_evidence_path",
+                _fresh2(base)["gate"] != "READY_FOR_REAL_DATA_UAT",
+                f"gate={_fresh2(base)['gate']}")
+        else:
+            neg("tamper_base_state_setup", False,
+                f"基线构造失败 gate={base_res['gate']}")
 
     from datetime import datetime as _dt, timezone as _tz
     from src.platform import binding_core as _bc2

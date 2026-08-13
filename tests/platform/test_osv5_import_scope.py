@@ -594,8 +594,9 @@ class TestGate32:
 
     def test_r30_evaluator_version_320(self, env):
         from src.platform.gate_evaluator import EVALUATOR_VERSION
-        # OSV51：3.2.0 → 3.3.0（证据新鲜度绑定 + 导入安全检查族）
-        assert EVALUATOR_VERSION == "3.3.0"
+        # OSV51：3.2.0 → 3.3.0；OSV52：→ 3.4.0（证据哈希实时重校验 +
+        # Active Gate Registry）
+        assert EVALUATOR_VERSION == "3.4.0"
 
     def test_r31_uatv7_validator_requires_import_ids(self, env):
         from scripts.uat_report_validator import validate_report

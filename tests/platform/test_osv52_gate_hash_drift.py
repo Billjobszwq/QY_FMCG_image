@@ -47,21 +47,28 @@ def _sha(p: Path) -> str:
     return hashlib.sha256(p.read_bytes()).hexdigest()
 
 
-def _mk_evidence(tmp: Path, name: str, payload: dict,
-                 binding: dict | None = None) -> Path:
+def _mk_evidence(tmp: Path, name: str, payload: dict, kind: str,
+                 head: str = "h0") -> Path:
+    from src.platform import binding_core as _bc
+    from src.platform.gate_evaluator import _result_payload_for
     d = dict(payload)
-    if binding is not None:
-        d["binding"] = binding
+    rp = _result_payload_for(kind, payload)
+    d["binding"] = {"source_commit": head, "code_tree_hash": "",
+                    "migration_hash": "",
+                    "result_hash": _bc.result_hash(rp)
+                    if rp is not None else ""}
     p = tmp / name
     p.write_text(json.dumps(d, ensure_ascii=False), encoding="utf-8")
     return p
 
 
-def _mk_recorded_gate(tmp: Path, manifest: dict, head: str = "h0") -> Path:
+def _mk_recorded_gate(tmp: Path, manifest: dict, store,
+                      head: str = "h0") -> Path:
+    from src.platform.gate_evaluator import db_fingerprint
     g = {"gate": "READY_FOR_REAL_DATA_UAT", "reasons": [], "checks": [],
          "evidence_hashes": {}, "evaluator_version": "3.4.0",
          "source_commit": head, "code_tree_hash": "",
-         "migration_hash": "", "db_fingerprint": {},
+         "migration_hash": "", "db_fingerprint": db_fingerprint(store),
          "evidence_manifest": manifest}
     p = tmp / "gate.json"
     p.write_text(json.dumps(g), encoding="utf-8")
@@ -86,23 +93,24 @@ def _fresh(store, gate_path: Path, head: str = "h0"):
 
 
 class TestEvidenceHashRecheck:
-    def _five(self, tmp: Path):
-        bind = {"source_commit": "h0", "code_tree_hash": "",
-                "migration_hash": "",
-                "result_hash": hashlib.sha256(b"x").hexdigest()[:16]}
+    def _five(self, env):
+        tmp = env["tmp"]
         uat = _mk_evidence(tmp, "uat.json",
                            {"protocol": "uatv7", "total": 23,
                             "failed": 0, "namespace": "ns",
-                            "ids": {}}, bind)
+                            "ids": {}}, "uat_report")
         tst = _mk_evidence(tmp, "test.json",
                            {"suite": "hermetic", "failed": 0,
                             "passed": 1, "skipped": 0,
-                            "deselected": 0}, bind)
+                            "deselected": 0, "marker": "not host_mps",
+                            "generated_by": "scripts/x"}, "test_report")
         brw = _mk_evidence(tmp, "browser.json",
-                           {"pages": [], "status": "ok"}, bind)
+                           {"pages": [], "status": "ok",
+                            "browser_test_run": "ns_b"},
+                           "browser_report")
         neg = _mk_evidence(tmp, "negative.json",
                            {"gate_negative_tests": [],
-                            "all_blocked": True}, bind)
+                            "all_blocked": True}, "negative_report")
         led = tmp / "ISSUES.md"
         led.write_text("# issues\nnone\n", encoding="utf-8")
         return {"uat_report": uat, "test_report": tst,
@@ -110,14 +118,16 @@ class TestEvidenceHashRecheck:
                 "issue_ledger": led}
 
     def test_clean_manifest_passes(self, env):
-        files = self._five(env["tmp"])
-        gate = _mk_recorded_gate(env["tmp"], _manifest_of(files))
+        files = self._five(env)
+        gate = _mk_recorded_gate(env["tmp"], _manifest_of(files),
+                                 env["store"])
         res = _fresh(env["store"], gate)
         assert res["gate"] == "READY_FOR_REAL_DATA_UAT", res
 
     def test_rewritten_negative_report_is_hash_drift(self, env):
-        files = self._five(env["tmp"])
-        gate = _mk_recorded_gate(env["tmp"], _manifest_of(files))
+        files = self._five(env)
+        gate = _mk_recorded_gate(env["tmp"], _manifest_of(files),
+                                 env["store"])
         files["negative_report"].write_text(
             json.dumps({"gate_negative_tests": [],
                         "all_blocked": True, "x": 1}),
@@ -126,8 +136,9 @@ class TestEvidenceHashRecheck:
         assert res["gate"] == "BLOCKED_BY_GATE_EVIDENCE_HASH_DRIFT", res
 
     def test_rewritten_test_report_is_hash_drift(self, env):
-        files = self._five(env["tmp"])
-        gate = _mk_recorded_gate(env["tmp"], _manifest_of(files))
+        files = self._five(env)
+        gate = _mk_recorded_gate(env["tmp"], _manifest_of(files),
+                                 env["store"])
         files["test_report"].write_text(
             json.dumps({"suite": "hermetic", "failed": 0,
                         "passed": 9999}), encoding="utf-8")
@@ -135,40 +146,44 @@ class TestEvidenceHashRecheck:
         assert res["gate"] == "BLOCKED_BY_GATE_EVIDENCE_HASH_DRIFT", res
 
     def test_replaced_browser_evidence_is_hash_drift(self, env):
-        files = self._five(env["tmp"])
-        gate = _mk_recorded_gate(env["tmp"], _manifest_of(files))
+        files = self._five(env)
+        gate = _mk_recorded_gate(env["tmp"], _manifest_of(files),
+                                 env["store"])
         files["browser_report"].write_bytes(b'{"pages": [1,2,3]}')
         res = _fresh(env["store"], gate)
         assert res["gate"] == "BLOCKED_BY_GATE_EVIDENCE_HASH_DRIFT", res
 
     def test_deleted_uat_report_is_stale(self, env):
-        files = self._five(env["tmp"])
-        gate = _mk_recorded_gate(env["tmp"], _manifest_of(files))
+        files = self._five(env)
+        gate = _mk_recorded_gate(env["tmp"], _manifest_of(files),
+                                 env["store"])
         files["uat_report"].unlink()
         res = _fresh(env["store"], gate)
         assert res["gate"] == "STALE_GATE_EVIDENCE", res
 
     def test_unparseable_json_is_stale(self, env):
-        files = self._five(env["tmp"])
-        gate = _mk_recorded_gate(env["tmp"], _manifest_of(files))
+        files = self._five(env)
+        gate = _mk_recorded_gate(env["tmp"], _manifest_of(files),
+                                 env["store"])
         p = files["test_report"]
-        blob = p.read_bytes()
-        # 保持大小不变但破坏 JSON → 哈希也变；HASH_DRIFT 与 STALE
-        # 均可接受，但不得 READY；此处用同尺寸损坏验证 fail-closed
-        p.write_bytes(b"{" + blob[1:])
+        blob = bytearray(p.read_bytes())
+        # 同尺寸破坏中段字节 → JSON 不可解析且哈希变化：fail-closed
+        blob[len(blob) // 2] = 0x07
+        p.write_bytes(bytes(blob))
         res = _fresh(env["store"], gate)
-        assert res["gate"] != "READY_FOR_REAL_DATA_UAT", res
+        assert res["gate"] in ("STALE_GATE_EVIDENCE",
+                               "BLOCKED_BY_GATE_EVIDENCE_HASH_DRIFT"), res
 
     def test_size_mismatch_is_hash_drift(self, env):
-        files = self._five(env["tmp"])
+        files = self._five(env)
         man = _manifest_of(files)
         man["negative_report"]["size"] += 5  # 记录尺寸被篡改
-        gate = _mk_recorded_gate(env["tmp"], man)
+        gate = _mk_recorded_gate(env["tmp"], man, env["store"])
         res = _fresh(env["store"], gate)
         assert res["gate"] == "BLOCKED_BY_GATE_EVIDENCE_HASH_DRIFT", res
 
     def test_missing_manifest_fails_closed(self, env):
-        files = self._five(env["tmp"])
+        files = self._five(env)
         g = {"gate": "READY_FOR_REAL_DATA_UAT", "reasons": [],
              "checks": [], "evidence_hashes": {},
              "evaluator_version": "3.4.0", "source_commit": "h0",
@@ -179,17 +194,17 @@ class TestEvidenceHashRecheck:
         assert res["gate"] != "READY_FOR_REAL_DATA_UAT", res
 
     def test_path_traversal_rejected(self, env):
-        files = self._five(env["tmp"])
+        files = self._five(env)
         man = _manifest_of(files)
         evil = env["tmp"].parent / "evil.json"
         evil.write_text("{}", encoding="utf-8")
         man["negative_report"]["path"] = "../evil.json"
-        gate = _mk_recorded_gate(env["tmp"], man)
+        gate = _mk_recorded_gate(env["tmp"], man, env["store"])
         res = _fresh(env["store"], gate)
         assert res["gate"] != "READY_FOR_REAL_DATA_UAT", res
 
     def test_symlink_escape_rejected(self, env):
-        files = self._five(env["tmp"])
+        files = self._five(env)
         man = _manifest_of(files)
         outside = env["tmp"].parent / "outside_neg.json"
         outside.write_text(files["negative_report"].read_text(),
@@ -202,15 +217,16 @@ class TestEvidenceHashRecheck:
         man["negative_report"]["path"] = str(link)
         man["negative_report"]["sha256"] = _sha(link)
         man["negative_report"]["size"] = link.stat().st_size
-        gate = _mk_recorded_gate(env["tmp"], man)
+        gate = _mk_recorded_gate(env["tmp"], man, env["store"])
         res = _fresh(env["store"], gate)
         assert res["gate"] != "READY_FOR_REAL_DATA_UAT", res
 
     def test_binding_kept_body_tampered_still_drift(self, env):
         """保持 binding 块字节不变、篡改正文其余字段——整文件哈希与
         result_hash 层必须拦下。"""
-        files = self._five(env["tmp"])
-        gate = _mk_recorded_gate(env["tmp"], _manifest_of(files))
+        files = self._five(env)
+        gate = _mk_recorded_gate(env["tmp"], _manifest_of(files),
+                                 env["store"])
         p = files["negative_report"]
         d = json.loads(p.read_text(encoding="utf-8"))
         d["all_blocked"] = False  # 篡改语义正文，binding 不动
@@ -231,7 +247,7 @@ class TestActiveGateRegistry:
             env["store"], protocol=scope, gate_path=gp,
             source_commit=head, evaluator_version="3.4.0",
             evidence_manifest_hash="m" * 16,
-            gate_file_sha256=_sha(gp), activated_by="")
+            gate_file_sha256=_sha(gp), requested_by="generator")
 
     def test_record_creates_candidate(self, env):
         gid = self._record(env)
@@ -248,7 +264,8 @@ class TestActiveGateRegistry:
                               actor="admin", approved=False)
         with pytest.raises(GateRegistryError):
             activate_gate_run(env["store"], gate_run_id=gid,
-                              actor="u_reader", approved=True)
+                              actor="u_reader", approved=True,
+                              session_role="read_only")
 
     def test_activate_cas_single_active(self, env):
         from src.platform.gate_registry import (activate_gate_run,
