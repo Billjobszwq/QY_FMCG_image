@@ -427,7 +427,8 @@ async def main_async() -> int:
                                      "String(location.hash).includes("
                                      "'/status')")
             okk = (new_y == "0" and focus_tag.upper() == "H1"
-                   and on_status == "true" and int(deep_y or 0) > 0)
+                   and str(on_status).lower() == "true"
+                   and int(deep_y or 0) > 0)
             pages.append({
                 "route": "/#/status", "viewport": width,
                 "expected_object_type": "nav_scroll_continuity",
