@@ -647,6 +647,18 @@ def evaluate_gate_from_evidence(*, store=None,
                 chk("recursive_secret_scan", leak == 0,
                     f"leak_columns={leak} batches={leak_batches[:5]}",
                     BLOCKED_IMPORT_SECURITY)
+                # OSV51 C-4：批次客户血缘完整性——fixture 批次必须有
+                # ≥1 关联行；quarantine 批次合法保持未绑定/待裁决；
+                # operational 全局批次无关联为合法。
+                unassoc = conn.execute(
+                    "SELECT count(*) c FROM import_batch_v1 b WHERE"
+                    " COALESCE(b.data_scope,'operational') IN"
+                    " ('uat_fixture','demo_fixture') AND NOT EXISTS"
+                    " (SELECT 1 FROM import_batch_customer_scope_v1 s"
+                    "  WHERE s.batch_id=b.batch_id)").fetchone()["c"]
+                chk("import_batch_association_complete", unassoc == 0,
+                    f"fixture_batches_without_association={unassoc}",
+                    BLOCKED_IMPORT_LINEAGE)
                 # OSV51 W2-a（C-1 §8）：quarantine 批次不得有任何可
                 # 归因的 operational 对象写入（DB 级断言，归因见
                 # quarantine_operational_write_violations 文档）。

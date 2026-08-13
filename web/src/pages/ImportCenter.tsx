@@ -33,6 +33,7 @@ interface BatchView {
   errors: { row: number; error: string }[];
   commit?: { stats?: Record<string, number>; receipts?: any[] };
   adjudication?: AdjudicationView;
+  is_global_template?: boolean;
   created_at: string;
 }
 
@@ -432,9 +433,15 @@ export default function ImportCenter() {
                       <div className="meta">{b.batch_id}</div></td>
                     <td data-label="模板">{b.template_id}</td>
                     <td data-label="操作人">{b.actor}</td>
-                    <td data-label="客户范围" className="v">
+                    <td data-label="客户范围" className="v"
+                      data-testid={`cust-scope-${b.batch_id}`}>
                       {(b.customer_scopes ?? []).map(
-                        (c) => c.customer_id).join("；") || "全局"}</td>
+                        (c) => c.customer_id).join("；")
+                        || (b.is_global_template
+                          ? "全局"
+                          : b.data_scope === "quarantine"
+                            ? "未绑定/待裁决（隔离）"
+                            : "未绑定/待裁决")}</td>
                     <td data-label="作用域" data-scope={b.data_scope}>
                       <code>{b.data_scope}</code></td>
                     <td data-label="Test Run" className="v">

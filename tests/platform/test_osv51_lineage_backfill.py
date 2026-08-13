@@ -38,6 +38,17 @@ def env(tmp_path: Path, monkeypatch):
     tds.create_test_run_context(NS_B,
                                 customer_ids=[f"{NS_B}_cust",
                                               f"{NS_B}_cust2"])
+    # 现场事实：test_run 客户在 md_customer_v1 存在（交叉印证源）
+    for ns, cids in ((NS, [f"{NS}_cust"]),
+                     (NS_B, [f"{NS_B}_cust", f"{NS_B}_cust2"])):
+        for cid in cids:
+            store._conn.execute(
+                "INSERT INTO md_customer_v1 (customer_id, name,"
+                " created_by, created_at, updated_at, data_scope,"
+                " test_run_id) VALUES (?,?,?,?,?,?,?)",
+                (cid, cid, "tds", "2026-08-12T04:34:29+00:00",
+                 "2026-08-12T04:34:29+00:00", "uat_fixture", ns))
+    store._conn.commit()
     return {"store": store, "tds": tds}
 
 

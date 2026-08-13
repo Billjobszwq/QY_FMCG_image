@@ -1150,6 +1150,10 @@ class ImportCenter:
         # OSV51 C-3：隔离批次附带裁决状态（UI 裁决面板的数据源）。
         if b.get("data_scope") == "quarantine":
             d["adjudication"] = self.adjudication_dto(b["batch_id"])
+        # OSV51 C-4：全局模板标记（空客户范围时 UI 仅对全局模板显示
+        # “全局”；有客户列模板空关联 → 未绑定/待裁决）。
+        d["is_global_template"] = TEMPLATE_CUSTOMER_COL.get(
+            b.get("template_id") or "") is None
         # OSV51 C-2：出口兜底——DTO 全量递归 secret 扫描（防存量行
         # 与任何新增字段的明文泄漏；commit 当次响应的明文回执由
         # commit() 在返回前覆盖，不经此路径）。
