@@ -283,7 +283,7 @@ def create_control_plane_router(store: Any, gateway: CommandGateway,
         return {"count": len(rows), "runs": [dict(r) for r in rows]}
 
     @router.post("/api/v1/control/gate/activate")
-    async def gate_activate(request) -> dict:
+    async def gate_activate(request: Request) -> dict:
         """OSV52：激活 gate run（平台角色 + 人工批准 + CAS）。"""
         from fastapi import HTTPException
         from ..gate_registry import (GateRegistryError,

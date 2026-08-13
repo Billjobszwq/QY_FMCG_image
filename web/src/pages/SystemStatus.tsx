@@ -40,6 +40,29 @@ export default function SystemStatus({ health }: { health: HealthBody | null }) 
           默认折叠。Gate 为实时 freshness 复评结果，非静态文件。 */}
       <div className="card">
         <h3>机器 Gate（evidence-driven，实时复评，只读）</h3>
+        {/* OSV52：Active Gate 显式 Registry（gate_run_v1）——实时端点
+            只读人工批准激活的 active gate run；废 mtime 选择。 */}
+        <div className="v" data-testid="active-gate-panel"
+          style={{ fontSize: 12, marginBottom: 8, padding: "6px 10px",
+            border: "1px solid var(--border)", borderRadius: 6 }}>
+          {gate?.active_gate_run ? (
+            <>Active Gate：<code>
+              {gate.active_gate_run.gate_run_id}</code>
+              {" "}· 协议 <code>{gate.active_gate_run.protocol}</code>
+              {" "}· 激活于 {gate.active_gate_run.activated_at}
+              {" "}by {gate.active_gate_run.activated_by}
+              {gate.active_gate_run.supersedes
+                ? <> · supersedes <code>
+                    {gate.active_gate_run.supersedes}</code></> : null}
+              {" "}· 证据 manifest <code>
+                {gate.active_gate_run.evidence_manifest_hash}</code>
+            </>
+          ) : (
+            <>Active Gate：无（gate_run_v1 无 status=active 记录——
+              实时 Gate fail-closed；需运行 gate 评估并经平台角色
+              人工批准激活）</>
+          )}
+        </div>
         {!gate && <p className="muted">尚未生成 gate.json（运行 UAT
           --gate）</p>}
         {gate && (
