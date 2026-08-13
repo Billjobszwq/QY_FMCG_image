@@ -101,13 +101,8 @@ export default function Home({ health, modules, identity }: {
     }
   };
 
-  if (err && !dash) {
-    return <div className="page wide">
-      <ErrorState message={`首页加载失败：${err}`}
-        onRetry={() => { setErr(null); load(); }} /></div>;
-  }
-  // OSV52：首页任何时刻都必须有唯一 H1（含加载中分支）——键盘/读屏
-  // 导航进入后立即有语义标题可聚焦。
+  // OSV52：首页任何时刻都必须有唯一 H1（含加载中/错误分支）——键盘/
+  // 读屏导航进入后立即有语义标题可聚焦。
   const header = (
     <div className="page-header">
       <h1>{identity?.product_name_zh ?? "智能业务操作系统"} · 总控台</h1>
@@ -116,21 +111,27 @@ export default function Home({ health, modules, identity }: {
       </span>
     </div>
   );
-  if (!dash) return <div className="page wide">
-    {header}
-    <Loading text="加载总控工作台…" /></div>;
 
-  const open = dash.work_items.filter((w) =>
-    ["todo", "running", "waiting", "approval", "blocked"].includes(
-      w.status));
-  const cap = dash.capacity;
-  const fmtBytes = (b: number) => b > 2 ** 30
-    ? `${(b / 2 ** 30).toFixed(1)} GB`
-    : `${(b / 2 ** 20).toFixed(1)} MB`;
-
+  if (err && !dash) {
+    return <div className="page wide">
+      {header}
+      <ErrorState message={`首页加载失败：${err}`}
+        onRetry={() => { setErr(null); load(); }} /></div>;
+  }
+  // OSV52：单一返回路径——H1 节点在数据加载前后保持稳定（同一 DOM
+  // 位置），ScrollManager 的焦点不会因节点被替换而回落 body。
   return (
     <div className="page wide">
       {header}
+      {!dash ? <Loading text="加载总控工作台…" /> : (() => {
+        const open = dash.work_items.filter((w) =>
+          ["todo", "running", "waiting", "approval", "blocked"].includes(
+            w.status));
+        const cap = dash.capacity;
+        const fmtBytes = (b: number) => b > 2 ** 30
+          ? `${(b / 2 ** 30).toFixed(1)} GB`
+          : `${(b / 2 ** 20).toFixed(1)} MB`;
+        return (<>
 
       {/* 快速目标（服务端持久化后交主管） */}
       <div className="card">
@@ -385,6 +386,8 @@ export default function Home({ health, modules, identity }: {
             </table>
           )}
       </div>
+        </>);
+      })()}
     </div>
   );
 }
