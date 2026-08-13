@@ -535,11 +535,13 @@ def evaluate_gate_from_evidence(*, store=None,
                     " p.name='data_scope'")}
                 unreg = sorted(t for t in scoped_in_db
                                if t not in SCOPE_REGISTRY)
+                # 非 leak_scan 表必须有其它可执行 gate 策略（如
+                # finance_scan/parent_edge/registry）；未登记或无
+                # 策略声明即阻断（负例 9）。
                 unscanned = sorted(t for t in scoped_in_db
-                                   if t in SCOPE_REGISTRY and t not in
-                                   set(leak_scan_tables())
-                                   and "leak_scan" not in
-                                   SCOPE_REGISTRY[t].get("gate", ""))
+                                   if t in SCOPE_REGISTRY and not
+                                   (SCOPE_REGISTRY[t].get("gate") or
+                                    "none").replace("none", "").strip())
                 chk("registry_runtime_scanner_complete",
                     not unreg and not unscanned,
                     f"unregistered={unreg[:4]} unscanned="

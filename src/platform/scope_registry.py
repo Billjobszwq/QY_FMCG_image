@@ -402,6 +402,12 @@ SCOPE_REGISTRY: dict[str, dict[str, Any]] = {
                                   "（visibility=history）",
                           archive_handler="import_batch_v1",
                           gate="leak_scan+registry"),
+    "import_batch_customer_scope_v1": _e(
+        "audit_only", pk="id", immutable=True,
+        customer="customer_id",
+        parent="import_batch_v1.batch_id",
+        op="批次客户作用域唯一事实源（effective 授权/列表过滤消费）",
+        archive="随批次生命周期（不单独归档）", gate="parent_edge"),
 
     # ---------- 训练 / 模型治理（非业务运营投影） ----------
     "training_run": _e("scoped_business_object", pk="run_id",
