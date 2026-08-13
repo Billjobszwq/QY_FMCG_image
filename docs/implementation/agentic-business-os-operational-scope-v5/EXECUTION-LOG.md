@@ -91,3 +91,12 @@ ISSUES 全 CLOSED；STATUS/LIST 全 DONE；FINAL-REPORT 53 项；
 handbook 新增 V5 九条方法论 + 变更记录；USER-HANDBOOK §11 /
 OPERATOR-RUNBOOK §8 / MODULE-AGENT-DEV-GUIDE §9 增补；最终 Gate
 在收尾 HEAD 上由真实 evaluator 生成（.eval/scope_v5/gate.json）。
+
+---
+
+## 附录 V5.1 更正（2026-08-13）
+
+T6 条目中“42 checks”为当时真值；T8/T10 后 gate.json 实际 52 checks。
+OSV51 轮（docs/implementation/operational-scope-v5-correction-v1/）
+已建立 machine_facts.json 机器事实源：Gate checks 数、Registry 数、
+UAT namespace/批次 ID、测试计数一律机器读取，禁止手工录入。

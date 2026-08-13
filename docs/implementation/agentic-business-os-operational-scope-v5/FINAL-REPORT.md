@@ -247,3 +247,29 @@ Center 运营视图）；2) 人工走查：Import Center 四视图 → BI 数据
 - 浏览器：…/.eval/scope_v5/browser/browser_evidence.json + *.png
 - 测试报告：…/.eval/scope_v5/test_report.json
 - 备份：…/.platform/backups/platform_pre_scope_v5_20260813T124408.sqlite
+
+---
+
+## 附录 V5.1 更正（operational-scope-v5-correction-v1 轮，2026-08-13）
+
+本附录不改动上文历史内容，仅按机器证据更正数字漂移（D-06：历史文件
+不回写，更正以附录形式追加）：
+
+1. **“42 检查”**（§31/§51 等）：为 V5 T6 生成时真值；同轮 T8/T10 代码
+   又新增 10 条 Gate 检查，收尾 gate.json 实为 **52 条**。OSV51 轮再增
+   导入安全/血缘/证据绑定检查族，最终数以
+   `.eval/scope_v5/machine_facts.json → gate.checks_total` 为准（机器
+   事实源，禁止手工录入）。
+2. **“Registry 125”**：T5 注册表为 125 条；T5/T6 追加
+   import_batch_customer_scope_v1 等后运行时为 **126 条**。以
+   `machine_facts.json → registry.entries` 为准。
+3. **UAT namespace/batch IDs**：§39 引用的 kh463m 记录在 T10 后一次
+   gate 复评中被评估脚本覆写（osv5_gate_evaluate.py 曾重写
+   uatv7/report.json），现行证据文件记录的是最后一次 UAT 运行的
+   namespace/批次（以 `uatv7/report.json` 与 machine_facts 为准）。
+   OSV51 C-6 已修复覆写路径：report.json 只由 uatv7_rehearsal.py 生成。
+4. **“首次 23/23”**：UAT V7 实际首次运行 jiv6d6 为 20/23（失败项
+   12/13/14），第二次 jiv6d6 重跑 23/23；kh463m 为收尾命名空间。
+   “首次 23/23”表述失实，更正为“第二次运行起 23/23”。
+5. **test_report.json**：原为手写摘要且无 HEAD 绑定；OSV51 起由
+   `scripts/osv51_test_report.py` 机器生成并携带 binding 块。
