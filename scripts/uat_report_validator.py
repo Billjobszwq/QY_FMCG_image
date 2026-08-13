@@ -80,6 +80,23 @@ REQUIRED_UATV7_EXTRA_IDS = (
     "import_evidence", "import_audit_events",
 )
 
+# UAT V7 为导入专项协议：全领域链由 V6 报告（.eval/scope_v4/uatv6）
+# 持续承载；V7 必备断言只覆盖导入链 + 归档 + 重启稳定性。
+REQUIRED_UATV7_CHECKS = (
+    "test_run_context_first", "1_customer_template_upload",
+    "2_project_template_upload", "3_address_template_upload",
+    "4_global_template_denied_for_readonly", "5_dry_run_passed",
+    "6_commit_committed", "7_batch_scope_associations",
+    "8_imported_objects_inherit_scope",
+    "9_operational_list_excludes_fixture",
+    "10_test_center_counts_imports", "11_bi_operational_import_count",
+    "12_cross_customer_read_403", "13_readonly_dryrun_commit_403",
+    "14_detail_no_raw_payload", "15_test_run_archived",
+    "16_batches_into_history", "17_imported_objects_fixture",
+    "18_service_restart", "19_archive_stable_after_restart",
+    "20_gate_reconcile_consistent",
+)
+
 
 def _validate_uatv4(report: dict) -> list[str]:
     problems: list[str] = []
@@ -118,9 +135,21 @@ def validate_report(report: dict) -> list[str]:
     SI2：protocol=uatv4 报告走 V4 协议校验（scope-first 检查集）。
     SI4：protocol=uatv6 在 V5 基础上追加 IAM/BI/Finance IDs 校验。"""
     if report.get("protocol") == "uatv7":
-        problems = _validate_uatv4(report)
+        problems: list[str] = []
+        if not report.get("namespace"):
+            problems.append("缺 namespace")
+        if int(report.get("failed", 0) or 0) > 0:
+            problems.append(f"failed={report.get('failed')} > 0")
+        checks = {c.get("check"): c
+                  for c in report.get("checks", []) or []}
+        for name, c in checks.items():
+            if not c.get("ok"):
+                problems.append(f"check 失败: {name}")
+        for req in REQUIRED_UATV7_CHECKS:
+            if req not in checks:
+                problems.append(f"缺必备断言: {req}")
         ids = report.get("ids") or {}
-        for k in REQUIRED_UATV6_EXTRA_IDS + REQUIRED_UATV7_EXTRA_IDS:
+        for k in ("test_run",) + REQUIRED_UATV7_EXTRA_IDS:
             if not ids.get(k):
                 problems.append(f"缺关键 ID: ids.{k}（V7 必备）")
         return problems
