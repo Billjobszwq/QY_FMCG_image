@@ -3,7 +3,7 @@
 - 轮次：operational-scope-v5-correction-v1
 - 基线 branch：feat/nextgen-training-cycle-v2
 - 基线 HEAD：8e31708d584459fb38fedefe21b070bede36db57
-- 当前 HEAD：46057d2875a3538c5917bf2aebd66a9f1d28e6f7（代码冻结）
+- 当前 HEAD：见 machine_facts.json → git.head（绝对冻结点 1a040628 后仅 docs 提交）
 - production：prod_v4_best_r1（未切换，本轮禁止切换）
 - 评估器版本：3.2.0 → 3.3.0（单点定义）
 - 负例账本：12 → 21（全部 ALL_BLOCKED）
@@ -26,10 +26,12 @@
 
 ## 当前判定
 
-全量 hermetic 0 failed（1581 passed，机器生成报告）；CSS 契约回归
-（var(--line)→var(--border)）已红→绿修复。证据链（test/UAT/browser/
-negative/gate）在收尾 HEAD 上重生成；machine_facts.json 为最终数字
-唯一来源。Gate 最终状态以 .eval/scope_v5/gate.json 收尾再生成与实时
-/api/v1/control/gate 一致性为准（见 FINAL-REPORT §19）。
+P0=0、P1=0（OSV51-013 为 P2 低风险遗留，登记在 ISSUES）；quarantine
+零写逃逸（live API 409×3 + 52 测试 + 负例）；初始密码零持久化（10
+测试 + live 扫描 0 命中）；17 批血缘补齐、3 批显式待裁决；parallel
+timeout 100 轮多种子零漂移；全量 hermetic 0 failed / 1581 passed；
+四份证据绑定当前 HEAD/树/迁移/DB；Gate 负例 21 全部阻断；浏览器四
+视口滚动连续 33/33。最终 Gate 数值见 .eval/scope_v5/gate.json 与
+machine_facts.json（实时/静态一致性见 FINAL-REPORT §19）。
 READY_FOR_REAL_DATA_UAT 仅表示可以开始真实数据 UAT；ACCEPTED /
 PRODUCTION_READY 需用户真实 UAT 与人工验收，本轮不得宣称。

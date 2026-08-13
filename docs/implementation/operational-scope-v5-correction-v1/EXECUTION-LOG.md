@@ -73,3 +73,28 @@
 - live 复核：integrity ok；Registry 126 条 problems=[]；三个隔离批次
   live API commit/dry-run 均 409 IMPORT_BATCH_WRITE_BLOCKED；live DB
   递归 secret 扫描 0 命中。
+
+## 2026-08-13 证据链收尾（绝对冻结 HEAD 之后）
+
+- 收尾期间诚实发现并修复的三个证据工艺缺陷（均在冻结前红→绿）：
+  1) 浏览器四视图截图同字节根因 = 批次表在 900px 视口折叠线以下，
+     截图前须将批次表卡片滚入可视区（OSV51-010 真正修复；此前两次
+     迭代分别尝试强制重载/重排，未命中根因）；
+  2) 滚动断言布尔大小写（jseval 返回 Python 'True'）；
+  3) 迁移 060 两张裁决表漏注册 Registry → coverage 98.43% → 补齐
+     （128 条，problems=[]，parent_edge 声明）。
+- 首次崩溃浏览器运行遗留 osv5br_20260813123256_og4t2 未归档（崩溃
+  发生在归档步骤之前）→ 导致 4 项残留检查失败 → 经 test-data
+  archive API 归档后归零。教训：浏览器脚本崩溃路径应 best-effort
+  归档（已记录为改进项）。
+- 证据生成顺序契约（本轮固化）：残留清零 → UAT rehearsal（自归档，
+  DB 落定）→ 浏览器证据（自归档，DB 落定）→ test_report（绑定落定
+  DB）→ 负例账本（hermetic）→ gate 评估（最后）。任一环节之后不得
+  再有代码/DB 变更，否则整链重跑。
+- 绝对冻结 HEAD：1a04062883381007242f9eccf70ccafb418f6eea
+  （Registry 128 条注册修复之后；本行提交为其后唯一 docs 提交）。
+- 收尾链结果：UAT V7 23/23；浏览器 33/33（含四视口滚动连续性 4/4、
+  四视图截图像素互异、console 未解释错误 0）；全量 hermetic
+  0 failed / 1581 passed / 1 skipped / 6 deselected（机器生成 +
+  binding）；负例 21 项 ALL_BLOCKED。最终 gate.json / machine_facts
+  数值以 .eval/scope_v5/ 为准。
