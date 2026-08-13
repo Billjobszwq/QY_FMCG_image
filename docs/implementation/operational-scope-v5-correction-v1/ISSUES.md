@@ -1,16 +1,17 @@
 # ISSUES — operational-scope-v5-correction-v1
 
-| ID | 级别 | 标题 | 状态 | 契约 |
-|---|---|---|---|---|
-| OSV51-001 | P0 | quarantine 批次可执行 dry-run/commit 写逃逸（imp-bf333d101db6 已被重放） | OPEN | C-1 |
-| OSV51-002 | P0 | users_v1 initial_password_once 明文持久化于 commit_json 并被 GET 反复返回 | OPEN | C-2 |
-| OSV51-003 | P0 | Gate 证据自比较 + 四份证据无代码/DB 绑定（静态 READY 与实时 STALE 并存） | OPEN | C-6 |
-| OSV51-004 | P1 | 隔离区无人工裁决状态机/API（裁决端点 405） | OPEN | C-3 |
-| OSV51-005 | P1 | 17 个历史批次缺 import_batch_customer_scope_v1 关联却被显示为“全局” | OPEN | C-4 |
-| OSV51-006 | P1 | TestParallelEngine.test_branch_timeout 全量态竞态（timeout 被 finalize 覆盖为 cancelled） | OPEN | C-5 |
-| OSV51-007 | P1 | 报告漂移：42vs52 checks、125vs126 registry、UAT namespace/batch ID 过期、“首次23/23”失实 | OPEN | C-8 |
-| OSV51-008 | P1 | 全量 hermetic 实测 1 failed（test_asset_draft_publish_and_kb_search 全量态竞态），静态 test_report 声称 0 failed | OPEN | C-5/C-8 |
-| OSV51-009 | P2 | 路由切换滚动位置残留（y=2124→≈1504），无焦点/读屏播报 | OPEN | C-7 |
-| OSV51-010 | P2 | 浏览器证据 4 张 Import 视图截图字节相同（采集路径缺陷） | OPEN | C-6 附录 |
-| OSV51-011 | P2 | imp-bf333d101db6 QA 重放未入账（需 QA_REPLAY_DETECTED 证据与 supersedes 关系） | OPEN | C-1.9 |
-| OSV51-012 | P2 | AGENTS.md 不存在于仓库（阅读清单无法满足，已用 handbook 替代并记录） | WONTFIX（记录） | 00-LIVE-AUDIT §2 |
+| ID | 级别 | 标题 | 状态 | 契约 | 关闭证据 |
+|---|---|---|---|---|---|
+| OSV51-001 | P0 | quarantine 批次写逃逸（imp-bf333d101db6 已被重放） | CLOSED | C-1 | 守卫 52 测试绿 + 负例 13/14/16 + 提交 3c786897/3ec5cbd9 |
+| OSV51-002 | P0 | users_v1 initial_password_once 明文持久化 | CLOSED | C-2 | 10 测试绿 + 负例 15 + scrub 0 命中 + 提交 30f0c17f |
+| OSV51-003 | P0 | Gate 证据自比较/无绑定（静态 READY 与实时 STALE 并存） | CLOSED | C-6 | binding 块 + 去自比较 + 实时复核 + 负例 17-21 + 提交 0d759fe6 |
+| OSV51-004 | P1 | 隔离区无裁决状态机（405） | CLOSED | C-3 | 15 测试绿 + 迁移 060 + API/UI + 提交 cc5600f4 |
+| OSV51-005 | P1 | 17 批缺客户血缘却显示“全局” | CLOSED | C-4 | 9 测试绿 + 12→29 关联行 + Gate completeness + 提交 78964124 |
+| OSV51-006 | P1 | test_branch_timeout 全量竞态 | CLOSED | C-5 | 确定性测试 + 100 轮压力零漂移 + 提交 c6af1d10 |
+| OSV51-007 | P1 | 报告漂移（42vs52/125vs126/namespace/“首次23/23”） | CLOSED | C-8 | machine_facts.py + V5 更正附录 + 提交 5c166d66 |
+| OSV51-008 | P1 | 全量 hermetic 实测失败而 test_report 声称 0 failed | CLOSED | C-5/C-8 | test_report 机器生成（binding + failed 诚实计数）+ kb flake 修复 185511b1；收尾全量重跑见 machine_facts |
+| OSV51-009 | P2 | 路由切换滚动残留 | CLOSED | C-7 | ScrollManager + typecheck/build + 四视口浏览器断言（05-BROWSER-UAT） |
+| OSV51-010 | P2 | 四视图截图字节相同 | CLOSED | C-6 | 采集修复 + browser_import_views_distinct Gate 检查 |
+| OSV51-011 | P2 | QA 重放未入账 | CLOSED | C-1.9 | QA_REPLAY_DETECTED evidence+audit（幂等；live DB 已入账） |
+| OSV51-012 | P2 | AGENTS.md 不存在 | WONTFIX | — | 记录于 00-LIVE-AUDIT §2（以 handbook + 本轮文档为入口） |
+| OSV51-013 | P2 | store.py set_business_run_status 残留 SELECT-then-UPDATE（无 workflow 终态写入经此路径） | OPEN（低风险，下轮） | C-5 备注 | understand/parallel-engine.md + W1-a concerns |

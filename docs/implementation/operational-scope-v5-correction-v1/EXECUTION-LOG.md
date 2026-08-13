@@ -14,3 +14,49 @@
   - 并行引擎（已完成）：确认 run finalize 无条件 UPDATE 覆盖 timeout→cancelled 为根因，共 6 处竞态点。
   - scope 治理（已完成）：V5 自记 2 项未关闭 P1（UAT 批次残留、import 历史缺客户作用域），与本轮任务吻合。
   - registry/报告（已完成）：确认 gate_negative_tests.json 为手工静态文件、osv5_gate_evaluate.py 会覆写 UAT report.json（13 份过期报告漂移源头）、"42 checks"为 V5 生成时真值后被代码新增 10 条 check 漂移、Registry 125→126 漂移源头在 scope_registry.json 追加 md_customer_v1 后报告未同步。
+
+## 2026-08-13 实施记录（W1-W6）
+
+- W1-a（C-5）：parallel 终态竞态修复——_branch_row 全部终态写改条件
+  UPDATE + rowcount；迟到 worker 回写被拒；test_branch_timeout 改有界
+  drain 确定性断言；新 100 轮压力测试 test_osv51_parallel_stress.py
+  （all/any/quorum/外部取消/branch/run timeout/重启恢复，零漂移）。
+  提交 d09f15bf / 4770eba3 / c6af1d10。独立复跑 3 次全绿 +
+  OSV51_STRESS_ROUNDS=150 种子 77 通过。
+- W1-b（RC-9）：kb_search 全量态 flake 根因 = tests/contract 导入
+  src.common.config 将 .env 生产 DEEPSEEK_API_KEY 灌入进程 →
+  AgentRuntime 走真实远端 LLM 非确定性答复。client fixture 隔离
+  provider 环境 + urllib 零外呼断言。提交 7a19c53d / 185511b1。
+- W1-c（C-7）：ScrollManager（history.scrollRestoration=manual；
+  PUSH/REPLACE → scrollTo(0,0)+focus h1+aria-live；POP 恢复历史
+  位置）。提交 5bc228f3 / 6d5f1140。四视口真实浏览器验收待最终 QA。
+- W2-a（C-1）：quarantine 写逃逸闭环（红 32/49 failed → 绿 52）；
+  UI 写冻结横幅；Gate 负例 13/14/16 + quarantine_execution_escape /
+  quarantine_no_operational_writes（BLOCKED_BY_IMPORT_SECURITY）；
+  QA_REPLAY_DETECTED 证据入账 live DB（evidence+audit 各 1，幂等）。
+  提交 b12d92ff / fb18e231 / 3c786897 / 3ec5cbd9。
+- W2-b（C-2）：首次密码零持久化（红 7 failed → 绿 10）；熵 32→128bit；
+  落库脱敏 + DTO 递归扫描 + scrub 脚本（live DB 0 命中）；Gate 负例
+  15 recursive_secret_scan。提交 e9ca7c91 / 30f0c17f。
+- W3（C-3）：隔离区裁决状态机——迁移 060 + CAS + 双人审批 +
+  revision 创建 + UI 裁决面板（红 15 failed → 绿 15）。live DB 迁移
+  应用；三个隔离批次经 API 裁决为 retained_for_evidence（继续隔离
+  留证；最终处置保留给用户）。提交 cc5600f4。
+- W4（C-4）：17 批血缘确定性回填（12→29 关联行；0 pending；3
+  quarantine 待裁决；逐批审计含 batch_id；幂等）；Gate
+  import_batch_association_complete；UI 未绑定/待裁决显示（禁“全局”
+  误导）。提交 78964124。
+- W5（C-6）：证据 binding 块 + 去自比较 + 实时复核（HEAD+tree+migration+
+  worktree+db fingerprint）+ test_report 机器生成器 + 浏览器四视图截图
+  去同字节缺陷 + 负例 17-21（12 项 binding 测试全绿）。提交 0d759fe6。
+- W6（C-8）：osv51_machine_facts.py 机器事实源 + V5 历史报告更正附录。
+  提交 5c166d66（代码冻结点）。
+- 评估器版本 3.2.0 → 3.3.0（单点定义 + r30 版本钉同步）。
+- 负例账本 12 → 21，全部 ALL_BLOCKED。
+
+## 2026-08-13 验收链（代码冻结 HEAD=5c166d66 后执行）
+
+- bin/abos restart：四服务健康；production=prod_v4_best_r1；训练 0。
+- host_mps 独立：6 passed（1582 deselected）。
+- 全量 hermetic：osv51_test_report.py 生成绑定报告（结果见
+  machine_facts.json）。
