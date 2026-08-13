@@ -1,0 +1,65 @@
+{
+  "gate_negative_tests": [
+    {
+      "negative": "fixture_import_written_operational",
+      "blocked": true,
+      "evidence": "gate=BLOCKED_BY_IMPORT_SCOPE_LINEAGE"
+    },
+    {
+      "negative": "fixture_import_missing_test_run",
+      "blocked": true,
+      "evidence": "gate=BLOCKED_BY_IMPORT_SCOPE_LINEAGE"
+    },
+    {
+      "negative": "archived_test_run_import_rejected",
+      "blocked": true,
+      "evidence": "status=409"
+    },
+    {
+      "negative": "readonly_cross_customer_detail_denied",
+      "blocked": true,
+      "evidence": "status=403"
+    },
+    {
+      "negative": "readonly_cross_customer_commit_denied",
+      "blocked": true,
+      "evidence": "status=403"
+    },
+    {
+      "negative": "dto_leaks_mapping_json",
+      "blocked": true,
+      "evidence": "dto_keys=['actor', 'archived_at', 'batch_id', 'commit', 'correlation_id', 'created_at', 'customer_scopes', 'data_scope']…"
+    },
+    {
+      "negative": "registry_fake_field_detected",
+      "blocked": true,
+      "evidence": "problems=['md_customer_v1: pk 不存在: no_such_column']"
+    },
+    {
+      "negative": "registry_missing_archive_handler_detected",
+      "blocked": true,
+      "evidence": "gate=BLOCKED_BY_SCOPE_REGISTRY"
+    },
+    {
+      "negative": "new_scoped_table_unregistered_detected",
+      "blocked": true,
+      "evidence": "gate=BLOCKED_BY_SCOPE_REGISTRY"
+    },
+    {
+      "negative": "browser_fixture_surface_unverified",
+      "blocked": true,
+      "evidence": "gate=BLOCKED_BY_GATE_EVIDENCE"
+    },
+    {
+      "negative": "bi_counts_fixture_import_operational",
+      "blocked": true,
+      "evidence": "gate=BLOCKED_BY_IMPORT_SCOPE_LINEAGE"
+    },
+    {
+      "negative": "stale_head_binding_detected",
+      "blocked": true,
+      "evidence": "gate=STALE_GATE_EVIDENCE"
+    }
+  ],
+  "all_blocked": true
+}

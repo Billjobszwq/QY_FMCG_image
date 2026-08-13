@@ -1,0 +1,1 @@
+{"suite": "hermetic", "failed": 0, "passed": 1479, "skipped": 1, "deselected": 6, "new_tests": 32, "new_file": "tests/platform/test_osv5_import_scope.py", "baseline": "1447 passed, 1 skipped, 6 deselected", "marker": "not host_mps"}
