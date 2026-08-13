@@ -178,6 +178,11 @@ input:focus-visible, select:focus-visible, textarea:focus-visible,
 button:focus-visible, a:focus-visible, [tabindex]:focus-visible {
   outline: 2px solid var(--info); outline-offset: 1px;
 }
+/* OSV5.1 C-7：路由切换时 ScrollManager 将焦点移到页面标题/内容区
+   （非交互元素），不显示焦点轮廓，避免轮廓闪烁 */
+.main-col h1:focus, .main-col h2:focus, .main-col:focus {
+  outline: none;
+}
 
 /* ---------- 主管工作台（黄色便签仅作强调） ---------- */
 .side-panel {

@@ -16,6 +16,8 @@ import {
   accentVar, fetchIdentity, fetchModules, fetchProduction,
 } from "./platform/registry";
 import SupervisorWorkspace from "./platform/SupervisorWorkspace";
+// OSV5.1 C-7：路由切换滚动连续性 + 焦点落点 + 读屏播报（集中式）
+import ScrollManager from "./platform/ScrollManager";
 import { MODULE_REDIRECTS, MODULE_ROUTES } from "./platform/ui_registry";
 // SI2 T9：三级深链页同样路由级 lazy（不进首页初始包）
 const NewPackaging = lazy(() => import("./pages/NewPackaging"));
@@ -111,6 +113,9 @@ export default function App() {
 
   return (
     <div className="abos-app">
+      {/* OSV5.1 C-7：所有导航入口（主/二级导航、UIIntent navigate、
+          普通链接、重定向）都经过 router，由此统一管滚动与焦点 */}
+      <ScrollManager />
       <header className="topbar">
         <span className="topbar-brand">
           {identity?.short ?? "qy·abos"} · {identity?.product_name_zh ??
