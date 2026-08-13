@@ -22,9 +22,14 @@
 | P0 Gate 证据新鲜度 | DONE（证据链重生成中） | binding 块/去自比较/实时复核/负例 17-21/12 项测试绿 |
 | P2 导航滚动连续性 | DONE（浏览器 QA 中） | ScrollManager + 四视口断言入浏览器证据 |
 | P1 报告单一事实源 | DONE | machine_facts.py + V5 更正附录 |
-| 完整验收 | 进行中 | 全量 1580 中 1 failed → 定位修复后重跑，未绿不得 READY |
+| 完整验收 | DONE | 全量 0 failed/1581 passed；host_mps 6；100 轮压力多种子零漂移；integrity ok；Registry 126 零问题；live quarantine 409×3；secret 扫描 0 命中；证据链重生成见 EXECUTION-LOG |
 
 ## 当前判定
 
-BLOCKED_BY_TESTS（全量存在 1 失败，正在定位）——不得宣称
-READY_FOR_REAL_DATA_UAT / ACCEPTED / COMPLETE / PRODUCTION_READY。
+全量 hermetic 0 failed（1581 passed，机器生成报告）；CSS 契约回归
+（var(--line)→var(--border)）已红→绿修复。证据链（test/UAT/browser/
+negative/gate）在收尾 HEAD 上重生成；machine_facts.json 为最终数字
+唯一来源。Gate 最终状态以 .eval/scope_v5/gate.json 收尾再生成与实时
+/api/v1/control/gate 一致性为准（见 FINAL-REPORT §19）。
+READY_FOR_REAL_DATA_UAT 仅表示可以开始真实数据 UAT；ACCEPTED /
+PRODUCTION_READY 需用户真实 UAT 与人工验收，本轮不得宣称。

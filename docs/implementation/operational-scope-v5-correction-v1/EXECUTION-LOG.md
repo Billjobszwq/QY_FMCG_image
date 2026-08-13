@@ -60,3 +60,16 @@
 - host_mps 独立：6 passed（1582 deselected）。
 - 全量 hermetic：osv51_test_report.py 生成绑定报告（结果见
   machine_facts.json）。
+- 全量 hermetic（第二次）：1 failed = tests/contract
+  test_css_variables_all_defined（本轮 W3 裁决面板引入未定义 token
+  var(--line)）→ 改 var(--border) 红→绿（222339f3）。
+- 全量 hermetic（第三次/收尾）：**0 failed / 1581 passed / 1 skipped /
+  6 deselected**（osv51_test_report.py 机器生成 + binding）。
+- 期间诚实事故记录：test_report 解析器对全绿摘要误判 failed=-1
+  （pytest 全绿不输出 “0 failed”）→ 修复解析器（全绿=0；无摘要=-1
+  阻断），6aaa3a1f。不得以误报掩盖，也不得以误报阻断。
+- host_mps：6 passed；100 轮压力：套件内 + 独立种子 777 通过（W1-a
+  另跑 150 轮种子 77）。
+- live 复核：integrity ok；Registry 126 条 problems=[]；三个隔离批次
+  live API commit/dry-run 均 409 IMPORT_BATCH_WRITE_BLOCKED；live DB
+  递归 secret 扫描 0 命中。

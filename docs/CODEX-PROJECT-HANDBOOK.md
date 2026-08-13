@@ -4,7 +4,65 @@
 >
 > 权威边界：本文件不是产品 L0 架构、实施计划、训练启动授权或线上状态接口。它只负责把权威文件、已经发生的工作和下一步入口串起来。若本文件与权威文件或当前代码冲突，以权威文件和重新验证的当前事实为准，并立即修订本文件。
 >
-> 当前快照时间：2026-08-12，Asia/Shanghai。
+> 当前快照时间：2026-08-13，Asia/Shanghai。
+
+## 2026-08-13 · Operational Scope V5.1 Correction 收口（当前接续入口）
+
+- 现场：分支 `feat/nextgen-training-cycle-v2`；收尾 HEAD 见
+  `git rev-parse HEAD`（基线 8e31708d → 本轮 18+ commits）；tracked
+  工作树干净；未跟踪数据/训练资产未触碰。
+- 本轮性质：**不增加新功能**，修复独立审计发现的安全边界/状态竞态/
+  数据血缘/UI 连续性问题。入口目录
+  `docs/implementation/operational-scope-v5-correction-v1/`
+  （00-LIVE-AUDIT / 01-ROOT-CAUSES-AND-CONTRACTS / 02..05 设计契约 /
+  STATUS / ISSUES / DECISIONS / LIST / EXECUTION-LOG / FINAL-REPORT）。
+- 八项修复全部落地（细节见该目录 FINAL-REPORT 20 节）：
+  1) P0-1 quarantine 写逃逸：服务层 `_assert_batch_writable` 唯一强制
+     点（409 IMPORT_BATCH_WRITE_BLOCKED），14 模板参数化 + 并发/伪造/
+     重启负例，Gate 检查 quarantine_execution_escape /
+     quarantine_no_operational_writes（BLOCKED_BY_IMPORT_SECURITY）；
+     imp-bf333d101db6 QA 重放以 QA_REPLAY_DETECTED 证据入账（不回写
+     历史）。
+  2) P0-2 首次密码零持久化：明文仅 commit 当次响应；落库/DTO/列表/
+     errors.csv 递归 secret 扫描 [REDACTED]；熵 128bit；存量清洗脚本；
+     Gate recursive_secret_scan。
+  3) 隔离区裁决状态机：迁移 060 + CAS + 双人审批（申请人≠审批人）+
+     新批次 revision（不原地改）+ UI 面板；三个现存批次
+     retained_for_evidence，最终处置待用户业务裁决。
+  4) 17 批客户血缘确定性回填（test_run→registry 唯一客户 +
+     md_customer 交叉印证，零名称猜测；12→29 关联行）；quarantine
+     显示“未绑定/待裁决”，禁“全局”误导；Gate 关联完整性检查。
+  5) parallel 终态竞态：全部终态写改条件 UPDATE + rowcount，迟到
+     回写被拒；100 轮压力（多种子）零漂移；test_branch_timeout 确定性化。
+  6) Gate 证据新鲜度闭环：四份证据 binding 块（source_commit/
+     code_tree_hash/migration_hash/database_fingerprint/
+     suite_config_hash/command_hash/result_hash/时间戳）；去自比较；
+     实时复核 HEAD+树+迁移+worktree+DB；test_report 机器生成器；
+     浏览器四视图截图像素互异检查。评估器 3.2.0→3.3.0。
+  7) 导航滚动连续性：ScrollManager（PUSH/REPLACE 归零聚焦 h1 +
+     aria-live；POP 恢复），四视口浏览器断言 nav_scroll_continuity。
+  8) 报告单一事实源：scripts/osv51_machine_facts.py；V5 历史报告
+     42vs52/125vs126/namespace/“首次23/23”以更正附录修正。
+- 负例账本 12→21（ALL_BLOCKED）；hermetic 全量 0 failed / 1581 passed
+  （机器生成报告）；host_mps 6 passed；Registry 126 条零问题；
+  SQLite integrity ok；production=prod_v4_best_r1 未切换；训练进程 0。
+- 方法论新增（V5.1 教训）：
+  (1) 证据文件的 recorded 绑定必须来自证据生成时刻，Gate 评估时把
+      当前值同时当 recorded/current 是自比较缺陷——binding 块 +
+      独立计算是唯一解；
+  (2) “静态 READY、实时 STALE、报告 0 failed、实测 1 failed”可以
+      并存——证据链每一环（测试报告、负例账本、浏览器证据）都必须
+      机器生成且带绑定，手写摘要必漂移；
+  (3) 守卫必须在 Domain Service 层单一强制点，UI/route 层只是体验；
+      状态机写迁移一律条件 UPDATE/CAS，禁止 SELECT-then-UPDATE；
+  (4) 隔离/历史数据的“全局”显示是血缘缺失的伪装——空关联必须有
+      显式的“未绑定/待裁决”语义；
+  (5) 多代理并行开发时，代理报告的 commit SHA/结果必须逐一 git 复核
+      （本轮出现幻觉报告，实际工作以 git 内容为准）。
+- 未关闭：OSV51-013（store.py set_business_run_status 残留
+  SELECT-then-UPDATE，低风险）；三个隔离批次最终处置待用户裁决。
+- 下一步：真实数据 UAT（Import Center 运营视图贯穿）+ 人工走查；
+  UAT 通过前不得宣称 ACCEPTED/PRODUCTION_READY。
 
 ## 2026-08-12 · 当前接续入口（优先于下方历史快照）
 
