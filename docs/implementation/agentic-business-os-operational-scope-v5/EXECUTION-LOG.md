@@ -32,3 +32,62 @@ tests/platform/test_osv5_import_scope.py：32 项断言。首跑
   实现，修复后转真绿）；
 - r24/r28：parent edge 现状恰好可解析 / coverage 已捕获未登记表。
 红态证据：本文件首跑记录（未修复前不得再跑覆盖语义）。
+
+## T2–T3（批次执行上下文 + IAM/DTO）
+
+- 迁移 059：import_batch_v1 生命周期列 + import_batch_customer_scope_v1。
+- ImportCenter：TEMPLATE_SCOPE 矩阵 + authorize_template/customers/
+  batch（整批 fail-closed）；upload(test_run_id) 同事务 uat_fixture；
+  batch_dto 白名单 + preview_rows 脱敏；list_batches 四视图；
+  dry-run/commit 归档守卫 + fixture 作用域继承（自然键/回执键）。
+- import_api：全端点 IAM 接入；errors.csv/preview 授权。
+- IAM：finance.manage/data.import.audit scope + auditor 角色。
+
+## T4/T6/T9（可执行 Registry + Gate 3.2 + session）
+
+- scope_registry：35 假 pk/5 假 customer_col/115 幻影 tenant_col
+  全部修正；validate_registry；ARCHIVE_HANDLERS（20 表）+
+  archivable_tables/leak_scan_tables/archive_handler_for。
+- scope.py/test_data.py：_SCOPED_TABLES/_SCOPED_DOMAIN_TABLES 改
+  Registry 派生；archive_namespace 由 handler 执行。
+- gate_evaluator：3.2.0；18 新检查；BLOCKED_BY_IMPORT_SCOPE_LINEAGE；
+  data_products_all_effective_consistent 8 产品逐项。
+- auth：purge_expired_sessions（登录触发/只删过期/审计/bill 豁免）。
+
+## T5（历史 20 条纠偏，live）
+
+plan（只读）：20 条 → 17 bind（uat_fixture_v3/uatv2/uatv3 唯一客户集
+匹配）+ 3 quarantine（uat-cust-a/b、uatv2 l16gw2 无登记 Test Run）。
+apply：幂等 + 20 行 scope_backfill_audit_v1；operational 20 → 0。
+
+## T6（Gate 3.2 降级 + 负例）
+
+osv5_gate_evaluate.py：42 检查，首次评估 BLOCKED_BY_P0（诚实降级，
+非手写）；osv5_gate_negative.py：12 负例 ALL_BLOCKED=True。
+
+## T7（UAT V7）
+
+uatv7_rehearsal.py：首跑 23/23（validator problems=[]；ids 6 新键；
+current_bundle=prod_v4_best_r1；training=0；residue=0）。首次运行
+前的一次脚本调试遗留 namespace 已归档（诚实登记）。
+
+## T8（浏览器对象级验收）
+
+osv5_browser_evidence.py：29/29；console unexplained=0；28 截图
+hash 入账。修复三处工具缺陷（falsy 值吞噬/status 测试中心区块/
+同 URL hash 导航状态污染）并在脚本内注释留痕。前端 ImportCenter
+重构（四视图 + 全字段列）。
+
+## T9（全量回归）
+
+hermetic 1479 passed/1 skipped/6 deselected（基线 1447 + 新 32）；
+host MPS 6 passed；tsc 零错误；vite build 成功；git diff --check 干净；
+live integrity ok；doctor 四端口在用/训练进程无；test_report.json
+入账。
+
+## T10（收口）
+
+ISSUES 全 CLOSED；STATUS/LIST 全 DONE；FINAL-REPORT 53 项；
+handbook 新增 V5 九条方法论 + 变更记录；USER-HANDBOOK §11 /
+OPERATOR-RUNBOOK §8 / MODULE-AGENT-DEV-GUIDE §9 增补；最终 Gate
+在收尾 HEAD 上由真实 evaluator 生成（.eval/scope_v5/gate.json）。

@@ -114,3 +114,18 @@ curl -b <登录 cookie> http://127.0.0.1:8400/api/v1/control/projection
 | integration ok=false | 按报告 errors 定位缺失的 agent/命令/UI 路由/OpenAPI 前缀 |
 | 账单疑问 | 账单行下钻 usage_id/run_id/证据；禁止手工改 usage（append-only） |
 | 工作流卡 waiting_human | `/workflow/approvals` 批准后自动续跑 |
+
+## 8. Operational Scope V5 运维口径（2026-08-13 增补）
+
+- Gate 版本 3.2.0：`/api/v1/control/gate` 实时 freshness 复评；
+  机器文件 `.eval/scope_v5/gate.json`（scripts/osv5_gate_evaluate.py
+  生成，禁止手改）。阻断状态含 BLOCKED_BY_IMPORT_SCOPE_LINEAGE。
+- 导入批次日常对账：`python3 scripts/scope_audit_v5.py`（列/创建/
+  scanner/archiver/API/Gate/Registry 七维；替代 scope_audit_v4）。
+- 历史批次纠偏：`python3 scripts/scope_reconcile_imports_v5.py`
+  （先只读 plan，确认后 `--apply`；幂等；逐批审计入账）。
+- 负例回归：`python3 scripts/osv5_gate_negative.py`（12 项必须全阻断）。
+- UAT V7 预演：`python3 scripts/uatv7_rehearsal.py`（真实 multipart
+  Import API；含服务重启稳定性检查）。
+- Session 治理：过期会话在登录时自动清理（只删过期、写审计）；
+  锁定平台身份（bill）不受影响。

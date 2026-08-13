@@ -166,3 +166,18 @@ UPDATE/DELETE）；旧的 admin 口令已失效。
 地理编码 `GEOCODER_PROVIDER=amap|tencent` + `AMAP_API_KEY`/
 `TENCENT_MAP_KEY`；地图瓦片 `MAP_TILES_URL`；LLM 合成
 `DEEPSEEK_API_KEY`。
+
+## 11. Import Center 视图与权限（OSV5，2026-08-13 增补）
+
+- Import Center 四个视图：运营导入（默认，仅 effective operational）、
+  我的批次、Test Run/历史证据（需授权）、隔离待处理（管理员/审计）。
+- 批次列表显示 文件名/模板/操作人/客户范围/作用域/Test Run/状态/
+  行数/时间；不再用截断 batch_id 猜批次。
+- 权限：上传需模板对应 capability（客户域=master.manage、用户/角色/
+  授权=iam.manage、价目卡=finance.manage、问卷=survey.manage），
+  且批次涉及的每个客户都必须在你的授权范围内——任一客户无权整批
+  拒绝。read_only 不能上传/预检/提交，也看不到无权批次。
+- 批次详情不含原始导入内容；原始行预览仅创建者或 data.import.audit
+  角色可见（脱敏 + 50 行上限）。
+- 历史 UAT 批次已纠偏：能唯一归属 Test Run 的进历史证据，不能的
+  在隔离区等待管理员处理；运营面与 BI 均不再计入。

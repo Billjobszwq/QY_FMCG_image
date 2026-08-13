@@ -826,3 +826,33 @@ Agent 不是万能管理员。Graph 节点必须声明 capability、数据域、
 |---|---|---|
 | 2026-08-13 | si3 收尾提交 | Scope Integrity V3 收口：假阳性 Gate 降级并修复；Scope Graph V3/effective scope/attribution ledger/全表 Registry/Gate 3.0 freshness/UAT V5 48 项；hermetic 1425 passed，host MPS 6 passed |
 | 2026-08-13 | si4 收尾提交 | Operational Scope V4 收口：SI3 READY 再次证伪（IAM 85 active 账号/BI 物理计数/前端默认值）；IAM 身份生命周期（迁移 057）；BI/Finance effective 口径（迁移 058）；Registry 语义层；Gate 3.1 + 22 负例；UAT V6 57/57；12 页浏览器 30/30；hermetic 1447 passed，host MPS 6 passed |
+| 2026-08-13 | osv5 收尾提交 | Operational Scope V5 收口：V4 READY 再次证伪（20 条历史 UAT 导入批次污染运营面/Import API 越权/Registry 假语义）；批次=冻结执行上下文（迁移 059 + 多客户关联表）；模板权限矩阵 + 逐客户整批 fail-closed + DTO 白名单；可执行 Registry（validator + scanner/archiver/filter/TestCenter/Gate 全部派生，平行清单废除）；历史 20 条纠偏 17 bind/3 quarantine；Gate 3.2.0（18 新检查 + 12 负例）；UAT V7 真实 multipart Import Center 23/23；浏览器对象级 29/29；hermetic 1479 passed，host MPS 6 passed |
+
+## 2026-08-13 · Operational Scope V5：可执行 Registry 与导入链收口方法论
+
+V5 再次证明：上一轮的 READY 只覆盖上一轮认识的失败面。新增
+方法论（接续 V4 九条）：
+
+  1. **表名进入 Registry 不等于作用域治理完成**。模块只有在创建、
+     授权、运营查询、归档、测试中心、BI、Gate、浏览器和证据链
+     全部由同一可执行策略驱动后，才算完成接入。
+  2. **Registry 声明必须可机器验证**：pk/列/parent edge/handler
+     对 schema 逐项校验；默认值不得臆造不存在的列（如全局
+     tenant_id）；声明造假比漏登记更危险。
+  3. **平行硬编码清单是泄漏温床**：scanner/archiver/过滤器/
+     统计/Gate 必须从唯一事实源派生；新增表只改 Registry 一处。
+  4. **导入批次是执行上下文载体**：必须冻结 tenant/scope/
+     test_run/actor/客户关联与授权决定；多客户批次不得压成单
+     customer_id；任何模板不得因“无客户列”绕过授权。
+  5. **API 响应必须 DTO 白名单**：直接回数据库行 = 原始 payload
+     泄漏；原始预览需独立权限 + 脱敏 + 行数上限。
+  6. **历史纠偏必须结构化证据优先**：mapping/回执/时间窗 >
+     文件名；不可唯一归属 → quarantine（fail-closed），不得删除
+     或继续计入运营。
+  7. **浏览器验收必须对象级对账**（DOM 行/具体 ID == API 口径）；
+     “页面不含 token”是假阴性；同 URL hash 导航需强制重载防
+     状态污染；CDP 值提取不得吞 falsy。
+  8. **UAT 必须真实经过其声称的入口**：宣称“导入闭环”就必须
+     multipart 走真实 Import API，否则无端到端证据。
+  9. **Gate 版本必须单点定义全链引用**（代码/gate.json/API/Web/
+     文档/validator/负例）；文档口径与代码版本漂移本身是缺陷。

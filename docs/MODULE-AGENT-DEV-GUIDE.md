@@ -138,3 +138,23 @@ analytics_agent、fieldops_agent、finance_agent。各自独立身份、allowlis
 curl -b <cookie> :8400/api/v1/platform/integration   # ok=true 才允许合入
 pytest tests/contract/test_abos_v2_integration.py    # 三方路由一致性
 ```
+
+## 9. OSV5 接入契约：可执行 Scope Registry（2026-08-13 增补）
+
+新增带 scope 的表（Domain Pack/导入模板）时：
+
+1. 只需在 `src/platform/scope_registry.py` 登记**类型化声明**：
+   pk（真实列/composite:/none）、tenant/customer/project 策略
+   （真实列或 derive/not_applicable，禁止臆造列）、scope_cols、
+   parent edges、op/archive 规则、gate 策略。
+2. 需要结构化归档的表：在 ARCHIVE_HANDLERS 注册可执行 handler
+   并在登记项声明 archive_handler（validator 强制双向一致）。
+3. scanner（leak_scan_tables）、archiver（archivable_tables）、
+   Test Center 统计、Gate 覆盖全部自动派生——**禁止再向任何平行
+   清单添加表名**。
+4. 表名进入 Registry ≠ 治理完成：创建、授权、运营查询、归档、
+   测试中心、BI、Gate、浏览器、证据链必须全部由同一策略驱动。
+5. 导入类模块必须复用 Import Center 作用域模型（批次=冻结执行
+   上下文 + 多客户关联表 + 模板权限矩阵），不得自建平行导入链。
+6. `validate_registry(conn)` 在启动测试与 Gate 运行；漏注册/假声明
+   会直接 BLOCKED_BY_SCOPE_REGISTRY。
