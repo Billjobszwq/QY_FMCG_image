@@ -422,17 +422,18 @@ def main() -> int:
 
     from datetime import datetime as _dt, timezone as _tz
     from src.platform import binding_core as _bc2
-    from src.platform.gate_evaluator import db_fingerprint as _dbfp
     finished_at = _dt.now(_tz.utc).isoformat()
     payload = {"gate_negative_tests": results,
                "all_blocked": all(r["blocked"] for r in results)}
+    # 负例账本为 hermetic（临时库）产物：binding 只绑代码状态，不绑
+    # database_fingerprint（临时库指纹与 live 库不可比；评估器对缺失
+    # 指纹跳过 DB 比对）。
     payload["binding"] = _bc2.make_binding(
         root=ROOT, conn=conn,
         argv=[sys.executable, "scripts/osv5_gate_negative.py"],
         result_payload={"all_blocked": payload["all_blocked"],
                         "count": len(results)},
-        started_at=started_at, finished_at=finished_at,
-        database_fingerprint=_dbfp(store))
+        started_at=started_at, finished_at=finished_at)
     OUT.parent.mkdir(parents=True, exist_ok=True)
     OUT.write_text(json.dumps(payload, ensure_ascii=False, indent=2),
                    encoding="utf-8")
