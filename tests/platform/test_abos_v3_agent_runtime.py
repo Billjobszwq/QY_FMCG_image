@@ -246,3 +246,52 @@ class TestLifecycleAssetsMemory:
         rows = c.get("/api/v1/agents/supervisor/memories").json()
         assert all(x["memory_id"] != m["memory_id"]
                    for x in rows["memories"])
+
+
+class TestKBSearchHermeticIsolation:
+    """RC-9 / C-5.5 回归：src/common/config.py 导入时把 .env 灌入
+    os.environ（含生产 DEEPSEEK_API_KEY）。任何先于本文件收集并导入它
+    的测试模块（如 tests/contract/test_immutability.py）都会让
+    AgentRuntime.invoke 的 _llm_compose 切换到真实远端 LLM：答复文本
+    不再确定，并会复述查询词，使 test_asset_draft_publish_and_kb_search
+    在全量态间歇失败（assert '巡检手册' not in '查询知识库"巡检手册"…'）。
+    hermetic 测试必须隔离 LLM provider 环境；断言不得放宽。
+    """
+
+    def test_fixture_isolates_llm_provider_env(self, client):
+        import os
+        assert not os.environ.get("DEEPSEEK_API_KEY"), (
+            "DEEPSEEK_API_KEY 泄漏进测试环境（src.common.config 导入 "
+            ".env）；agent 答复将依赖远端 LLM，非确定性")
+
+    def test_invoke_makes_no_external_llm_call(self, client,
+                                               monkeypatch):
+        import urllib.request
+        c, h, _b, _g = client
+        calls = []
+
+        class _FakeResp:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *a):
+                return False
+
+            def read(self):
+                return json.dumps(
+                    {"choices": [{"message": {"content":
+                        '查询知识库“巡检手册”，结果为空。'}}]}).encode()
+
+        def _fake_urlopen(req, *a, **kw):
+            calls.append(getattr(req, "full_url", ""))
+            return _FakeResp()
+
+        monkeypatch.setattr(urllib.request, "urlopen", _fake_urlopen)
+        c.post("/api/v1/agents/assets", headers=h, json={
+            "kind": "kb", "name": "巡检手册",
+            "content": "门店巡检必须先拍门头照，再填问卷。"})
+        r = invoke(c, h, "supervisor", "查知识库：巡检手册")
+        assert calls == [], (
+            f"hermetic invoke 不得调用外部 LLM: {calls}")
+        assert r["provider"] != "llm+tool_loop"
+        assert "巡检手册" not in r["message"]
