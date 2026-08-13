@@ -30,3 +30,24 @@
 ## 验收链（最终 HEAD 上执行）
 
 见 ACCEPTANCE.md 与 machine_facts.json（.eval/scope_v5/）。
+
+## 2026-08-14 收尾链（最终 HEAD 上执行；任何之后提交都会使证据 STALE）
+
+- 收尾链顺序（固化）：UAT V7 rehearsal（23/23，自归档 DB 落定）→
+  浏览器证据（51 pages 全断言：四视图×四视口 URL 三方一致、未知 view
+  规范化、首页唯一 H1+焦点、滚动连续性、四视图截图互异、console 0）→
+  全量 hermetic（osv51_test_report.py，-W error 门禁，0 failed）→
+  负例 27 ALL_BLOCKED → osv5_gate_evaluate.py（写 evidence_manifest +
+  登记 gate_run_v1 candidate）→ 平台角色人工批准激活 → 实时端点复核。
+- 期间诚实返工记录（不得隐藏）：
+  1) home_unique_h1_focus 两轮失败：先因加载完成替换 H1 节点（改单一
+     返回路径），再因断言走了 location.hash（POP 语义不抢焦点，属
+     设计）——改经真实一级导航“主管工作台”PUSH 进入后通过；
+  2) evaluator_version_consistent 版本钉残留 3.3.0、gate_run_v1 漏
+     注册 Registry → 修复后返工整链；
+  3) V5.1 收尾悖论（文档提交晚于 gate → HEAD 漂移 STALE）本轮以
+     “文档先行 + 数字引用 machine_facts”规避（E-10）。
+- 篡改演练与恢复：激活后改写 gate_negative_tests.json → 实时端点
+  必须立即 BLOCKED_BY_GATE_EVIDENCE_HASH_DRIFT；恢复只走重跑
+  （negative→gate→重新激活），不手工改 hash。结果见 machine_facts
+  与 ACCEPTANCE.md。

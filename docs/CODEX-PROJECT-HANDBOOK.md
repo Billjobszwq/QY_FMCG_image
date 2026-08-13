@@ -4,9 +4,60 @@
 >
 > 权威边界：本文件不是产品 L0 架构、实施计划、训练启动授权或线上状态接口。它只负责把权威文件、已经发生的工作和下一步入口串起来。若本文件与权威文件或当前代码冲突，以权威文件和重新验证的当前事实为准，并立即修订本文件。
 >
-> 当前快照时间：2026-08-13，Asia/Shanghai。
+> 当前快照时间：2026-08-14，Asia/Shanghai。
 
-## 2026-08-13 · Operational Scope V5.1 Correction 收口（当前接续入口）
+## 2026-08-14 · Operational Scope V5.2 Correction 收口（当前接续入口）
+
+- 现场：分支 `feat/nextgen-training-cycle-v2`；收尾 HEAD 见
+  `git rev-parse HEAD`（基线 8cb51dcf = V5.1 收尾）。入口目录
+  `docs/implementation/operational-scope-v5-correction-v2/`
+  （LIVE-AUDIT / ISSUES / DECISIONS / LIST / EXECUTION-LOG /
+  ACCEPTANCE / FINAL-REPORT）。
+- 本轮修复（独立 QA DONE_WITH_CONCERNS 的 High/Medium/Low 全部关闭）：
+  1) **证据哈希防篡改**：gate.json 携带 evidence_manifest（五份证据×
+     路径/SHA256/大小/生成时间）；实时 freshness 复评每次重读重算：
+     内容/尺寸/哈希不符 → BLOCKED_BY_GATE_EVIDENCE_HASH_DRIFT；缺失/
+     路径越界/符号链接逃逸/JSON 不可解析 → STALE。分层校验（整文件/
+     binding/result_hash）。评估器 3.3.0→3.4.0。
+  2) **Active Gate 显式 Registry**：迁移 061 gate_run_v1（append-only，
+     禁 DELETE）；废除 .eval/*/gate.json mtime 选择；实时端点只读
+     status=active 的 scope_v5 run（无 active/文件缺失/哈希不符 →
+     fail-closed）；激活需平台角色 + approved + CAS + 协议防接管
+     （旧 scope 重跑不得接管）；Web 状态页展示 active gate_run 元数据。
+  3) **Import Center URL↔视图同步**：?view= 单一事实源；未知规范化
+     replace；页签 PUSH；浏览器三方一致断言 4 视图×4 视口。
+  4) **测试质量**：runner 强制 -W error::pytest.PytestReturnNotNoneWarning；
+     测试函数零非 None 返回（AST 扫描）。
+  5) **首页 H1**：加载中/错误分支恒有唯一 H1；单一返回路径稳定 DOM
+     节点（焦点不回落 body）；home_unique_h1_focus 断言。
+  6) **OSV51-013 结构性关闭**：set_business_run_status 由
+     SELECT-then-UPDATE 改条件 UPDATE/CAS（实证旧实现 1500 轮并发
+     1301 轮双写覆盖终态；修复后 1500/1500 恰一赢家 0 覆盖）；
+     succeeded/cancelled 绝对终态。
+  7) 负例账本 21→27（新增篡改族 6 项，全部经实时复评路径阻断）。
+- 收尾验收数值一律引用 `.eval/scope_v5/machine_facts.json`（机器
+  生成；含 gate/test/browser/registry/services/production/training）。
+- 方法论新增（V5.2 教训）：
+  (1) Gate 记录的证据哈希若不在实时路径重算，等于没有——evidence_hashes
+      必须每次 freshness 复评重读重算，且 recorded 只来自证据文件；
+  (2) “最新文件即当前 Gate”（mtime 选择）是隐式状态接管漏洞——Gate
+      激活必须显式、人工批准、CAS、append-only 留痕；
+  (3) 收尾悖论：gate 生成后任何提交都会推进 HEAD → 证据 binding 即
+      STALE。因此文档必须在证据链之前提交（E-10）；FINAL-REPORT 数字
+      全部引用 machine_facts，避免为补文档再跑整链；
+  (4) 浏览器断言导航语义时必须经真实一级导航 PUSH（location.hash
+      直写在 router 语义里是 POP——恢复位置、不抢焦点是设计而非缺陷）；
+  (5) 页面级 H1 焦点要稳，DOM 结构必须在异步加载前后保持节点同一
+      （多分支 early-return 会替换节点导致焦点回落 body）；
+  (6) SELECT-then-UPDATE 的状态机即使逻辑上受转移表保护，也要用条件
+      UPDATE/CAS 关闭并发窗口——“文档声明不可达”不是结构性关闭。
+- 未关闭：OSV52-007（P2）vendor-maplibre ~949KB（gzip 248KB）性能
+  债务（任务书只登记）；隔离区三批次最终业务处置待用户裁决（当前
+  retained_for_evidence）。
+- 下一步：真实数据 UAT（Gate READY 后）+ 人工走查；UAT 通过前不得
+  宣称 ACCEPTED/PRODUCTION_READY。
+
+## 2026-08-13 · Operational Scope V5.1 Correction 收口
 
 - 现场：分支 `feat/nextgen-training-cycle-v2`；收尾 HEAD 见
   `git rev-parse HEAD`（基线 8e31708d → 本轮 18+ commits）；tracked
