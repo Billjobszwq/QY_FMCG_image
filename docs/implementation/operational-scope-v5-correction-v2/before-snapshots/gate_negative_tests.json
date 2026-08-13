@@ -1,0 +1,120 @@
+{
+  "gate_negative_tests": [
+    {
+      "negative": "fixture_import_written_operational",
+      "blocked": true,
+      "evidence": "gate=BLOCKED_BY_IMPORT_SCOPE_LINEAGE"
+    },
+    {
+      "negative": "fixture_import_missing_test_run",
+      "blocked": true,
+      "evidence": "gate=BLOCKED_BY_IMPORT_SCOPE_LINEAGE"
+    },
+    {
+      "negative": "archived_test_run_import_rejected",
+      "blocked": true,
+      "evidence": "status=409"
+    },
+    {
+      "negative": "readonly_cross_customer_detail_denied",
+      "blocked": true,
+      "evidence": "status=403"
+    },
+    {
+      "negative": "readonly_cross_customer_commit_denied",
+      "blocked": true,
+      "evidence": "status=403"
+    },
+    {
+      "negative": "dto_leaks_mapping_json",
+      "blocked": true,
+      "evidence": "dto_keys=['actor', 'archived_at', 'batch_id', 'commit', 'correlation_id', 'created_at', 'customer_scopes', 'data_scope']…"
+    },
+    {
+      "negative": "registry_fake_field_detected",
+      "blocked": true,
+      "evidence": "problems=['md_customer_v1: pk 不存在: no_such_column']"
+    },
+    {
+      "negative": "registry_missing_archive_handler_detected",
+      "blocked": true,
+      "evidence": "gate=BLOCKED_BY_SCOPE_REGISTRY"
+    },
+    {
+      "negative": "new_scoped_table_unregistered_detected",
+      "blocked": true,
+      "evidence": "gate=BLOCKED_BY_SCOPE_REGISTRY"
+    },
+    {
+      "negative": "browser_fixture_surface_unverified",
+      "blocked": true,
+      "evidence": "gate=BLOCKED_BY_GATE_EVIDENCE"
+    },
+    {
+      "negative": "bi_counts_fixture_import_operational",
+      "blocked": true,
+      "evidence": "gate=BLOCKED_BY_IMPORT_SCOPE_LINEAGE"
+    },
+    {
+      "negative": "stale_head_binding_detected",
+      "blocked": true,
+      "evidence": "gate=STALE_GATE_EVIDENCE"
+    },
+    {
+      "negative": "quarantine_execution_escape",
+      "blocked": true,
+      "evidence": "commit=409 dry_run=409 writes=0"
+    },
+    {
+      "negative": "quarantine_post_isolation_mutation_detected",
+      "blocked": true,
+      "evidence": "gate=BLOCKED_BY_IMPORT_SECURITY"
+    },
+    {
+      "negative": "recursive_secret_scan",
+      "blocked": true,
+      "evidence": "gate=BLOCKED_BY_IMPORT_SECURITY"
+    },
+    {
+      "negative": "quarantine_operational_object_write_detected",
+      "blocked": true,
+      "evidence": "gate=BLOCKED_BY_IMPORT_SECURITY"
+    },
+    {
+      "negative": "missing_binding_detected",
+      "blocked": true,
+      "evidence": "gate=BLOCKED_BY_GATE_EVIDENCE"
+    },
+    {
+      "negative": "stale_code_without_rerun_tests",
+      "blocked": true,
+      "evidence": "gate=STALE_GATE_EVIDENCE"
+    },
+    {
+      "negative": "stale_db_without_rerun_uat",
+      "blocked": true,
+      "evidence": "gate=STALE_GATE_EVIDENCE"
+    },
+    {
+      "negative": "stale_frontend_without_rerun_browser",
+      "blocked": true,
+      "evidence": "gate=STALE_GATE_EVIDENCE"
+    },
+    {
+      "negative": "self_compare_injection_still_blocked",
+      "blocked": true,
+      "evidence": "gate=BLOCKED_BY_GATE_EVIDENCE"
+    }
+  ],
+  "all_blocked": true,
+  "binding": {
+    "source_commit": "8cb51dcf418b5c368a6ceca30df5d42848658698",
+    "code_tree_hash": "cdd081a3b9d17a12",
+    "migration_hash": "18b94ed950130d03",
+    "suite_config_hash": "99e7988f79f11408",
+    "command_hash": "c08c72f1eba5d995",
+    "started_at": "2026-08-13T14:34:28.552902+00:00",
+    "finished_at": "2026-08-13T14:34:29.409686+00:00",
+    "result_hash": "2624f157b7764f05"
+  }
+}
