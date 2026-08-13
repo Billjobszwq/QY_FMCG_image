@@ -1058,7 +1058,7 @@ def evaluate_gate_from_evidence(*, store=None,
                 chk("data_products_all_effective_consistent", False,
                     f"对账异常: {e}", "BLOCKED_BY_BI_EFFECTIVE")
             chk("evaluator_version_consistent",
-                EVALUATOR_VERSION == "3.3.0",
+                EVALUATOR_VERSION == "3.4.0",
                 f"evaluator_version={EVALUATOR_VERSION}",
                 "BLOCKED_BY_GATE_EVIDENCE")
         except Exception as e:

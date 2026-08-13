@@ -422,6 +422,13 @@ SCOPE_REGISTRY: dict[str, dict[str, Any]] = {
         op="裁决动作追加式证据（只读分析产物；禁 UPDATE/DELETE）",
         archive="随隔离批次生命周期（不单独归档）",
         gate="parent_edge"),
+    # OSV52：Active Gate 显式 Registry（迁移 061）
+    "gate_run_v1": _e(
+        "audit_only", pk="gate_run_id",
+        op="Gate 运行账本（candidate→active→superseded；激活需"
+           " CAS + 人工批准；实时 Gate 只读 active）",
+        archive="append-only，不归档（禁 DELETE）",
+        gate="registry"),
 
     # ---------- 训练 / 模型治理（非业务运营投影） ----------
     "training_run": _e("scoped_business_object", pk="run_id",
