@@ -33,6 +33,14 @@ class _OkRecognition:
 @pytest.fixture()
 def client(tmp_path: Path, monkeypatch):
     monkeypatch.setenv("PLATFORM_ADMIN_PASSWORD", PW)
+    # RC-9 / C-5.5 hermetic 隔离：src/common/config.py 导入时把 .env
+    # 灌入 os.environ（含生产 DEEPSEEK_API_KEY）。先于本文件收集的测试
+    # 模块一旦导入它（如 tests/contract/test_immutability.py），
+    # invoke() 的 _llm_compose 就会调用真实远端 LLM：答复文本非确定并
+    # 复述查询词，导致 kb_search 断言全量态间歇失败。去除 provider 环
+    # 境，恒走确定性 rules 路径（同 test_supervisor_runtime_v2 约定）。
+    monkeypatch.delenv("DEEPSEEK_API_KEY", raising=False)
+    monkeypatch.delenv("DEEPSEEK_MODEL", raising=False)
     adapter = _OkRecognition()
     bundle = build_production_bundle(
         db_path=tmp_path / "p.sqlite", cas_root=tmp_path / "cas",
