@@ -3,6 +3,7 @@
 // data_scope/Test Run/状态/行数/时间；四视图（运营/我的/历史/隔离）；
 // 详情为显式 DTO（无原始 payload），原始预览需授权（preview 端点）。
 import { useCallback, useEffect, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { csrfToken } from "../api";
 import { EmptyState, ErrorState, Loading, PageHeader, StatusBadge }
   from "../platform/components";
@@ -63,7 +64,23 @@ async function apiPost(path: string) {
 export default function ImportCenter() {
   const [templates, setTemplates] = useState<TemplateView[] | null>(null);
   const [batches, setBatches] = useState<BatchView[] | null>(null);
-  const [view, setView] = useState<string>("operational");
+  // OSV52：视图状态以 URL query 为单一事实源——刷新/直链/前进/后退
+  // 均一致；未知 view 规范化为 operational 并替换 URL。
+  const [params, setParams] = useSearchParams();
+  const VIEW_KEYS = VIEWS.map((v) => v.key as string);
+  const rawView = params.get("view") || "operational";
+  const view = VIEW_KEYS.includes(rawView) ? rawView : "operational";
+  useEffect(() => {
+    const pv = params.get("view");
+    if (pv && !VIEW_KEYS.includes(pv)) {
+      setParams({ view: "operational" }, { replace: true });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [params]);
+  const changeView = (v: string) => {
+    setErr(null);
+    setParams({ view: v });
+  };
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [selTpl, setSelTpl] = useState("");
@@ -405,7 +422,7 @@ export default function ImportCenter() {
             <button key={v.key} role="tab"
               aria-selected={view === v.key}
               className={`btn small${view === v.key ? " primary" : ""}`}
-              onClick={() => { setView(v.key); setErr(null); }}>
+              onClick={() => changeView(v.key)}>
               {v.label}</button>))}
         </div>
         {!batches && !err && <Loading />}

@@ -416,6 +416,64 @@ async def main_async() -> int:
                                   "True", "True" if no_ov else "False",
                                   fn, sha))
 
+        # ---- OSV52：Import Center URL↔页签↔API 三方一致性
+        # （直连/刷新 ?view= 四视图 × 四视口 + 未知 view 规范化） ----
+        for width in (1440, 1280, 1024, 768):
+            for uview, ulabel, n_api in (
+                    ("operational", "运营导入", n_op),
+                    ("mine", "我的批次", n_mine),
+                    ("history", "Test Run / 历史证据", n_hist),
+                    ("quarantine", "隔离待处理", n_quar)):
+                await goto(ws, msg_id, owner,
+                           f"/#/data/import?view={uview}",
+                           width=width)
+                sel_label = await jseval(ws, msg_id,
+                                         "(()=>{const b=document.querySelector("
+                                         "'button[role=tab][aria-selected="
+                                         "\\\"true\\\"]');"
+                                         "return b?b.innerText:'';})()")
+                rows_n = await jseval(ws, msg_id, IMPORT_ROWS_JS)
+                url_ok = await jseval(ws, msg_id,
+                                      "String(location.href).includes("
+                                      f"'view={uview}')")
+                oki = (sel_label == ulabel and rows_n == str(n_api)
+                       and str(url_ok).lower() == "true")
+                pages.append({
+                    "route": f"/#/data/import?view={uview}",
+                    "viewport": width,
+                    "expected_object_type":
+                        "import_url_view_api_consistent",
+                    "expected_object_id": ulabel,
+                    "actual_object_id": sel_label,
+                    "expected_text": f"rows={n_api}",
+                    "actual_text": f"tab={sel_label} rows={rows_n} "
+                                   f"url_ok={url_ok}",
+                    "selector":
+                        "button[role=tab][aria-selected=true]",
+                    "assertion": oki, "screenshot": "",
+                    "screenshot_sha256": "",
+                    "console_errors": len(CONSOLE_ISSUES)})
+        # 未知 view 规范化到 operational 并替换 URL
+        await goto(ws, msg_id, owner, "/#/data/import?view=nosuch")
+        await asyncio.sleep(1.5)
+        norm = await jseval(ws, msg_id,
+                            "(()=>{const b=document.querySelector("
+                            "'button[role=tab][aria-selected=\\\"true"
+                            "\\\"]');return (b?b.innerText:'')+'|'"
+                            "+String(location.href.includes("
+                            "'view=operational'));})()")
+        pages.append({
+            "route": "/#/data/import?view=nosuch", "viewport": 1440,
+            "expected_object_type": "import_unknown_view_normalized",
+            "expected_object_id": "运营导入|true",
+            "actual_object_id": norm,
+            "expected_text": "运营导入|true",
+            "actual_text": str(norm),
+            "selector": "button[role=tab][aria-selected=true]",
+            "assertion": norm == "运营导入|true", "screenshot": "",
+            "screenshot_sha256": "",
+            "console_errors": len(CONSOLE_ISSUES)})
+
         # ---- OSV51 C-7：导航滚动连续性（四视口；须在 proc.terminate
         # 之前执行，复用 CDP 会话） ----
         # Import Center 深滚 → 主导航进入系统管理：新页面必须
