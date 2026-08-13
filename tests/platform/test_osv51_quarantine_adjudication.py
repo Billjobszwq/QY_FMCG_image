@@ -70,8 +70,12 @@ def env(tmp_path: Path, monkeypatch):
                          json={"username": u, "password": UPW})
         assert rr.status_code == 200, rr.text
         logins[u] = {"X-CSRF-Token": rr.json()["csrf_token"]}
+    # TestClient 共享 cookie：最后重新登录 admin，恢复主会话
+    r = client.post("/api/v1/auth/login",
+                    json={"username": "admin", "password": PW})
+    headers = {"X-CSRF-Token": r.json()["csrf_token"]}
     return {"store": bundle.store, "client": client, "h": headers,
-            "iam": iam, "tds": tds, "logins": logins,
+            "iam": iam, "tds": tds, "logins": logins, "app": app,
             "db_path": tmp_path / "p.sqlite"}
 
 
@@ -114,6 +118,15 @@ def _relogin_admin(env):
                            json={"username": "admin", "password": PW})
     env["h"] = {"X-CSRF-Token": r.json()["csrf_token"]}
     return env["h"]
+
+
+def _login(env, u):
+    """TestClient 共享 cookie：切换到指定用户会话并返回其 headers。"""
+    pw = UPW if u != "admin" else PW
+    r = env["client"].post("/api/v1/auth/login",
+                           json={"username": u, "password": pw})
+    assert r.status_code == 200, r.text
+    return {"X-CSRF-Token": r.json()["csrf_token"]}
 
 
 class TestStateMachineBasics:
@@ -168,10 +181,10 @@ class TestStateMachineBasics:
 
     def test_read_only_denied_auditor_allowed(self, env):
         bid = _mk_quarantined(env)
-        rr = _adj(env["client"], env["logins"]["u_ro"], bid,
+        rr = _adj(env["client"], _login(env, "u_ro"), bid,
                   {"action": "retain"})
         assert rr.status_code == 403
-        ra = _adj(env["client"], env["logins"]["u_auditor"], bid,
+        ra = _adj(env["client"], _login(env, "u_auditor"), bid,
                   {"action": "retain"})
         assert ra.status_code == 200, ra.text
         _relogin_admin(env)
@@ -193,7 +206,7 @@ class TestDualApprovalRelease:
         assert rs.status_code == 409
         assert "ADJUDICATION_SAME_ACTOR" in rs.json()["detail"]
         # 第二人批准
-        h1 = env["logins"]["u_approve1"]
+        h1 = _login(env, "u_approve1")
         ra = _adj(env["client"], h1, bid, {"action": "approve_release"})
         assert ra.status_code == 200, ra.text
         a2 = _state(env["client"], h1, bid)
@@ -235,18 +248,28 @@ class TestDualApprovalRelease:
         _adj(env["client"], env["h"], bid,
              {"action": "request_release"})
         a = _state(env["client"], env["h"], bid)
+        # 两个审批人各自独立会话（独立 TestClient，cookie 隔离）
+        from fastapi.testclient import TestClient as _TC
+        ca = _TC(env["app"])
+        cb = _TC(env["app"])
         results: list[int] = []
         lock = threading.Lock()
 
-        def approve(u):
-            rr = _adj(env["client"], env["logins"][u], bid,
+        def approve(u, c):
+            lg = c.post("/api/v1/auth/login",
+                        json={"username": u, "password": UPW})
+            assert lg.status_code == 200, lg.text
+            hh = {"X-CSRF-Token": lg.json()["csrf_token"]}
+            rr = _adj(c, hh, bid,
                       {"action": "approve_release",
                        "version": a["version"]})
             with lock:
                 results.append(rr.status_code)
 
-        ths = [threading.Thread(target=approve, args=(u,))
-               for u in ("u_approve1", "u_approve2")]
+        ths = [threading.Thread(target=approve, args=("u_approve1",
+                                                      ca)),
+               threading.Thread(target=approve, args=("u_approve2",
+                                                      cb))]
         [t.start() for t in ths]
         [t.join() for t in ths]
         assert sorted(results) == [200, 409], results
@@ -256,10 +279,11 @@ class TestDualApprovalRelease:
         bid = _mk_quarantined(env, "rel3")
         _adj(env["client"], env["h"], bid,
              {"action": "request_release"})
-        rr = _adj(env["client"], env["logins"]["u_approve2"], bid,
+        h2 = _login(env, "u_approve2")
+        rr = _adj(env["client"], h2, bid,
                   {"action": "reject_release", "reason": "证据不足"})
         assert rr.status_code == 200, rr.text
-        a = _state(env["client"], env["logins"]["u_approve2"], bid)
+        a = _state(env["client"], h2, bid)
         assert a["state"] == "quarantined"
         _relogin_admin(env)
 

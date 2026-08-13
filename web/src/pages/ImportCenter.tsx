@@ -19,6 +19,11 @@ interface CustomerScope {
   customer_id: string; project_id: string;
   authorization_decision: string;
 }
+interface AdjudicationView {
+  batch_id?: string; state: string; version: number;
+  target_test_run_id?: string; revision_batch_id?: string;
+  requested_by?: string; approved_by?: string; reason?: string;
+}
 interface BatchView {
   batch_id: string; template_id: string; filename: string;
   file_format: string; status: string; actor: string; row_count: number;
@@ -27,6 +32,7 @@ interface BatchView {
   dry_run?: { plan?: Record<string, number>; rows?: number };
   errors: { row: number; error: string }[];
   commit?: { stats?: Record<string, number>; receipts?: any[] };
+  adjudication?: AdjudicationView;
   created_at: string;
 }
 
@@ -61,6 +67,8 @@ export default function ImportCenter() {
   const [busy, setBusy] = useState(false);
   const [selTpl, setSelTpl] = useState("");
   const [detail, setDetail] = useState<BatchView | null>(null);
+  const [adjReason, setAdjReason] = useState("");
+  const [adjTestRun, setAdjTestRun] = useState("");
 
   const load = useCallback((v: string) => {
     api("/import/templates").then(
@@ -104,6 +112,29 @@ export default function ImportCenter() {
     try {
       const d = await apiPost(`/import/batches/${batchId}/${action}`);
       setDetail(d.batch); load(view);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : String(e));
+    } finally { setBusy(false); }
+  };
+
+  // OSV51 C-3：隔离区人工裁决（状态机 + 双人审批，后端 CAS 幂等）
+  const adjudicate = async (action: string,
+    extra?: Record<string, string>) => {
+    if (!detail) return;
+    setBusy(true); setErr(null);
+    try {
+      const headers: Record<string, string> =
+        { "content-type": "application/json" };
+      const t = csrfToken();
+      if (t) headers["X-CSRF-Token"] = t;
+      const r = await fetch(
+        `/api/v1/import/batches/${detail.batch_id}/adjudication`,
+        { method: "POST", headers, body: JSON.stringify(
+          { action, reason: adjReason, ...extra }) });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(d.detail ?? `裁决失败 HTTP ${r.status}`);
+      const dd = await api(`/import/batches/${detail.batch_id}`);
+      setDetail(dd.batch); load(view);
     } catch (e) {
       setErr(e instanceof Error ? e.message : String(e));
     } finally { setBusy(false); }
@@ -245,6 +276,90 @@ export default function ImportCenter() {
                 >下载错误报告</a>
               </div>
             );
+          })()}
+          {detail.data_scope === "quarantine" && (() => {
+            // OSV51 C-3：隔离区人工裁决面板（状态机显隐 + 双人审批）
+            const adj: AdjudicationView = detail.adjudication
+              ?? { state: "quarantined", version: 0 };
+            const st = adj.state;
+            const can = (a: string) => (
+              (a === "approve_release" || a === "reject_release")
+                ? st === "release_requested"
+                : (st === "quarantined" || st === "retained_for_evidence"
+                  || (a === "retain" && st === "release_requested")));
+            return (
+              <div style={{ marginTop: 10, border: "1px solid var(--line)",
+                borderRadius: 8, padding: 10 }}
+                data-testid="quarantine-adjudication">
+                <h3 style={{ marginTop: 0 }}>隔离区裁决
+                  <code style={{ marginLeft: 8 }}
+                    data-testid="adjudication-state">{st}</code>
+                  <span className="v" style={{ marginLeft: 8 }}>
+                    version {adj.version}
+                    {adj.requested_by ? ` · 申请人 ${adj.requested_by}`
+                      : ""}
+                    {adj.approved_by ? ` · 审批人 ${adj.approved_by}` : ""}
+                  </span></h3>
+                {adj.revision_batch_id ? (
+                  <p className="v">修订批次：
+                    <code>{adj.revision_batch_id}</code></p>) : null}
+                {(st === "quarantined" || st === "retained_for_evidence"
+                  || st === "release_requested") && (
+                  <>
+                    <div style={{ display: "flex", gap: 8,
+                      flexWrap: "wrap", alignItems: "center" }}>
+                      <input className="v" placeholder="裁决理由（审计留痕）"
+                        aria-label="裁决理由" value={adjReason}
+                        onChange={(e) => setAdjReason(e.target.value)}
+                        style={{ minWidth: 220 }} />
+                      {can("retain") && (
+                        <button className="btn small" disabled={busy}
+                          onClick={() => adjudicate("retain")}>
+                          继续隔离留证</button>)}
+                      {can("retain") && (
+                        <button className="btn small" disabled={busy}
+                          onClick={() => {
+                            if (window.confirm("确认软作废该隔离批次？"
+                              + "（不删除原始证据，仅标记）"))
+                              adjudicate("soft_discard");
+                          }}>软作废</button>)}
+                      {can("retain") && (
+                        <button className="btn small" disabled={busy}
+                          onClick={() => adjudicate("request_release")}>
+                          申请转正式</button>)}
+                    </div>
+                    {can("retain") && (
+                      <div style={{ display: "flex", gap: 8, marginTop: 6,
+                        flexWrap: "wrap", alignItems: "center" }}>
+                        <input className="v" placeholder="目标 Test Run ID"
+                          aria-label="目标 Test Run" value={adjTestRun}
+                          onChange={(e) => setAdjTestRun(e.target.value)} />
+                        <button className="btn small" disabled={busy
+                          || !adjTestRun.trim()}
+                          onClick={() => adjudicate("bind_test_run",
+                            { target_test_run_id:
+                              adjTestRun.trim() })}>
+                          绑定 Test Run</button>
+                      </div>)}
+                  </>)}
+                {st === "release_requested" && (
+                  <div style={{ display: "flex", gap: 8, marginTop: 6 }}>
+                    <button className="btn small primary" disabled={busy}
+                      onClick={() => {
+                        if (window.confirm("批准转正式？将由申请人之外的"
+                          + "审批人创建新的运营修订批次。"))
+                          adjudicate("approve_release");
+                      }}>批准转正式（双人审批）</button>
+                    <button className="btn small" disabled={busy}
+                      onClick={() => adjudicate("reject_release")}>
+                      拒绝申请</button>
+                  </div>)}
+                {(st === "soft_discarded" || st === "release_approved"
+                  || st === "bound_to_test_run"
+                  || st === "superseded_by_new_batch") && (
+                  <p className="v">当前为终态 {st}；如需变更请走新的
+                    裁决申请。</p>)}
+              </div>);
           })()}
           {detail.errors.length > 0 && (
             <>

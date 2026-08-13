@@ -147,6 +147,44 @@ def create_import_router(center: ImportCenter,
         except ImportError_ as e:
             raise HTTPException(409, str(e))
 
+    # OSV51 C-3：隔离区人工裁决闭环（状态机 + 双人审批 + CAS）。
+    @router.get("/api/v1/import/batches/{batch_id}/adjudication")
+    def adjudication_get(batch_id: str, request: Request) -> dict:
+        p = _principal(request, csrf=False)
+        try:
+            b = center.get_batch(batch_id)
+            center.authorize_batch(p["actor"], p["role"], b)
+        except ImportAuthError as e:
+            raise HTTPException(403, str(e))
+        except ImportError_ as e:
+            raise HTTPException(404, str(e))
+        return {"adjudication": center.adjudication_dto(batch_id),
+                "history": center.adjudication_history(batch_id)}
+
+    @router.post("/api/v1/import/batches/{batch_id}/adjudication")
+    async def adjudication_post(batch_id: str, request: Request) -> dict:
+        p = _principal(request, csrf=True)
+        try:
+            body = await request.json()
+        except Exception:
+            raise HTTPException(422, "请求体必须是 JSON")
+        action = str(body.get("action") or "").strip()
+        if not action:
+            raise HTTPException(422, "缺少 action")
+        try:
+            v = body.get("version")
+            return {"adjudication": center.adjudicate(
+                batch_id, action=action, actor=p["actor"],
+                session_role=p["role"],
+                reason=str(body.get("reason") or ""),
+                target_test_run_id=str(body.get("target_test_run_id")
+                                       or ""),
+                version=int(v) if v is not None else None)}
+        except ImportAuthError as e:
+            raise HTTPException(403, str(e))
+        except ImportError_ as e:
+            raise HTTPException(409, str(e))
+
     @router.get("/api/v1/import/batches/{batch_id}/errors.csv")
     def errors_csv(batch_id: str, request: Request):
         p = _principal(request, csrf=False)

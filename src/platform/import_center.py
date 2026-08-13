@@ -29,6 +29,10 @@ class ImportAuthError(ImportError_):
     """OSV5：导入授权失败（fail-closed，API 映射 403）。"""
 
 
+class AdjudicationError(ImportError_):
+    """OSV51 C-3：隔离区裁决状态机错误（稳定错误码，API 映射 409）。"""
+
+
 # OSV51 C-2：敏感键名（子串匹配，大小写不敏感，fail-closed 宁多勿漏）。
 SECRET_KEY_SUBSTRINGS = ("password", "passwd", "token", "api_key",
                          "apikey", "secret", "credential",
@@ -854,6 +858,17 @@ class ImportCenter:
             self._inherit_batch_scope(b, receipts)
         self._update_batch(batch_id, status=status, errors=errors,
                            commit=commit_result)
+        # OSV51 C-3：release revision 提交成功 → 源 quarantine 批次
+        # superseded_by_new_batch（条件 UPDATE，仅 release_approved 时）。
+        if b.get("source") == "quarantine_release" and \
+                b.get("correlation_id"):
+            self.store._conn.execute(
+                "UPDATE quarantine_adjudication_v1 SET"
+                " state='superseded_by_new_batch', version=version+1,"
+                " updated_at=? WHERE batch_id=? AND"
+                " state='release_approved'",
+                (_now(), b["correlation_id"]))
+            self.store._conn.commit()
         # 证据 + 审计（原文件 hash/actor/结果留痕）
         try:
             self.store.insert_evidence_bundle(
@@ -1132,6 +1147,9 @@ class ImportCenter:
         c = b.get("commit") or {}
         d["commit"] = {"stats": c.get("stats"),
                        "receipts": c.get("receipts")}
+        # OSV51 C-3：隔离批次附带裁决状态（UI 裁决面板的数据源）。
+        if b.get("data_scope") == "quarantine":
+            d["adjudication"] = self.adjudication_dto(b["batch_id"])
         # OSV51 C-2：出口兜底——DTO 全量递归 secret 扫描（防存量行
         # 与任何新增字段的明文泄漏；commit 当次响应的明文回执由
         # commit() 在返回前覆盖，不经此路径）。
@@ -1280,3 +1298,241 @@ class ImportCenter:
                         ensure_ascii=False),
              _now(), batch_id))
         self.store._conn.commit()
+
+    # ---------- OSV51 C-3：隔离区人工裁决状态机 ----------
+    # 状态集与契约：03-QUARANTINE-STATE-MACHINE.md。
+    # 原则：原始导入证据不可修改；所有迁移 CAS（version 条件 UPDATE）；
+    # release_to_operational 双人审批 + 新批次 revision（不原地改）。
+
+    ADJ_STATES = ("quarantined", "retained_for_evidence",
+                  "bound_to_test_run", "soft_discarded",
+                  "release_requested", "release_approved",
+                  "superseded_by_new_batch")
+
+    def _adjudication_row(self, batch_id: str) -> dict:
+        conn = self.store._conn
+        row = conn.execute(
+            "SELECT * FROM quarantine_adjudication_v1 WHERE batch_id=?",
+            (batch_id,)).fetchone()
+        if row:
+            return dict(row)
+        now = _now()
+        conn.execute(
+            "INSERT OR IGNORE INTO quarantine_adjudication_v1"
+            " (batch_id, state, version, created_at, updated_at)"
+            " VALUES (?,?,?,?,?)",
+            (batch_id, "quarantined", 0, now, now))
+        conn.commit()
+        row = conn.execute(
+            "SELECT * FROM quarantine_adjudication_v1 WHERE batch_id=?",
+            (batch_id,)).fetchone()
+        return dict(row)
+
+    def adjudication_dto(self, batch_id: str) -> dict:
+        return self._adjudication_row(batch_id)
+
+    def adjudication_history(self, batch_id: str) -> list[dict]:
+        rows = self.store._conn.execute(
+            "SELECT kind, actor, detail_json, created_at FROM"
+            " quarantine_adjudication_evidence_v1 WHERE batch_id=?"
+            " ORDER BY id", (batch_id,)).fetchall()
+        out = []
+        for r in rows:
+            d = {"kind": r["kind"], "actor": r["actor"],
+                 "created_at": r["created_at"]}
+            try:
+                d["detail"] = json.loads(r["detail_json"] or "{}")
+            except Exception:
+                d["detail"] = {}
+            out.append(d)
+        return out
+
+    def _create_release_revision(self, orig: dict, *, data_scope: str,
+                                 test_run_id: str, actor: str) -> str:
+        """创建新批次 revision（复制 mapping 行；原行不动）。"""
+        conn = self.store._conn
+        new_id = _new_id("imp")
+        now = _now()
+        conn.execute(
+            "INSERT INTO import_batch_v1 (batch_id, template_id,"
+            " filename, file_format, file_hash, status, actor,"
+            " row_count, mapping_json, dry_run_json,"
+            " error_report_json, commit_json, created_at, updated_at,"
+            " data_scope, test_run_id, visibility, source,"
+            " correlation_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            (new_id, orig["template_id"],
+             (orig.get("filename") or "") + ".release",
+             orig.get("file_format") or "csv",
+             orig.get("file_hash") or "", "uploaded", actor,
+             orig.get("row_count") or 0,
+             json.dumps(orig.get("mapping") or {}, ensure_ascii=False),
+             "{}", "[]", "{}", now, now, data_scope, test_run_id,
+             "current", "quarantine_release", orig["batch_id"]))
+        if data_scope == "uat_fixture" and test_run_id:
+            # 客户关联物化（单一关联源；来自 Test Run 注册表，
+            # 不做名称猜测）
+            tr = conn.execute(
+                "SELECT customer_ids_json FROM uat_test_run_v1"
+                " WHERE test_run_id=?", (test_run_id,)).fetchone()
+            try:
+                cids = json.loads((tr and tr["customer_ids_json"])
+                                  or "[]")
+            except Exception:
+                cids = []
+            for cid in cids:
+                conn.execute(
+                    "INSERT OR IGNORE INTO"
+                    " import_batch_customer_scope_v1 (batch_id,"
+                    " customer_id, project_id, scope_source,"
+                    " authorization_decision, created_at)"
+                    " VALUES (?,?,?,?,?,?)",
+                    (new_id, cid, "", "adjudication_bind", "granted",
+                     now))
+        conn.commit()
+        return new_id
+
+    def adjudicate(self, batch_id: str, *, action: str, actor: str,
+                   session_role: str = "admin", reason: str = "",
+                   target_test_run_id: str = "",
+                   version: int | None = None) -> dict:
+        b = self._must(batch_id)
+        if b.get("data_scope") != "quarantine":
+            raise AdjudicationError(
+                f"ADJUDICATION_NOT_QUARANTINE: 批次 {batch_id}"
+                f" data_scope={b.get('data_scope')}，非隔离批次")
+        if not (self._platform_actor(actor, session_role)
+                or self.iam.authorize(actor, "data.import.audit")):
+            raise ImportAuthError(
+                "ADJUDICATION_PERMISSION_DENIED: 裁决需 platform 角色"
+                " 或 data.import.audit")
+        conn = self.store._conn
+        cur = self._adjudication_row(batch_id)
+        state = cur["state"]
+        expected = cur["version"] if version is None else int(version)
+
+        def _conflict():
+            raise AdjudicationError(
+                "ADJUDICATION_VERSION_CONFLICT: 裁决版本冲突"
+                f"（请求 version={expected}，当前"
+                f" version={cur['version']}）；请刷新后重试")
+
+        def _invalid():
+            raise AdjudicationError(
+                f"ADJUDICATION_INVALID_TRANSITION: {state} 不允许"
+                f" {action}")
+
+        def _cas(new_state: str, **fields) -> dict:
+            sets = ["state=?", "version=version+1", "updated_at=?"]
+            vals: list = [new_state, _now()]
+            for k in ("target_test_run_id", "revision_batch_id",
+                      "requested_by", "requested_at", "approved_by",
+                      "approved_at", "reason"):
+                if k in fields:
+                    sets.append(f"{k}=?")
+                    vals.append(fields[k])
+            vals.extend([batch_id, expected])
+            rc = conn.execute(
+                "UPDATE quarantine_adjudication_v1 SET"
+                f" {', '.join(sets)} WHERE batch_id=? AND version=?",
+                vals).rowcount
+            conn.commit()
+            return rc
+
+        def _record(kind: str, detail: dict) -> None:
+            conn.execute(
+                "INSERT INTO quarantine_adjudication_evidence_v1"
+                " (batch_id, kind, actor, detail_json, created_at)"
+                " VALUES (?,?,?,?,?)",
+                (batch_id, kind, actor,
+                 json.dumps(detail, ensure_ascii=False), _now()))
+            conn.commit()
+            try:
+                self.iam.audit(actor, f"import.quarantine.{kind}",
+                               f"import:{batch_id}", detail,
+                               customer_id="")
+            except Exception:
+                pass
+
+        now = _now()
+        if action == "retain":
+            if state == "retained_for_evidence":
+                return self.adjudication_dto(batch_id)  # 幂等
+            if state not in ("quarantined", "release_requested"):
+                _invalid()
+            rc = _cas("retained_for_evidence", reason=reason)
+            if rc == 0:
+                _conflict()
+            _record("retain", {"reason": reason})
+        elif action == "soft_discard":
+            if state == "soft_discarded":
+                return self.adjudication_dto(batch_id)
+            if state not in ("quarantined", "retained_for_evidence"):
+                _invalid()
+            rc = _cas("soft_discarded", reason=reason)
+            if rc == 0:
+                _conflict()
+            _record("soft_discard", {"reason": reason})
+        elif action == "bind_test_run":
+            if state == "bound_to_test_run" and \
+                    cur["target_test_run_id"] == target_test_run_id:
+                return self.adjudication_dto(batch_id)
+            if state not in ("quarantined", "retained_for_evidence"):
+                _invalid()
+            tr = conn.execute(
+                "SELECT test_run_id FROM uat_test_run_v1"
+                " WHERE test_run_id=?",
+                (target_test_run_id,)).fetchone()
+            if not tr:
+                raise AdjudicationError(
+                    "ADJUDICATION_TEST_RUN_NOT_FOUND: "
+                    f"{target_test_run_id} 不在 Test Run 注册表")
+            rev = self._create_release_revision(
+                b, data_scope="uat_fixture",
+                test_run_id=target_test_run_id, actor=actor)
+            rc = _cas("bound_to_test_run",
+                      target_test_run_id=target_test_run_id,
+                      revision_batch_id=rev, reason=reason)
+            if rc == 0:
+                _conflict()
+            _record("bind_test_run",
+                    {"target_test_run_id": target_test_run_id,
+                     "revision_batch_id": rev, "reason": reason})
+        elif action == "request_release":
+            if state == "release_requested" and \
+                    cur["requested_by"] == actor:
+                return self.adjudication_dto(batch_id)
+            if state not in ("quarantined", "retained_for_evidence"):
+                _invalid()
+            rc = _cas("release_requested", requested_by=actor,
+                      requested_at=now, reason=reason)
+            if rc == 0:
+                _conflict()
+            _record("request_release", {"reason": reason})
+        elif action == "approve_release":
+            if state != "release_requested":
+                _invalid()
+            if actor == cur["requested_by"]:
+                raise AdjudicationError(
+                    "ADJUDICATION_SAME_ACTOR: 审批人不得与申请人相同"
+                    f"（{actor}）")
+            rev = self._create_release_revision(
+                b, data_scope="operational", test_run_id="",
+                actor=actor)
+            rc = _cas("release_approved", approved_by=actor,
+                      approved_at=now, revision_batch_id=rev,
+                      reason=reason)
+            if rc == 0:
+                _conflict()
+            _record("approve_release",
+                    {"revision_batch_id": rev, "reason": reason})
+        elif action == "reject_release":
+            if state != "release_requested":
+                _invalid()
+            rc = _cas("quarantined", reason=reason)
+            if rc == 0:
+                _conflict()
+            _record("reject_release", {"reason": reason})
+        else:
+            raise AdjudicationError(
+                f"ADJUDICATION_UNKNOWN_ACTION: {action}")
+        return self.adjudication_dto(batch_id)

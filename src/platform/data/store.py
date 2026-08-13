@@ -2242,6 +2242,48 @@ CREATE UNIQUE INDEX IF NOT EXISTS ux_import_batch_cust_scope
   ON import_batch_customer_scope_v1 (batch_id, customer_id, project_id);
 """
 
+_M060 = """
+CREATE TABLE IF NOT EXISTS quarantine_adjudication_v1 (
+  batch_id TEXT PRIMARY KEY,
+  state TEXT NOT NULL DEFAULT 'quarantined',
+  version INTEGER NOT NULL DEFAULT 0,
+  target_test_run_id TEXT NOT NULL DEFAULT '',
+  revision_batch_id TEXT NOT NULL DEFAULT '',
+  requested_by TEXT NOT NULL DEFAULT '',
+  requested_at TEXT NOT NULL DEFAULT '',
+  approved_by TEXT NOT NULL DEFAULT '',
+  approved_at TEXT NOT NULL DEFAULT '',
+  reason TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS quarantine_adjudication_evidence_v1 (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  batch_id TEXT NOT NULL,
+  kind TEXT NOT NULL,
+  actor TEXT NOT NULL,
+  detail_json TEXT NOT NULL DEFAULT '{}',
+  created_at TEXT NOT NULL
+);
+CREATE TRIGGER IF NOT EXISTS quarantine_adjudication_v1_no_delete
+  BEFORE DELETE ON quarantine_adjudication_v1
+  BEGIN
+    SELECT RAISE(ABORT, 'quarantine_adjudication_v1 禁止 DELETE');
+  END;
+CREATE TRIGGER IF NOT EXISTS quarantine_adjudication_evidence_v1_no_update
+  BEFORE UPDATE ON quarantine_adjudication_evidence_v1
+  BEGIN
+    SELECT RAISE(ABORT,
+      'quarantine_adjudication_evidence_v1 追加式：禁止 UPDATE');
+  END;
+CREATE TRIGGER IF NOT EXISTS quarantine_adjudication_evidence_v1_no_delete
+  BEFORE DELETE ON quarantine_adjudication_evidence_v1
+  BEGIN
+    SELECT RAISE(ABORT,
+      'quarantine_adjudication_evidence_v1 追加式：禁止 DELETE');
+  END;
+"""
+
 MIGRATIONS: tuple[tuple[str, str], ...] = (
     ("001_platform_init", _M001),
     ("002_labeling_inbox", _M002),
@@ -2302,6 +2344,7 @@ MIGRATIONS: tuple[tuple[str, str], ...] = (
     ("057_iam_identity_lifecycle_v1", _M057),
     ("058_bi_registry_lifecycle_v1", _M058),
     ("059_import_scope_lineage_v1", _M059),
+    ("060_quarantine_adjudication_v1", _M060),
 )
 
 
