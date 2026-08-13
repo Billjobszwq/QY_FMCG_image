@@ -474,6 +474,33 @@ async def main_async() -> int:
             "screenshot_sha256": "",
             "console_errors": len(CONSOLE_ISSUES)})
 
+        # ---- OSV52：首页唯一 H1 + 导航进入焦点落点（键盘/读屏契约） ----
+        await goto(ws, msg_id, owner, "/#/status")
+        await jseval(ws, msg_id,
+                     "(()=>{const a=[...document.querySelectorAll("
+                     "'.pnav a, nav a')].find(x=>(x.innerText||'')"
+                     ".includes('首页'));if(a){a.click();return '1';}"
+                     "location.hash='#/home';return '0';})()")
+        await asyncio.sleep(2.5)
+        h1_state = await jseval(ws, msg_id,
+                                "(()=>{const col=document.querySelector("
+                                "'.main-col')||document;"
+                                "const n=col.querySelectorAll('h1')"
+                                ".length;const f=(document.activeElement"
+                                "&&document.activeElement.tagName)||'';"
+                                "return n+'|'+f;})()")
+        pages.append({
+            "route": "/#/home", "viewport": 1440,
+            "expected_object_type": "home_unique_h1_focus",
+            "expected_object_id": "1|H1",
+            "actual_object_id": h1_state,
+            "expected_text": "1|H1",
+            "actual_text": str(h1_state),
+            "selector": ".main-col h1 + document.activeElement",
+            "assertion": h1_state == "1|H1", "screenshot": "",
+            "screenshot_sha256": "",
+            "console_errors": len(CONSOLE_ISSUES)})
+
         # ---- OSV51 C-7：导航滚动连续性（四视口；须在 proc.terminate
         # 之前执行，复用 CDP 会话） ----
         # Import Center 深滚 → 主导航进入系统管理：新页面必须

@@ -115,30 +115,36 @@ class TestOneTimeDelivery:
         assert found == [], f"重复提交不得回发明文: {found}"
 
     def test_first_commit_delivers_once(self, env):
-        bid = _upload_users(env)
-        env["client"].post(f"/api/v1/import/batches/{bid}/dry-run",
-                           headers=env["h"])
-        r = env["client"].post(
-            f"/api/v1/import/batches/{bid}/commit", headers=env["h"])
-        assert r.status_code == 200, r.text
-        receipts = r.json()["batch"]["commit"]["receipts"]
-        pws = [x.get("initial_password_once") for x in receipts]
+        # OSV52：测试函数只做断言，不返回业务值（复用逻辑见
+        # _commit_users helper）。
+        bid, pws = _commit_users(env)
         assert len(pws) == 2 and all(
-            p and p != "[REDACTED]" for p in pws), receipts
-        return bid, pws
+            p and p != "[REDACTED]" for p in pws), pws
+        # 当次响应后重读详情：明文不得再次出现
+        rr = env["client"].get(f"/api/v1/import/batches/{bid}",
+                               headers=env["h"])
+        body = rr.text
+        for pw in pws:
+            assert pw not in body, "初始口令在重读详情中复现"
+
+
+def _commit_users(env):
+    """OSV52：普通 helper（非测试函数）——upload→dry-run→commit，
+    返回 (batch_id, 一次性初始口令列表)。"""
+    bid = _upload_users(env)
+    env["client"].post(f"/api/v1/import/batches/{bid}/dry-run",
+                       headers=env["h"])
+    r = env["client"].post(
+        f"/api/v1/import/batches/{bid}/commit", headers=env["h"])
+    assert r.status_code == 200, r.text
+    pws = [x["initial_password_once"]
+           for x in r.json()["batch"]["commit"]["receipts"]]
+    return bid, pws
 
 
 class TestZeroPersistence:
     def _commit_users(self, env):
-        bid = _upload_users(env)
-        env["client"].post(f"/api/v1/import/batches/{bid}/dry-run",
-                           headers=env["h"])
-        r = env["client"].post(
-            f"/api/v1/import/batches/{bid}/commit", headers=env["h"])
-        assert r.status_code == 200, r.text
-        pws = [x["initial_password_once"]
-               for x in r.json()["batch"]["commit"]["receipts"]]
-        return bid, pws
+        return _commit_users(env)
 
     def test_db_json_columns_contain_no_plaintext(self, env):
         bid, pws = self._commit_users(env)

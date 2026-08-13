@@ -106,7 +106,18 @@ export default function Home({ health, modules, identity }: {
       <ErrorState message={`首页加载失败：${err}`}
         onRetry={() => { setErr(null); load(); }} /></div>;
   }
+  // OSV52：首页任何时刻都必须有唯一 H1（含加载中分支）——键盘/读屏
+  // 导航进入后立即有语义标题可聚焦。
+  const header = (
+    <div className="page-header">
+      <h1>{identity?.product_name_zh ?? "智能业务操作系统"} · 总控台</h1>
+      <span className="desc">
+        待办 / 日历 / 进度 / 活动 / 容量 / Agent 提醒 · 全部来自实时事实源
+      </span>
+    </div>
+  );
   if (!dash) return <div className="page wide">
+    {header}
     <Loading text="加载总控工作台…" /></div>;
 
   const open = dash.work_items.filter((w) =>
@@ -119,12 +130,7 @@ export default function Home({ health, modules, identity }: {
 
   return (
     <div className="page wide">
-      <div className="page-header">
-        <h1>{identity?.product_name_zh ?? "智能业务操作系统"} · 总控台</h1>
-        <span className="desc">
-          待办 / 日历 / 进度 / 活动 / 容量 / Agent 提醒 · 全部来自实时事实源
-        </span>
-      </div>
+      {header}
 
       {/* 快速目标（服务端持久化后交主管） */}
       <div className="card">

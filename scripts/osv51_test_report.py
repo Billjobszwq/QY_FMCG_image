@@ -57,8 +57,11 @@ def main() -> int:
     from src.platform.gate_evaluator import db_fingerprint
     store = PlatformStore(ROOT / ".platform" / "platform.sqlite")
     started = _utcnow()
+    # OSV52：测试质量门禁——测试函数返回非 None 视为错误（不得以
+    # 过滤/降级 warning 的方式绕过）。
     argv = [PY, "-m", "pytest", "tests", "-q", "-p",
-            "no:cacheprovider"]
+            "no:cacheprovider",
+            "-W", "error::pytest.PytestReturnNotNoneWarning"]
     if args.quick:
         print("--quick：不重跑；binding 按当前状态生成（仅演示/兜底）")
         text = ""
