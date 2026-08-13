@@ -112,7 +112,11 @@ def main() -> None:
             "effective_operational": op("geo_address_v1")},
         "import_batch_v1": {
             "physical": _c(conn, "SELECT count(*) FROM import_batch_v1"),
-            "effective_operational_note": "import_batch_v1 无 scope 列"},
+            # OSV5-012 修正：迁移 058/059 后 import_batch_v1 已具备
+            # data_scope/test_run_id/visibility 列；全链审计改用
+            # scripts/scope_audit_v5.py（列/创建/scanner/archiver/
+            # API/Gate/Registry 七维）。此处仅保留历史口径存档。
+            "effective_operational_note": "见 scope_audit_v5.py"},
     }
 
     # ---------- P0-003 BI metric 污染 ----------

@@ -73,6 +73,13 @@ REQUIRED_UATV6_EXTRA_IDS = (
     "finance_dry_run_invoice", "rate_calc",
 )
 
+# OSV5 / UAT V7：导入链必须真实经过 Import Center（指令第九节）。
+REQUIRED_UATV7_EXTRA_IDS = (
+    "import_batch_customer", "import_batch_project",
+    "import_batch_address", "import_scope_associations",
+    "import_evidence", "import_audit_events",
+)
+
 
 def _validate_uatv4(report: dict) -> list[str]:
     problems: list[str] = []
@@ -110,6 +117,13 @@ def validate_report(report: dict) -> list[str]:
 
     SI2：protocol=uatv4 报告走 V4 协议校验（scope-first 检查集）。
     SI4：protocol=uatv6 在 V5 基础上追加 IAM/BI/Finance IDs 校验。"""
+    if report.get("protocol") == "uatv7":
+        problems = _validate_uatv4(report)
+        ids = report.get("ids") or {}
+        for k in REQUIRED_UATV6_EXTRA_IDS + REQUIRED_UATV7_EXTRA_IDS:
+            if not ids.get(k):
+                problems.append(f"缺关键 ID: ids.{k}（V7 必备）")
+        return problems
     if report.get("protocol") == "uatv6":
         problems = _validate_uatv4(report)
         ids = report.get("ids") or {}

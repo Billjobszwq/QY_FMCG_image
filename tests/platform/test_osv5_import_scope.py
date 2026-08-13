@@ -634,4 +634,6 @@ class TestSessionCleanup:
         assert removed == 1
         ids = {r["session_id"] for r in store._conn.execute(
             "SELECT session_id FROM auth_sessions").fetchall()}
-        assert ids == {"s-active", "s-bill"}
+        assert "s-expired" not in ids
+        assert {"s-active", "s-bill"} <= ids  # 环境自身的未过期
+        # 会话（如 admin 登录）不受影响

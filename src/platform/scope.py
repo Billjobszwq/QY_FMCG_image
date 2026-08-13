@@ -534,19 +534,9 @@ class ScopedQuery:
                    if k in self._IMMUTABLE_TABLES)
 
 
-# 需要结构化 scope 的业务表（迁移 051 覆盖；与 02-DOMAIN-SCOPE-MATRIX
-# 同源）。已有列的表同样列出，供一致性扫描统一消费。SI3 T3 将由
-# scope_registry.py 的全表登记接管覆盖率检查。
-_SCOPED_TABLES = (
-    "md_customer_v1", "md_project_v1", "md_sku_v1",
-    "business_run_v1", "work_item_v2",
-    "field_task_v1", "route_plan_v1", "geofence_event_v1",
-    "user_calendar_v1",
-    "survey_definition_v1", "survey_assignment_v1", "survey_response_v1",
-    "survey_media_v1",
-    "workflow_definition_v1", "workflow_node_execution_v1",
-    "workflow_timer_v1", "workflow_branch_v1",
-    "agent_run_v1", "recognition_task",
-    "usage_event_v2", "evidence_bundle_v1",
-    "bi_report_spec_v1", "bi_anomaly_v1",
-)
+# 需要结构化 scope 的业务表：OSV5 起由 scope_registry 的 gate=
+# leak_scan 声明派生（唯一事实源；禁止再维护平行硬编码清单，
+# 指令第七节 7.1）。新增表只需在 Registry 登记完整策略。
+from .scope_registry import leak_scan_tables as _leak_scan_tables
+
+_SCOPED_TABLES = _leak_scan_tables()

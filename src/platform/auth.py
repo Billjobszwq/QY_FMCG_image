@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import hashlib
 import hmac
+import json
 import os
 import secrets
 from datetime import datetime, timedelta, timezone
@@ -53,6 +54,37 @@ def verify_password(password: str, stored: str) -> bool:
             hash_password(password, bytes.fromhex(salt_hex)), stored)
     except Exception:
         return False
+
+
+def purge_expired_sessions(store: Any) -> int:
+    """OSV5（指令第十二节）：有界过期 session 清理。
+
+    - 只删 expires_at < now 的行；未过期 session（含锁定平台身份
+      bill，不得因不在 iam_principal_v1 而误判非法）不受影响；
+    - 登录/启动时触发；清理写审计（fail-safe，审计失败不阻断）。
+    """
+    now = _utcnow().isoformat()
+    conn = store._conn
+    rows = conn.execute(
+        "SELECT session_id, actor FROM auth_sessions WHERE expires_at"
+        " < ?", (now,)).fetchall()
+    if not rows:
+        return 0
+    conn.execute("DELETE FROM auth_sessions WHERE expires_at < ?",
+                 (now,))
+    try:
+        conn.execute(
+            "INSERT INTO iam_audit_event_v1 (occurred_at, actor_id,"
+            " action, resource, detail_json, customer_id)"
+            " VALUES (?,?,?,?,?,?)",
+            (now, "system", "auth.sessions.purged", "auth_sessions",
+             json.dumps({"removed": len(rows),
+                         "actors": sorted({r["actor"] for r in rows})},
+                        ensure_ascii=False), ""))
+    except Exception:
+        pass
+    conn.commit()
+    return len(rows)
 
 
 def default_users(store: Any) -> dict[str, tuple[str, str]]:
@@ -116,6 +148,11 @@ class AuthService:
             "bootstrap-lock")
 
     def login(self, username: str, password: str) -> dict[str, Any]:
+        # OSV5：登录时顺带清理过期 session（有界；不影响当前会话）。
+        try:
+            purge_expired_sessions(self.store)
+        except Exception:
+            pass
         rec = self._users.get(username)
         if rec is not None and verify_password(password, rec[0]):
             role = rec[1]

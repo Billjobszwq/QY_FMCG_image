@@ -35,13 +35,18 @@ _NOOP_ARCHIVE = "不适用（非业务对象）"
 
 def _e(cat: str, *, pk: str = "", customer: str = "", project: str = "",
        scope: str = "", derive: str = "", parent: str = "",
-       op: str = _OP_EFF, archive: str = _ARCHIVE,
-       immutable: bool = False, gate: str = "leak_scan") -> dict:
-    return {"category": cat, "pk": pk, "tenant_col": "tenant_id",
+       tenant: str = "", op: str = _OP_EFF, archive: str = _ARCHIVE,
+       immutable: bool = False, gate: str = "leak_scan",
+       archive_handler: str = "") -> dict:
+    """OSV5 类型化声明：tenant/customer/project 列仅在真实存在时
+    声明（否则留空=not_applicable 或经 derive）；pk 必须为真实列、
+    composite: 前缀或 none；archive_handler 指向可执行处理器。"""
+    return {"category": cat, "pk": pk, "tenant_col": tenant,
             "customer_col": customer, "project_col": project,
             "scope_cols": scope, "derive": derive, "parent": parent,
             "op_rule": op, "archive_rule": archive,
-            "immutable": immutable, "gate": gate}
+            "immutable": immutable, "gate": gate,
+            "archive_handler": archive_handler}
 
 
 SCOPE_REGISTRY: dict[str, dict[str, Any]] = {
@@ -77,19 +82,22 @@ SCOPE_REGISTRY: dict[str, dict[str, Any]] = {
                        derive="父链 run_id→business_run_v1",
                        parent="business_run_v1.run_id",
                        gate="leak_scan+parent_edge+terminal"),
-    "work_item_supersession_v1": _e("derived_projection", pk="id",
+    "work_item_supersession_v1": _e("derived_projection",
+                                    pk="supersession_id",
                                     derive="随 work_item_v2",
                                     op="重建时按 effective 过滤",
                                     gate="projection"),
-    "task_state_projection_v1": _e("derived_projection", pk="id",
+    "task_state_projection_v1": _e("derived_projection",
+                                   pk="composite:project|cycle_id|"
+                                      "logical_task_key",
                                    derive="随 work 投影",
                                    op="重建时按 effective 过滤",
                                    gate="projection"),
     "goal_draft_v1": _e("scoped_business_object", pk="goal_id",
-                        customer="customer_id",
                         scope="经发起 run 推导",
-                        derive="goal→run 父链", gate="parent_edge"),
-    "flow_supersession_v1": _e("derived_projection", pk="id",
+                        derive="goal→run 父链（无自身 customer 列）",
+                        gate="parent_edge"),
+    "flow_supersession_v1": _e("derived_projection", pk="flow_id",
                                derive="随 workflow_definition_v1",
                                gate="projection"),
 
@@ -114,7 +122,7 @@ SCOPE_REGISTRY: dict[str, dict[str, Any]] = {
                              parent="business_run_v1.run_id",
                              derive="父链 run_id",
                              gate="leak_scan+parent_edge+terminal"),
-    "workflow_dead_letter_v1": _e("immutable_ledger", pk="dead_letter_id",
+    "workflow_dead_letter_v1": _e("immutable_ledger", pk="dead_id",
                                   derive="父链 run_id→business_run_v1",
                                   parent="business_run_v1.run_id",
                                   immutable=True,
@@ -130,7 +138,7 @@ SCOPE_REGISTRY: dict[str, dict[str, Any]] = {
                          archive=_NOOP_ARCHIVE, gate="registry"),
     "agent_session_v1": _e("cache_runtime", pk="session_id",
                            archive=_NOOP_ARCHIVE, gate="none"),
-    "agent_session_msg_v1": _e("cache_runtime", pk="message_id",
+    "agent_session_msg_v1": _e("cache_runtime", pk="id",
                                archive=_NOOP_ARCHIVE, gate="none"),
     "agent_run_v1": _e("scoped_business_object", pk="run_id",
                        customer="customer_id", project="project_id",
@@ -144,9 +152,9 @@ SCOPE_REGISTRY: dict[str, dict[str, Any]] = {
                            gate="parent_edge"),
     "agent_memory_v1": _e("cache_runtime", pk="memory_id",
                           archive=_NOOP_ARCHIVE, gate="none"),
-    "memory_entry_v1": _e("cache_runtime", pk="entry_id",
+    "memory_entry_v1": _e("cache_runtime", pk="id",
                           archive=_NOOP_ARCHIVE, gate="none"),
-    "blackboard_event_v1": _e("immutable_ledger", pk="seq",
+    "blackboard_event_v1": _e("immutable_ledger", pk="id",
                               derive="父链 run_id",
                               immutable=True, gate="attribution"),
 
@@ -191,9 +199,8 @@ SCOPE_REGISTRY: dict[str, dict[str, Any]] = {
                       scope="data_scope/test_run_id",
                       gate="leak_scan"),
     "geofence_event_v1": _e("scoped_business_object", pk="event_id",
-                            customer="customer_id",
                             scope="data_scope/test_run_id",
-                            derive="父链 fence/task",
+                            derive="父链 fence/task（无自身 customer 列）",
                             gate="leak_scan+parent_edge"),
     "field_task_v1": _e("scoped_business_object", pk="task_id",
                         customer="customer_id",
@@ -212,8 +219,7 @@ SCOPE_REGISTRY: dict[str, dict[str, Any]] = {
                                      archive=_NOOP_ARCHIVE,
                                      gate="registry"),
     "travel_cost_v1": _e("scoped_business_object", pk="cost_id",
-                         customer="customer_id",
-                         derive="父链 task/plan",
+                         derive="父链 task/plan（无自身 customer 列）",
                          gate="parent_edge"),
     "user_calendar_v1": _e("scoped_business_object", pk="event_id",
                            customer="customer_id",
@@ -236,7 +242,7 @@ SCOPE_REGISTRY: dict[str, dict[str, Any]] = {
                                      pk="profile_id",
                                      archive=_NOOP_ARCHIVE,
                                      gate="registry"),
-    "cascade_usage": _e("immutable_ledger", pk="id",
+    "cascade_usage": _e("immutable_ledger", pk="usage_id",
                         derive="历史级联用量；经 run 父链",
                         immutable=True, gate="attribution"),
 
@@ -291,7 +297,8 @@ SCOPE_REGISTRY: dict[str, dict[str, Any]] = {
                               parent="fin_invoice_v1.invoice_id",
                               gate="parent_edge"),
     "fin_adjustment_v1": _e("immutable_ledger", pk="adjustment_id",
-                            customer="customer_id", immutable=True,
+                            immutable=True,
+                            derive="客户经账单/用量父链",
                             gate="parent_edge"),
 
     # ---------- 事件 / 证据 ----------
@@ -317,20 +324,24 @@ SCOPE_REGISTRY: dict[str, dict[str, Any]] = {
                            archive=_NOOP_ARCHIVE, gate="registry"),
     "iam_role_v1": _e("global_configuration", pk="role_id",
                       archive=_NOOP_ARCHIVE, gate="registry"),
-    "iam_role_permission_v1": _e("global_configuration", pk="id",
+    "iam_role_permission_v1": _e("global_configuration",
+                                 pk="composite:role_id|bundle_id",
                                  archive=_NOOP_ARCHIVE, gate="registry"),
     "iam_permission_bundle_v1": _e("global_configuration",
                                    pk="bundle_id",
                                    archive=_NOOP_ARCHIVE,
                                    gate="registry"),
-    "iam_membership_v1": _e("global_configuration", pk="id",
+    "iam_membership_v1": _e("global_configuration",
+                            pk="composite:principal_id|role_id|"
+                               "customer_id|project_id",
                             customer="customer_id",
+                            tenant="tenant_id",
                             archive=_NOOP_ARCHIVE, gate="registry"),
-    "iam_approval_matrix_v1": _e("global_configuration", pk="id",
+    "iam_approval_matrix_v1": _e("global_configuration", pk="matrix_id",
                                  archive=_NOOP_ARCHIVE, gate="registry"),
-    "iam_audit_event_v1": _e("audit_only", pk="seq", immutable=True,
-                             gate="none"),
-    "audit_event": _e("audit_only", pk="seq", immutable=True,
+    "iam_audit_event_v1": _e("audit_only", pk="audit_id", immutable=True,
+                             tenant="tenant_id", gate="none"),
+    "audit_event": _e("audit_only", pk="audit_id", immutable=True,
                       gate="none"),
     "auth_sessions": _e("cache_runtime", pk="session_id",
                         archive=_NOOP_ARCHIVE, gate="none"),
@@ -351,11 +362,12 @@ SCOPE_REGISTRY: dict[str, dict[str, Any]] = {
                                       gate="attribution"),
 
     # ---------- 配置 / 限流 ----------
-    "platform_flag": _e("global_configuration", pk="flag_key",
+    "platform_flag": _e("global_configuration", pk="flag",
                         archive=_NOOP_ARCHIVE, gate="registry"),
-    "rate_limit_v1": _e("global_configuration", pk="id",
+    "rate_limit_v1": _e("global_configuration",
+                        pk="composite:key|window_start",
                         archive=_NOOP_ARCHIVE, gate="none"),
-    "rate_limit_rule_v1": _e("global_configuration", pk="rule_id",
+    "rate_limit_rule_v1": _e("global_configuration", pk="capability",
                              archive=_NOOP_ARCHIVE, gate="registry"),
     "schema_migrations": _e("global_configuration", pk="id",
                             immutable=True, archive=_NOOP_ARCHIVE,
@@ -368,22 +380,28 @@ SCOPE_REGISTRY: dict[str, dict[str, Any]] = {
               gate="none"),
     "job_attempt": _e("cache_runtime", pk="attempt_id",
                       archive=_NOOP_ARCHIVE, gate="none"),
-    "checkpoint": _e("cache_runtime", pk="checkpoint_id",
+    "checkpoint": _e("cache_runtime", pk="composite:run_id|node_name",
                      archive=_NOOP_ARCHIVE, gate="none"),
     "graph_run": _e("cache_runtime", pk="run_id",
                     archive=_NOOP_ARCHIVE, gate="none"),
-    "node_execution": _e("cache_runtime", pk="exec_id",
+    "node_execution": _e("cache_runtime", pk="execution_id",
                          archive=_NOOP_ARCHIVE, gate="none"),
     "model_lease": _e("cache_runtime", pk="lease_id",
                       archive=_NOOP_ARCHIVE, gate="none"),
     "model_residency": _e("cache_runtime", pk="model_id",
                           archive=_NOOP_ARCHIVE, gate="none"),
-    "resource_lease_v1": _e("cache_runtime", pk="lease_id",
+    "resource_lease_v1": _e("cache_runtime", pk="id",
                             archive=_NOOP_ARCHIVE, gate="none"),
     "import_batch_v1": _e("scoped_business_object", pk="batch_id",
-                          customer="customer_id",
-                          scope="data_scope/test_run_id",
-                          gate="leak_scan"),
+                          scope="data_scope/test_run_id/visibility",
+                          derive="客户经 import_batch_customer_scope_v1"
+                                 " 多对多关联（无单列 customer_id）",
+                          op="list 默认 effective operational ∩ 客户"
+                             "作用域；history/quarantine 需授权",
+                          archive="archive_namespace 按 test_run_id 归档"
+                                  "（visibility=history）",
+                          archive_handler="import_batch_v1",
+                          gate="leak_scan+registry"),
 
     # ---------- 训练 / 模型治理（非业务运营投影） ----------
     "training_run": _e("scoped_business_object", pk="run_id",
@@ -396,23 +414,25 @@ SCOPE_REGISTRY: dict[str, dict[str, Any]] = {
                             immutable=True, gate="none"),
     "training_cycle_v1": _e("scoped_business_object", pk="cycle_id",
                             op="治理域", gate="registry"),
-    "training_cycle_node_v1": _e("scoped_business_object", pk="node_id",
+    "training_cycle_node_v1": _e("scoped_business_object", pk="id",
                                  derive="父链 cycle", gate="parent_edge"),
-    "training_cycle_node_state_v2": _e("immutable_ledger", pk="id",
+    "training_cycle_node_state_v2": _e("immutable_ledger",
+                                       pk="composite:cycle_id|"
+                                          "logical_node",
                                        immutable=True, gate="none"),
     "training_cycle_event_v1": _e("immutable_ledger", pk="seq",
                                   immutable=True, gate="none"),
-    "training_artifact_v1": _e("reference_registry", pk="artifact_id",
+    "training_artifact_v1": _e("reference_registry", pk="id",
                                archive=_NOOP_ARCHIVE, gate="registry"),
-    "training_artifact_v2": _e("reference_registry", pk="artifact_id",
+    "training_artifact_v2": _e("reference_registry", pk="id",
                                archive=_NOOP_ARCHIVE, gate="registry"),
     "training_run_supersession_v1": _e("derived_projection", pk="id",
                                        gate="none"),
     "nextgen_plan_v1": _e("scoped_business_object", pk="plan_id",
                           op="治理域", gate="registry"),
-    "nextgen_plan_approval_v1": _e("audit_only", pk="approval_id",
+    "nextgen_plan_approval_v1": _e("audit_only", pk="id",
                                    immutable=True, gate="none"),
-    "nextgen_run_attempt_v1": _e("immutable_ledger", pk="attempt_id",
+    "nextgen_run_attempt_v1": _e("immutable_ledger", pk="run_id",
                                  immutable=True, gate="none"),
     "dataset_snapshot": _e("reference_registry", pk="snapshot_id",
                            archive=_NOOP_ARCHIVE, gate="registry"),
@@ -429,12 +449,12 @@ SCOPE_REGISTRY: dict[str, dict[str, Any]] = {
     "legacy_model_registry_v1": _e("reference_registry", pk="model_id",
                                    archive=_NOOP_ARCHIVE,
                                    gate="registry"),
-    "sam_lineage_v1": _e("reference_registry", pk="lineage_id",
+    "sam_lineage_v1": _e("reference_registry", pk="id",
                          archive=_NOOP_ARCHIVE, gate="registry"),
     "source_asset_inventory_v1": _e("reference_registry", pk="asset_id",
                                     archive=_NOOP_ARCHIVE,
                                     gate="registry"),
-    "resource_benchmark_v1": _e("reference_registry", pk="benchmark_id",
+    "resource_benchmark_v1": _e("reference_registry", pk="id",
                                 archive=_NOOP_ARCHIVE, gate="registry"),
     "asset": _e("reference_registry", pk="asset_id",
                 archive=_NOOP_ARCHIVE, gate="registry"),
@@ -446,22 +466,24 @@ SCOPE_REGISTRY: dict[str, dict[str, Any]] = {
     # ---------- 审核 / 质量 / gold ----------
     "review_task_v1": _e("scoped_business_object", pk="task_id",
                          op="治理域（标注审核）", gate="registry"),
-    "review_queue_ledger_v1": _e("immutable_ledger", pk="seq",
+    "review_queue_ledger_v1": _e("immutable_ledger", pk="queue_version",
                                  immutable=True, gate="none"),
-    "review_queue_invalidation_v1": _e("immutable_ledger", pk="seq",
+    "review_queue_invalidation_v1": _e("immutable_ledger", pk="id",
                                        immutable=True, gate="none"),
-    "review_event_v1": _e("immutable_ledger", pk="seq", immutable=True,
+    "review_event_v1": _e("immutable_ledger", pk="id", immutable=True,
                           gate="none"),
-    "quality_decision_v1": _e("audit_only", pk="decision_id",
+    "quality_decision_v1": _e("audit_only", pk="id",
                               immutable=True, gate="none"),
-    "quality_gold_v1": _e("reference_registry", pk="gold_id",
+    "quality_gold_v1": _e("reference_registry", pk="id",
                           archive=_NOOP_ARCHIVE, gate="registry"),
-    "quality_human_v1": _e("audit_only", pk="human_id", immutable=True,
+    "quality_human_v1": _e("audit_only", pk="id", immutable=True,
                            gate="none"),
     "gold_region_v1": _e("reference_registry", pk="region_id",
                          archive=_NOOP_ARCHIVE, gate="registry"),
-    "package_decision": _e("derived_projection", pk="id", gate="none"),
-    "package_supersede": _e("derived_projection", pk="id", gate="none"),
+    "package_decision": _e("derived_projection", pk="decision_id",
+                           gate="none"),
+    "package_supersede": _e("derived_projection", pk="supersede_id",
+                            gate="none"),
 }
 
 
@@ -612,3 +634,146 @@ def registry_coverage(conn) -> dict[str, Any]:
             "total_tables": total, "covered": covered,
             "coverage": (round(covered / total * 100, 2)
                          if total else 100.0)}
+
+
+# --------------------------------------------------------------------
+# OSV5 T4：可执行 Registry（指令第七节）。声明必须可机器验证；
+# scanner/archiver/operational filter/Test Center/Gate 全部从本文件
+# 派生，禁止再维护平行硬编码清单。
+# --------------------------------------------------------------------
+
+
+def _archive_structural(table: str):
+    """通用结构化归档 handler：按 test_run_id 追加式置 fixture。"""
+
+    def handler(conn, namespace: str, now: str) -> None:
+        conn.execute(
+            f"UPDATE {table} SET data_scope='uat_fixture' WHERE"
+            " test_run_id=?", (namespace,))
+
+    return handler
+
+
+def _archive_import_batch(conn, namespace: str, now: str) -> None:
+    conn.execute(
+        "UPDATE import_batch_v1 SET data_scope='uat_fixture',"
+        " visibility='history', archived_at=? WHERE test_run_id=?",
+        (now, namespace))
+
+
+def _archive_metric(conn, namespace: str, now: str) -> None:
+    conn.execute(
+        "UPDATE bi_metric_v1 SET status='archived', archived_at=?"
+        " WHERE test_run_id=?", (now, namespace))
+
+
+def _archive_dashboard(conn, namespace: str, now: str) -> None:
+    conn.execute(
+        "UPDATE bi_dashboard_v1 SET data_scope='uat_fixture' WHERE"
+        " test_run_id=?", (namespace,))
+
+
+# 可执行归档 handler 注册表（与表登记项一一对应；缺失即 Gate
+# 阻断，不得 silently continue）。不可变账本不在此列（归档走
+# attribution 追加式路径）。
+ARCHIVE_HANDLERS: dict[str, Any] = {
+    "md_project_v1": _archive_structural("md_project_v1"),
+    "md_sku_v1": _archive_structural("md_sku_v1"),
+    "field_task_v1": _archive_structural("field_task_v1"),
+    "route_plan_v1": _archive_structural("route_plan_v1"),
+    "geofence_event_v1": _archive_structural("geofence_event_v1"),
+    "geofence_v1": _archive_structural("geofence_v1"),
+    "user_calendar_v1": _archive_structural("user_calendar_v1"),
+    "survey_definition_v1": _archive_structural(
+        "survey_definition_v1"),
+    "survey_assignment_v1": _archive_structural(
+        "survey_assignment_v1"),
+    "survey_response_v1": _archive_structural("survey_response_v1"),
+    "survey_media_v1": _archive_structural("survey_media_v1"),
+    "workflow_definition_v1": _archive_structural(
+        "workflow_definition_v1"),
+    "agent_run_v1": _archive_structural("agent_run_v1"),
+    "recognition_task": _archive_structural("recognition_task"),
+    "bi_report_spec_v1": _archive_structural("bi_report_spec_v1"),
+    "bi_anomaly_v1": _archive_structural("bi_anomaly_v1"),
+    "bi_dashboard_v1": _archive_dashboard,
+    "bi_metric_v1": _archive_metric,
+    "fin_invoice_v1": _archive_structural("fin_invoice_v1"),
+    "import_batch_v1": _archive_import_batch,
+}
+
+
+def archive_handler_for(table: str):
+    return ARCHIVE_HANDLERS.get(table)
+
+
+def archivable_tables() -> tuple[str, ...]:
+    """可归档表集合（Registry 派生；不可变账本除外）。"""
+    return tuple(sorted(ARCHIVE_HANDLERS))
+
+
+def leak_scan_tables() -> tuple[str, ...]:
+    """泄漏扫描表集合（Registry gate 含 leak_scan 派生）。"""
+    return tuple(sorted(
+        t for t, e in SCOPE_REGISTRY.items()
+        if "leak_scan" in (e.get("gate") or "")))
+
+
+def validate_registry(conn) -> list[str]:
+    """Registry schema validator（启动/测试/Gate 消费）：表/列/
+    PK/parent edge/scope 列/归档 handler 全部机器校验；返回问题
+    列表（空=零错误）。不得以删校验或清空字段方式绕过。"""
+    problems: list[str] = []
+    schema = {}
+    for (name,) in conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND"
+            " name NOT LIKE 'sqlite_%'"):
+        schema[name] = {r[1] for r in conn.execute(
+            f"PRAGMA table_info({name})")}
+    for t, e in SCOPE_REGISTRY.items():
+        if t == "sqlite_sequence" or t not in schema:
+            continue
+        cols = schema[t]
+        pk = e.get("pk") or ""
+        if pk and not pk.startswith("composite:") and pk != "none" \
+                and pk not in cols:
+            problems.append(f"{t}: pk 不存在: {pk}")
+        if pk.startswith("composite:"):
+            for part in pk[len("composite:"):].split("|"):
+                if part not in cols:
+                    problems.append(f"{t}: composite pk 列不存在: {part}")
+        for key in ("tenant_col", "customer_col", "project_col"):
+            v = e.get(key) or ""
+            if v and v not in cols:
+                problems.append(f"{t}: {key} 不存在: {v}")
+        sc = e.get("scope_cols") or ""
+        if sc and "/" in sc:
+            for c in sc.split("/"):
+                c = c.strip()
+                if c and c not in cols:
+                    problems.append(f"{t}: scope 列不存在: {c}")
+        parent = e.get("parent") or ""
+        if parent and "(" not in parent and "." in parent:
+            pt, _, pcol = parent.partition(".")
+            if pt not in schema:
+                problems.append(f"{t}: parent 表不存在: {pt}")
+            elif pcol not in schema[pt]:
+                problems.append(f"{t}: parent 列不存在: {parent}")
+        ah = e.get("archive_handler") or ""
+        if ah and ah not in ARCHIVE_HANDLERS:
+            problems.append(f"{t}: 声明的 archive handler 不可执行: {ah}")
+        if t in ARCHIVE_HANDLERS and not ah:
+            problems.append(f"{t}: 已注册 handler 但登记项未声明"
+                            " archive_handler")
+        if "leak_scan" in (e.get("gate") or ""):
+            if "data_scope" not in cols:
+                problems.append(f"{t}: leak_scan 但无 data_scope 列")
+    return problems
+
+
+# OSV5：归档 handler 与登记项双向绑定（validator 强制一致；
+# 显式声明专项 handler 的表不被覆盖；空串默认值视为未声明）。
+for _t in ARCHIVE_HANDLERS:
+    if _t in SCOPE_REGISTRY and not SCOPE_REGISTRY[_t].get(
+            "archive_handler"):
+        SCOPE_REGISTRY[_t]["archive_handler"] = _t

@@ -22,24 +22,13 @@ LEGACY_PREFIXES = ("uatv2_", "uat_fixture_v3", "uat-cust")
 
 # SI2 T3：带结构化 scope 列、需随归档一并处理的 Domain 表（与
 # 02-DOMAIN-SCOPE-MATRIX / 迁移 051 同源）。
-_SCOPED_DOMAIN_TABLES = (
-    "md_project_v1", "md_sku_v1",
-    "field_task_v1", "route_plan_v1", "geofence_event_v1",
-    "geofence_v1",
-    "user_calendar_v1",
-    "survey_definition_v1", "survey_assignment_v1", "survey_response_v1",
-    "survey_media_v1",
-    "workflow_definition_v1",
-    "agent_run_v1", "recognition_task",
-    # SI3：usage_event_v2 / evidence_bundle_v1 为不可变账本（DB
-    # 触发器禁止 UPDATE）——归档不得改原行，改经
-    # scope_attribution_ledger_v1 追加式绑定（下方 _archive_ledgers）。
-    "bi_report_spec_v1", "bi_anomaly_v1",
-    # SI4：看板具备 scope 列（迁移 058），随归档结构化处理。
-    "bi_dashboard_v1",
-    # SI4：账单继承客户 provenance（迁移 055），随归档处理。
-    "fin_invoice_v1",
-)
+# OSV5：归档表集合与 handler 全部由 scope_registry 派生（唯一事实
+# 源；原 18 张平行硬编码清单已废除，指令第七节 7.1）。不可变账本
+# （usage_event_v2/evidence_bundle_v1）走 attribution 追加式路径，
+# 不在 handler 集内。
+from .scope_registry import ARCHIVE_HANDLERS, archivable_tables
+
+_SCOPED_DOMAIN_TABLES = archivable_tables()
 
 
 def _now() -> str:
@@ -170,13 +159,11 @@ class FixtureTestDataService:
                 f" test_run_id=? WHERE customer_id IN ({qm}) AND"
                 " COALESCE(test_run_id,'')='' AND"
                 " data_scope='uat_fixture'", (namespace, *cids))
-        # 2) 全 Domain 结构化归档：带 test_run_id 的行结构性地属于
-        # fixture（不得 operational；运行时不依赖名称）。
-        # SI3：fail-fast——归档异常不得吞（指令九.5）。
-        for table in _SCOPED_DOMAIN_TABLES:
-            conn.execute(
-                f"UPDATE {table} SET data_scope='uat_fixture' WHERE"
-                " test_run_id=?", (namespace,))
+        # 2) 全 Domain 结构化归档（OSV5：由 Registry 归档 handler
+        # 派生执行；含 import_batch_v1/bi_metric/bi_dashboard 等专项
+        # handler；fail-fast，异常不得吞，指令九.5）。
+        for table, handler in ARCHIVE_HANDLERS.items():
+            handler(conn, namespace, now)
         # 2b) SI3：不可变账本（Usage/Evidence）追加式 attribution，
         # 不改原行（红线三.3；DEC-SI3-003）。
         for ledger_table, id_col in (("usage_event_v2", "usage_id"),
@@ -233,24 +220,16 @@ class FixtureTestDataService:
             conn.execute(
                 "DELETE FROM auth_sessions WHERE actor IN (" + qm + ")",
                 tuple(unames))
-        # 2e) SI4：BI 注册表归档（指令 8.2）：UAT metric 置 archived，
-        # 不再进入运营指标目录/看板/异常规则/Agent 分析。
-        conn.execute(
-            "UPDATE bi_metric_v1 SET status='archived', archived_at=?"
-            " WHERE test_run_id=?", (now, namespace))
+        # 2e) SI4：BI 注册表归档已并入 Registry handler（bi_metric
+        # status=archived；不再进入运营目录/看板/异常规则/Agent 分析）。
         # 2f) SI4：账单行随账单归档（继承 invoice provenance）。
         conn.execute(
             "UPDATE fin_invoice_line_v1 SET data_scope='uat_fixture',"
             " test_run_id=? WHERE invoice_id IN (SELECT invoice_id"
             " FROM fin_invoice_v1 WHERE test_run_id=?)",
             (namespace, namespace))
-        # 2g) OSV5：导入批次随 Test Run 归档（追加式：visibility=
-        # history，不删行；幂等，二次归档不漂移）。
-        conn.execute(
-            "UPDATE import_batch_v1 SET data_scope='uat_fixture',"
-            " visibility='history', archived_at=? WHERE test_run_id=?",
-            (now, namespace))
-        # node/timer/branch 随 run 归档（审计可见）
+        # node/timer/branch 随 run 归档（审计可见；非 Registry
+        # 结构化归档表，随 run 父链处理）
         for table in ("workflow_node_execution_v1", "workflow_timer_v1",
                       "workflow_branch_v1"):
             conn.execute(

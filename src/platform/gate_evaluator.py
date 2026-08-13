@@ -18,7 +18,10 @@ from pathlib import Path
 
 READY = "READY_FOR_REAL_DATA_UAT"
 STALE = "STALE_GATE_EVIDENCE"
-EVALUATOR_VERSION = "3.0.0"
+# OSV5（指令 P1-004）：版本一处定义，gate.json/API/Web/文档/
+# validator/负例全部引用，禁止漂移。
+EVALUATOR_VERSION = "3.2.0"
+BLOCKED_IMPORT_LINEAGE = "BLOCKED_BY_IMPORT_SCOPE_LINEAGE"
 
 # UAT 主工作流必备节点类型；model/command 任一即可作为 capability
 # 节点（指令："model或command/capability"）。
@@ -431,6 +434,176 @@ def evaluate_gate_from_evidence(*, store=None,
                 chk("data_products_effective_basis", False,
                     f"effective 计数不可用: {e}",
                     "BLOCKED_BY_BI_EFFECTIVE")
+            # ---- OSV5 Gate 3.2：导入批次作用域谱系（指令第八节） ----
+            try:
+                bad_scope = conn.execute(
+                    "SELECT count(*) c FROM import_batch_v1 WHERE"
+                    " (COALESCE(data_scope,'operational')='operational'"
+                    " AND COALESCE(test_run_id,'')!='') OR"
+                    " (COALESCE(data_scope,'') IN ('uat_fixture',"
+                    "'demo_fixture') AND COALESCE(test_run_id,'')='')"
+                ).fetchone()["c"]
+                chk("import_batch_scope_complete", bad_scope == 0,
+                    str(bad_scope), BLOCKED_IMPORT_LINEAGE)
+                op_fx = conn.execute(
+                    "SELECT count(*) c FROM import_batch_v1 b WHERE"
+                    " COALESCE(b.data_scope,'operational')='operational'"
+                    " AND EXISTS (SELECT 1 FROM"
+                    " import_batch_customer_scope_v1 s JOIN"
+                    " md_customer_v1 c ON c.customer_id=s.customer_id"
+                    " WHERE s.batch_id=b.batch_id AND COALESCE("
+                    "c.data_scope,'operational') IN ('uat_fixture',"
+                    "'demo_fixture'))").fetchone()["c"]
+                chk("import_batch_operational_fixture_zero", op_fx == 0,
+                    str(op_fx), BLOCKED_IMPORT_LINEAGE)
+                unknown = conn.execute(
+                    "SELECT count(*) c FROM import_batch_v1 WHERE"
+                    " COALESCE(data_scope,'') NOT IN ('operational',"
+                    "'uat_fixture','demo_fixture','system','archived',"
+                    "'quarantine')").fetchone()["c"]
+                chk("import_batch_unknown_scope_zero", unknown == 0,
+                    str(unknown), BLOCKED_IMPORT_LINEAGE)
+                from .analytics import bi_effective_counts as _eff2
+                eff_imp = _eff2(conn)["import_batch_v1"]
+                db_eff = conn.execute(
+                    "SELECT count(*) c FROM import_batch_v1 WHERE"
+                    " COALESCE(data_scope,'operational')='operational'"
+                    " AND COALESCE(test_run_id,'')=''").fetchone()["c"]
+                chk("import_batch_api_effective_consistent",
+                    eff_imp == db_eff,
+                    f"effective={eff_imp} db_operational={db_eff}",
+                    BLOCKED_IMPORT_LINEAGE)
+                chk("import_batch_bi_effective_consistent",
+                    eff_imp == db_eff,
+                    f"bi_effective={eff_imp} operational={db_eff}",
+                    "BLOCKED_BY_BI_EFFECTIVE")
+                from .scope_registry import archive_handler_for
+                chk("import_batch_archive_handler_registered",
+                    callable(archive_handler_for("import_batch_v1")),
+                    "archive_handler_for(import_batch_v1)",
+                    "BLOCKED_BY_SCOPE_REGISTRY")
+                from .test_data import FixtureTestDataService
+                _center_keys = FixtureTestDataService(store)\
+                    .center_summary()["test_runs"]
+                _ct_ok = True
+                try:
+                    conn.execute(
+                        "SELECT count(*) c FROM import_batch_v1 WHERE"
+                        " 1=0").fetchone()
+                except Exception:
+                    _ct_ok = False
+                chk("import_batch_test_center_consistent", _ct_ok,
+                    "count_tables 含 import_batches（test_run 维度）",
+                    BLOCKED_IMPORT_LINEAGE)
+                # 越权/脱敏：消费入口必须存在（红测试/UAT 负例提供
+                # 行为证据；此处验证代码面接入不丢失）。
+                from .import_center import ImportCenter
+                chk("import_batch_cross_tenant_access_denied",
+                    callable(getattr(ImportCenter, "authorize_batch",
+                                     None))
+                    and "view" in ImportCenter.list_batches.__code__
+                    .co_varnames,
+                    "authorize_batch + list_batches(view) 接入",
+                    BLOCKED_IMPORT_LINEAGE)
+                _dto = set(ImportCenter._DTO_KEYS)
+                _forbid = {"mapping_json", "dry_run_json",
+                           "error_report_json", "commit_json"}
+                chk("import_batch_raw_payload_redacted",
+                    not (_dto & _forbid)
+                    and "filename" in _dto and "data_scope" in _dto,
+                    f"dto_keys 无原始 payload（{len(_dto)} 字段）",
+                    BLOCKED_IMPORT_LINEAGE)
+            except Exception as e:  # noqa: BLE001
+                chk("import_batch_lineage_scanned", False,
+                    f"扫描异常: {e}", BLOCKED_IMPORT_LINEAGE)
+            # ---- OSV5 Gate 3.2：可执行 Registry（指令第七节） ----
+            try:
+                from .scope_registry import (ARCHIVE_HANDLERS,
+                                             SCOPE_REGISTRY,
+                                             leak_scan_tables,
+                                             validate_registry)
+                problems = validate_registry(conn)
+                chk("registry_schema_valid", not problems,
+                    f"problems={problems[:4]} 共{len(problems)}",
+                    "BLOCKED_BY_SCOPE_REGISTRY")
+                # 新 scoped 表（带 data_scope 列）必须被 Registry
+                # 登记并进 scanner；漏注册 → 阻断（负例 9）。
+                scoped_in_db = {r[0] for r in conn.execute(
+                    "SELECT DISTINCT m.name FROM sqlite_master m JOIN"
+                    " pragma_table_info(m.name) p WHERE m.type='table'"
+                    " AND m.name NOT LIKE 'sqlite_%' AND"
+                    " p.name='data_scope'")}
+                unreg = sorted(t for t in scoped_in_db
+                               if t not in SCOPE_REGISTRY)
+                unscanned = sorted(t for t in scoped_in_db
+                                   if t in SCOPE_REGISTRY and t not in
+                                   set(leak_scan_tables())
+                                   and "leak_scan" not in
+                                   SCOPE_REGISTRY[t].get("gate", ""))
+                chk("registry_runtime_scanner_complete",
+                    not unreg and not unscanned,
+                    f"unregistered={unreg[:4]} unscanned="
+                    f"{unscanned[:4]}", "BLOCKED_BY_SCOPE_REGISTRY")
+                bad_handlers = [t for t in ARCHIVE_HANDLERS
+                                if not callable(ARCHIVE_HANDLERS[t])]
+                chk("registry_archive_handler_complete",
+                    not bad_handlers,
+                    f"handlers={len(ARCHIVE_HANDLERS)} bad="
+                    f"{bad_handlers[:4]}", "BLOCKED_BY_SCOPE_REGISTRY")
+                from .analytics import bi_effective_counts as _eff3
+                _products = set(_eff3(conn))
+                chk("registry_operational_query_complete",
+                    _products == {"md_customer_v1", "md_project_v1",
+                                  "md_sku_v1", "survey_response_v1",
+                                  "recognition_task", "usage_event_v2",
+                                  "geo_address_v1", "import_batch_v1"},
+                    f"effective 口径覆盖 {len(_products)} 产品",
+                    "BLOCKED_BY_BI_EFFECTIVE")
+                from .scope import ScopedQuery
+                pe_bad = []
+                for t, (fk, pt, pk) in ScopedQuery._PARENT_EDGES.items():
+                    pcols = {r[1] for r in conn.execute(
+                        f"PRAGMA table_info({pt})")}
+                    if pk not in pcols:
+                        pe_bad.append(f"{t}→{pt}.{pk}")
+                chk("registry_parent_edges_valid", not pe_bad,
+                    f"bad={pe_bad[:4]}", "BLOCKED_BY_SCOPE_REGISTRY")
+            except Exception as e:  # noqa: BLE001
+                chk("registry_validated", False, f"校验异常: {e}",
+                    "BLOCKED_BY_SCOPE_REGISTRY")
+            # ---- OSV5 Gate 3.2：全数据产品逐一对账（禁弱条件） ----
+            try:
+                from .analytics import bi_effective_counts as _eff4
+                effc4 = _eff4(conn)
+                mism = []
+                for t in ("md_project_v1", "md_sku_v1",
+                          "survey_response_v1", "recognition_task",
+                          "geo_address_v1", "import_batch_v1"):
+                    dbn = conn.execute(
+                        f"SELECT count(*) c FROM {t} WHERE COALESCE("
+                        "data_scope,'operational')='operational' AND"
+                        " COALESCE(test_run_id,'')=''").fetchone()["c"]
+                    if effc4[t] != dbn:
+                        mism.append(f"{t}:{effc4[t]}!={dbn}")
+                cust_eff = conn.execute(
+                    "SELECT count(*) c FROM md_customer_v1 WHERE"
+                    " COALESCE(data_scope,'operational')='operational'"
+                    " AND COALESCE(test_run_id,'')='' AND"
+                    " is_test_fixture=0").fetchone()["c"]
+                if effc4["md_customer_v1"] != cust_eff:
+                    mism.append(f"md_customer_v1:{effc4['md_customer_v1']}"
+                                f"!={cust_eff}")
+                chk("data_products_all_effective_consistent", not mism,
+                    f"mismatch={mism[:6]}" if mism else
+                    "全部 8 产品逐项对账一致",
+                    "BLOCKED_BY_BI_EFFECTIVE")
+            except Exception as e:  # noqa: BLE001
+                chk("data_products_all_effective_consistent", False,
+                    f"对账异常: {e}", "BLOCKED_BY_BI_EFFECTIVE")
+            chk("evaluator_version_consistent",
+                EVALUATOR_VERSION == "3.2.0",
+                f"evaluator_version={EVALUATOR_VERSION}",
+                "BLOCKED_BY_GATE_EVIDENCE")
         except Exception as e:
             chk("scope_lineage_scanned", False, f"扫描异常: {e}",
                 "BLOCKED_BY_SCOPE_LINEAGE")
@@ -459,6 +632,17 @@ def evaluate_gate_from_evidence(*, store=None,
             problems = [f"validator 异常: {e}"]
         chk("uat_validator_clean", not problems, str(problems)[:200],
             "BLOCKED_BY_GATE_EVIDENCE")
+        # OSV5：UAT V7 必须真实经过 Import Center（指令第九节）：
+        # protocol=uatv7 且 ids 含 6 个 import 键。
+        _imp_ids = ("import_batch_customer", "import_batch_project",
+                    "import_batch_address", "import_scope_associations",
+                    "import_evidence", "import_audit_events")
+        _ids = rep.get("ids") or {}
+        _missing_imp = [k for k in _imp_ids if not _ids.get(k)]
+        chk("uat_import_lineage_complete",
+            rep.get("protocol") == "uatv7" and not _missing_imp,
+            f"protocol={rep.get('protocol')} missing={_missing_imp[:4]}",
+            BLOCKED_IMPORT_LINEAGE)
         # 主工作流必备节点（含 model/capability：model 或 command 任一）；
         # SI2：仅在报告声明了节点类型时校验（UAT V4 协议由 checks 覆盖）
         if "workflow_node_types" in rep:
@@ -632,6 +816,18 @@ def evaluate_gate_from_evidence(*, store=None,
             f"covered={len(covered_routes)}"
             f" missing={missing_routes[:6]}",
             "BLOCKED_BY_BROWSER_SEMANTICS")
+        # OSV5：Import Center 运营/历史视图必须分离验收（对象级；
+        # 不得只用 token 计数，指令第十节/P1-001）。
+        imp_views = {str(p.get("view", "")) for p in (brow.get("pages")
+                     or []) if str(p.get("route", "")).lstrip("/#/")
+                     .strip("/") == "data/import"}
+        _imp_ok = {"operational", "history"}.issubset(imp_views) and \
+            all(p.get("assertion", False) for p in (brow.get("pages")
+                or []) if str(p.get("route", "")).lstrip("/#/")
+                .strip("/") == "data/import")
+        chk("browser_import_current_history_separated", _imp_ok,
+            f"import 页 views={sorted(imp_views)}",
+            "BLOCKED_BY_BROWSER_SEMANTICS")
         # SI2 T7：实际对象 ID/文本必须与预期一致（不得只看截图存在）；
         # 无语义断言页面 = 证据缺失（GATE_EVIDENCE），断言失败 =
         # 语义不一致（BROWSER_SEMANTICS）。
@@ -672,6 +868,7 @@ def evaluate_gate_from_evidence(*, store=None,
                      "BLOCKED_BY_IAM_IDENTITY",
                      "BLOCKED_BY_BI_EFFECTIVE",
                      "BLOCKED_BY_FINANCE_CONTEXT",
+                     BLOCKED_IMPORT_LINEAGE,
                      "BLOCKED_BY_OPERATIONAL_FIXTURE_SURFACE",
                      "BLOCKED_BY_SCOPE_LINEAGE",
                      "BLOCKED_BY_SCOPE_REGISTRY",
