@@ -728,7 +728,9 @@ class WorkflowService:
             "UPDATE workflow_timer_v1 SET status='cancelled', fired_at=?"
             " WHERE run_id=? AND status='pending'",
             (_now_iso(), run_id))
-        # 未结束分支一律 cancelled
+        # 未结束分支一律 cancelled（OSV51 C-5：守卫只取 pending/
+        # running——已写入的 timeout/failed/completed 终态绝不被 run
+        # 收敛降级覆盖）。
         conn.execute(
             "UPDATE workflow_branch_v1 SET status='cancelled',"
             " ended_at=?, error=CASE WHEN error='' THEN 'run 终态收敛'"
@@ -918,23 +920,50 @@ class WorkflowService:
                         q.append(nxt)
         return cands[0]
 
+    # OSV51 C-5：分支终态集合——timeout/failed/completed/cancelled
+    # 均不可降级；竞争写入按“先到且合法者赢，后到者无条件放弃”。
+    BRANCH_TERMINAL_STATUSES = ("completed", "failed", "timeout",
+                                "cancelled")
+
+    def _branch_status(self, branch_id: str) -> str:
+        """读分支 durable 状态（迟到写被拒后以 durable 行为准）。"""
+        row = self.store._conn.execute(
+            "SELECT status FROM workflow_branch_v1 WHERE branch_id=?",
+            (branch_id,)).fetchone()
+        return row["status"] if row else ""
+
     def _branch_row(self, branch_id: str, status: str, *,
-                    error: str = "", output: dict | None = None) -> None:
+                    error: str = "", output: dict | None = None
+                    ) -> bool:
+        """写分支状态；OSV51 C-5 条件 UPDATE 守卫（废除无条件写）：
+
+        - 终态写入：WHERE status NOT IN 终态集——终态互不覆盖，迟到
+          写 rowcount=0 被拒（返回 False），durable 状态不变；
+        - 活动态 running：WHERE status IN ('pending','running')——
+          已被终态化的分支不得被 worker 起跑写回 running；
+        - 返回 rowcount>0（写入是否生效）。
+        """
         sets, vals = ["status=?", "updated_at=?"], [status, _now_iso()]
         if status == "running":
             sets.append("started_at=?"); vals.append(_now_iso())
-        if status in ("completed", "failed", "timeout", "cancelled"):
+            guard = " AND status IN ('pending','running')"
+        elif status in self.BRANCH_TERMINAL_STATUSES:
             sets.append("ended_at=?"); vals.append(_now_iso())
+            guard = (" AND status NOT IN"
+                     " ('completed','failed','timeout','cancelled')")
+        else:
+            guard = ""
         if error:
             sets.append("error=?"); vals.append(error[:300])
         if output is not None:
             sets.append("output_json=?")
             vals.append(json.dumps(output, ensure_ascii=False,
                                    default=str))
-        self.store._conn.execute(
+        cur = self.store._conn.execute(
             f"UPDATE workflow_branch_v1 SET {', '.join(sets)}"
-            " WHERE branch_id=?", (*vals, branch_id))
+            f" WHERE branch_id=?{guard}", (*vals, branch_id))
         self.store._conn.commit()
+        return cur.rowcount > 0
 
     def _exec_branch(self, d: dict, entry: str, stop_nodes: set[str],
                      ctx: dict, *, run_id: str, work_id: str, corr: str,
@@ -1085,6 +1114,19 @@ class WorkflowService:
 
         todo = [b for b in branches
                 if b["status"] not in ("completed",)]
+        # OSV51 C-5：终态写全部带守卫后，恢复重跑必须先显式把旧终态
+        # 行复位为 pending（恢复路径单写者的有意转换，非竞争写）；
+        # 否则重跑分支的 running/completed 写会被守卫拒绝。
+        if resume_rows:
+            for b in todo:
+                if b["status"] in self.BRANCH_TERMINAL_STATUSES:
+                    conn.execute(
+                        "UPDATE workflow_branch_v1 SET status="
+                        "'pending', ended_at=NULL, error='',"
+                        " updated_at=? WHERE branch_id=? AND status=?",
+                        (_now_iso(), b["branch_id"], b["status"]))
+                    conn.commit()
+                    b["status"] = "pending"
         bctx_map: dict[str, dict] = {}
         results: dict[str, dict] = {b["branch_id"]: {"status": "failed",
                                                      "error": "未执行"}
@@ -1096,25 +1138,40 @@ class WorkflowService:
 
         def _worker(b: dict) -> dict:
             bctx = copy.deepcopy(ctx)
-            self._branch_row(b["branch_id"], "running")
+            # OSV51 C-5：起跑写带守卫——分支若已被终态化（超时清扫/
+            # quorum 取消先于线程起跑），直接放弃执行，以 durable 状
+            # 态为准，不得把终态写回 running。
+            if not self._branch_row(b["branch_id"], "running"):
+                return {"status": self._branch_status(b["branch_id"])
+                        or "cancelled"}
             try:
                 out = self._exec_branch(
                     d, b["entry"], stop, bctx, run_id=run_id,
                     work_id=work_id, corr=corr,
                     branch_id=b["branch_id"])
-                bctx_map[b["branch_id"]] = bctx
-                self._branch_row(b["branch_id"], "completed",
-                                 output={"entry": b["entry"], **out})
-                return {"status": "completed"}
+                # OSV51 C-5：迟到完成写防护——超时判定后到达的
+                # completed 被 rowcount=0 拒绝；仅当 durable 写入生效
+                # 才记账 completed（否则以 durable 行为准）。
+                if self._branch_row(b["branch_id"], "completed",
+                                    output={"entry": b["entry"],
+                                            **out}):
+                    bctx_map[b["branch_id"]] = bctx
+                    return {"status": "completed"}
+                return {"status": self._branch_status(b["branch_id"])
+                        or "failed"}
             except WorkflowCancelled as ce:
-                # UFC T2：run 已终态——分支标 cancelled，结果丢弃
+                # UFC T2：run 已终态——分支标 cancelled，结果丢弃；
+                # C-5：若分支已被标 timeout 等终态，迟到 cancelled 必
+                # 须放弃（不得降级 timeout）。
                 self._branch_row(b["branch_id"], "cancelled",
                                  error=str(ce)[:200])
-                return {"status": "cancelled"}
+                return {"status": self._branch_status(b["branch_id"])
+                        or "cancelled"}
             except Exception as e:
                 self._branch_row(b["branch_id"], "failed",
                                  error=str(e))
-                return {"status": "failed", "error": str(e)[:300]}
+                return {"status": self._branch_status(b["branch_id"])
+                        or "failed", "error": str(e)[:300]}
 
         if simulate:
             for b in todo:
@@ -1137,14 +1194,21 @@ class WorkflowService:
                         pending, timeout=timeout or None,
                         return_when=FIRST_COMPLETED)
                     if not done_set:
-                        # 超时：剩余分支标 timeout
+                        # 超时：剩余分支标 timeout（C-5 条件写：若
+                        # worker 已抢先写入终态，rowcount=0 放弃，记账
+                        # 以 durable 行为准，不虚构 timeout）。
                         for f in pending:
                             b = futs[f]
-                            self._branch_row(b["branch_id"], "timeout",
-                                             error="branch_timeout")
-                            results[b["branch_id"]] = {
-                                "status": "timeout",
-                                "error": "branch_timeout"}
+                            if self._branch_row(
+                                    b["branch_id"], "timeout",
+                                    error="branch_timeout"):
+                                results[b["branch_id"]] = {
+                                    "status": "timeout",
+                                    "error": "branch_timeout"}
+                            else:
+                                results[b["branch_id"]] = {
+                                    "status": self._branch_status(
+                                        b["branch_id"]) or "timeout"}
                         pending = set()
                         break
                     for f in done_set:
@@ -1161,13 +1225,20 @@ class WorkflowService:
                                if r["status"] == "completed")
                     if ok_n >= need and mode != "all":
                         # any/quorum 达成：剩余未完成分支标 cancelled
+                        # （C-5 条件写：worker 抢先 completed 时放弃，
+                        # 记账以 durable 行为准）。
                         for f in pending:
                             f.cancel()
                             b = futs[f]
-                            self._branch_row(b["branch_id"], "cancelled",
-                                             error="quorum 达成后取消")
-                            results[b["branch_id"]] = {
-                                "status": "cancelled"}
+                            if self._branch_row(
+                                    b["branch_id"], "cancelled",
+                                    error="quorum 达成后取消"):
+                                results[b["branch_id"]] = {
+                                    "status": "cancelled"}
+                            else:
+                                results[b["branch_id"]] = {
+                                    "status": self._branch_status(
+                                        b["branch_id"]) or "cancelled"}
                         pending = set()
                         break
             finally:
