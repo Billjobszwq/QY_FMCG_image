@@ -274,13 +274,24 @@ async def main_async() -> int:
             n_dom = await jseval(ws, msg_id, IMPORT_ROWS_JS)
             ids_dom = await jseval(ws, msg_id, IMPORT_IDS_JS)
             ids_ok = all(i in ids_dom for i in want_ids)
+            # OSV51-010 根因修复：批次表在 900px 视口折叠线以下——
+            # 先把批次表卡片滚入可视区再截图，四视图截图像素才会
+            # 真实互异（此前只截到页首模板区，四视图字节相同）。
             await jseval(ws, msg_id,
-                         "window.scrollTo(0,0);"
+                         "(()=>{const el=(document.querySelector("
+                         "'[data-batch-id]')||{}).closest?document."
+                         "querySelector('[data-batch-id]').closest("
+                         "'.card'):null;const t=el||[...document."
+                         "querySelectorAll('.card')].pop();"
+                         "if(t){t.scrollIntoView({block:'start'});"
+                         "return '1';}return '0';})()")
+            await asyncio.sleep(0.6)
+            await jseval(ws, msg_id,
                          "void document.body.offsetHeight;1")
-            await asyncio.sleep(0.5)
+            await asyncio.sleep(0.4)
             fn, sha = await shot(ws, msg_id, 1440, f"import_{view}")
             if prev_sha and sha == prev_sha:
-                # 同字节 = 渲染未生效：强制重载后重取一次
+                # 仍同字节 = 渲染未生效：强制重载后重取一次
                 await goto(ws, msg_id, owner, "/#/data/import")
                 await jseval(ws, msg_id,
                              "(()=>{const b=[...document.querySelectorAll("
@@ -289,9 +300,14 @@ async def main_async() -> int:
                              "return !!b;})()")
                 await asyncio.sleep(3.0)
                 await jseval(ws, msg_id,
-                             "window.scrollTo(0,0);"
-                             "void document.body.offsetHeight;1")
-                await asyncio.sleep(0.5)
+                             "(()=>{const el=(document.querySelector("
+                             "'[data-batch-id]')||{}).closest?document."
+                             "querySelector('[data-batch-id]').closest("
+                             "'.card'):null;const t=el||[...document."
+                             "querySelectorAll('.card')].pop();"
+                             "if(t){t.scrollIntoView({block:'start'});"
+                             "return '1';}return '0';})()")
+                await asyncio.sleep(0.8)
                 fn, sha = await shot(ws, msg_id, 1440,
                                      f"import_{view}")
             prev_sha = sha
