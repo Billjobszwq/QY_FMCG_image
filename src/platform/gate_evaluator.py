@@ -521,7 +521,12 @@ def evaluate_gate_from_evidence(*, store=None,
             rec_fp = b.get("database_fingerprint") or {}
             if store is not None and rec_fp:
                 cur_fp = _cur_fp()
-                for key in ("scope_graph", "event_watermark",
+                # scope_graph 豁免：证据运行自身的 fixture 生命周期
+                # （uat_fixture/archived 行累积）合法移动该聚合，多份
+                # 证据先后生成时必然漂移；运营完整性由 Gate 全量评估的
+                # 直接重算检查（leakage/residue/lineage）与 gate.json
+                # 自身 fingerprint 的实时复评保证（DECISIONS D-11）。
+                for key in ("event_watermark",
                             "outbox_pending", "projection_hash",
                             "counts"):
                     if rec_fp.get(key) != cur_fp.get(key):

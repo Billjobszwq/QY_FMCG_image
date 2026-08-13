@@ -51,3 +51,12 @@
 ## 6. 本轮即时语义
 
 当前全量 1 failed（OSV51-008）+ 代码即将修改 → test_report 重生成必为 failed≥1 直至修复 → Gate 必须非 READY。修复完成并全链重跑前不得恢复 READY（任务书第七条第 7 款）。
+
+## 7. D-11 精化：证据级 DB 比对的 scope_graph 豁免
+
+证据 binding 的 database_fingerprint 比对键为 event_watermark /
+outbox_pending / projection_hash / counts；**scope_graph 豁免**（证据
+运行自身 fixture 生命周期合法移动该聚合）。运营数据漂移防线：
+1) Gate 全量评估直接重算 leakage/residue/lineage/quarantine 归因；
+2) gate.json 顶层 db_fingerprint（证据链结束后生成）与实时端点全键
+比对（含 scope_graph）→ 任何证据后 DB 变化仍触发 STALE。

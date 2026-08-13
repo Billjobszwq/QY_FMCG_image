@@ -12,3 +12,4 @@
 | D-08 | 并行引擎压力测试定 100 轮为门槛（可配置环境变量提高），纳入 hermetic 套件但控制单轮耗时 | 任务要求至少 100 轮无漂移；同时避免套件时长失控 | 2026-08-13 |
 | D-09 | test_report.json 改为脚本生成（带绑定块），手写 JSON 废止 | C-6/C-8 单一事实源要求 | 2026-08-13 |
 | D-10 | 本轮证据目录沿用 .eval/scope_v5/（不新建 scope_v51 目录），gate.json 由修复后的评估器覆写 | 实时端点按 .eval/*/gate.json mtime 选取；新建目录会造成双 gate 并存 | 2026-08-13 |
+| D-11 | 证据级 DB fingerprint 比对豁免 scope_graph 一项 | 证据运行自身的 fixture 生命周期（uat_fixture/archived 行累积）合法移动 scope_graph 聚合，多份证据先后生成必然漂移，任何排序都无法全绿；运营完整性由 Gate 全量评估的直接重算检查族（leakage/residue/lineage/quarantine 归因）+ gate.json 自身完整 fingerprint 的实时复评双重保证。event_watermark/outbox_pending/projection_hash/counts 仍逐项比对 | 2026-08-13 |
