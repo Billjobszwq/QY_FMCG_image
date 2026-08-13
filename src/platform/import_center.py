@@ -29,6 +29,37 @@ class ImportAuthError(ImportError_):
     """OSV5：导入授权失败（fail-closed，API 映射 403）。"""
 
 
+# OSV51 C-2：敏感键名（子串匹配，大小写不敏感，fail-closed 宁多勿漏）。
+SECRET_KEY_SUBSTRINGS = ("password", "passwd", "token", "api_key",
+                         "apikey", "secret", "credential",
+                         "private_key")
+
+
+def _is_secret_key(key: str) -> bool:
+    kl = str(key).lower()
+    return any(s in kl for s in SECRET_KEY_SUBSTRINGS)
+
+
+def redact_secrets(obj: Any) -> Any:
+    """OSV51 C-2：递归 secret 扫描/脱敏（DTO 与落库 JSON 共用）。
+
+    dict/list 任意深度；敏感键的字符串值替换为 '[REDACTED]'（保留键
+    与非敏感字段）。非字符串值不视为秘密载体，但继续递归其结构。
+    """
+    if isinstance(obj, dict):
+        out: dict = {}
+        for k, v in obj.items():
+            if _is_secret_key(k) and isinstance(v, str) and v \
+                    and v != "[REDACTED]":
+                out[k] = "[REDACTED]"
+            else:
+                out[k] = redact_secrets(v)
+        return out
+    if isinstance(obj, list):
+        return [redact_secrets(v) for v in obj]
+    return obj
+
+
 # OSV5（指令 5.2）：模板 → capability scope 矩阵（版本化 permission
 # policy，不得只判断是否登录；全局模板不得因无 customer_id 绕过）。
 TEMPLATE_SCOPE: dict[str, str] = {
@@ -188,8 +219,9 @@ TEMPLATES: dict[str, dict] = {
             _col("status", "状态", required=False,
                  enum=["", "active", "disabled"], example="active"),
         ],
-        "note": "提交时为每个用户生成一次性初始口令（在提交回执中返回，"
-                "不入库明文），用户应尽快修改。",
+        "note": "提交时为每个用户生成一次性初始口令：仅在提交成功的当次"
+                "响应中返回一次，系统不落库明文（DB 仅存哈希，回执以"
+                "[REDACTED] 存档），用户应尽快修改。",
     },
     "roles_permissions_v1": {
         "name": "自定义角色与权限",
@@ -580,10 +612,14 @@ class ImportCenter:
         data_scope ∈ {quarantine, archived} 或 visibility=='history' 的
         批次一律禁止 dry-run/commit/重放：
         - quarantine：隔离裁决闭环（03-QUARANTINE-STATE-MACHINE.md）之前
-          不得产生任何写入；只读分析走裁决证据（追加式，不改原批次）；
-        - archived/history：已归档证据不得再次操作（OSV5 原语义并入）。
-        稳定错误码 IMPORT_BATCH_WRITE_BLOCKED → API 映射 409。
-        守卫只读 DB 行（b 来自 _must），请求参数无法覆盖。
+          不得产生任何写入；quarantine dry-run 同样被拦（会覆写原批次
+          dry_run_json 证据）。只读分析产物将来进裁决证据（契约 C-3
+          adjudication evidence：追加式、独立表，后续波次实现），不改
+          原批次行；
+        - archived/history：已归档证据不得再次操作（OSV5 原语义并入，
+          已终态历史批次重放同码）。
+        稳定错误码 IMPORT_BATCH_WRITE_BLOCKED → API 映射 409，detail
+        原样携码。守卫只读 DB 行（b 来自 _must），请求参数无法覆盖。
         """
         if b.get("data_scope") in ("quarantine", "archived") or \
                 b.get("visibility") == "history":
@@ -809,7 +845,10 @@ class ImportCenter:
                 stats["failed"] += 1
                 errors.append({"row": 0, "error": f"批量写入失败: {e}"})
         status = "committed" if stats["failed"] == 0 else "partial_failed"
-        commit_result = {"stats": stats, "receipts": receipts[:50]}
+        # OSV51 C-2：落库回执先脱敏；明文只存在于本次响应（内存）。
+        once_receipts = [dict(r) for r in receipts[:50]]
+        commit_result = {"stats": stats,
+                         "receipts": redact_secrets(receipts[:50])}
         # OSV5：fixture 批次的导入对象继承批次作用域（同事务）。
         if b.get("data_scope") == "uat_fixture" and b.get("test_run_id"):
             self._inherit_batch_scope(b, receipts)
@@ -826,11 +865,16 @@ class ImportCenter:
             self.iam.audit(actor, "import.committed",
                            f"import:{batch_id}",
                            {"template": b["template_id"],
-                            "stats": stats}, 
+                            "stats": stats},
                            customer_id="")
         except Exception:
             pass
-        return self.batch_dto(self._must(batch_id))
+        dto = self.batch_dto(self._must(batch_id))
+        # OSV51 C-2：初始口令仅此一次随 commit 响应返回（不落库、
+        # 不再被任何 GET/列表/重读路径返回）。
+        dto["commit"] = {**(dto.get("commit") or {}),
+                         "receipts": once_receipts}
+        return dto
 
     def _inherit_batch_scope(self, b: dict, receipts: list) -> None:
         """fixture 批次提交对象作用域继承（自然键/回执键）。"""
@@ -927,12 +971,13 @@ class ImportCenter:
             return {"employee_id": emp["employee_id"]}
         if template_id == "users_v1":
             import secrets
-            temp_pw = "Init-" + secrets.token_hex(4)
+            temp_pw = "Init-" + secrets.token_hex(16)
             self.iam.create_principal(
                 kind=rec.get("kind") or "user", username=rec["username"],
                 display_name=rec.get("display_name") or "",
                 password=temp_pw, created_by=actor)
-            # 一次性初始口令只在回执中返回（不写明文入库/日志）
+            # OSV51 C-2：一次性初始口令只在 commit 当次响应中返回；
+            # 落库 receipts 一律经 redact_secrets 脱敏（DB 只存哈希）。
             return {"username": rec["username"],
                     "initial_password_once": temp_pw}
         if template_id == "roles_permissions_v1":
@@ -1087,7 +1132,10 @@ class ImportCenter:
         c = b.get("commit") or {}
         d["commit"] = {"stats": c.get("stats"),
                        "receipts": c.get("receipts")}
-        return d
+        # OSV51 C-2：出口兜底——DTO 全量递归 secret 扫描（防存量行
+        # 与任何新增字段的明文泄漏；commit 当次响应的明文回执由
+        # commit() 在返回前覆盖，不经此路径）。
+        return redact_secrets(d)
 
     def preview_rows(self, batch_id: str, *, limit: int = 50) -> dict:
         """原始行预览（仅创建者/data.import.audit，API 层鉴权）；

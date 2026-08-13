@@ -237,7 +237,8 @@ export default function ImportCenter() {
                   {detail.visibility === "history" ? "（已归档历史）" : ""}
                   ，已写冻结：不得执行 dry-run/提交。
                   {detail.data_scope === "quarantine"
-                    ? "请在隔离区走人工裁决流程。" : ""}
+                    ? "隔离批次不可执行 dry-run/提交，请走裁决流程。"
+                    : ""}
                 </p>
                 <a className="btn"
                   href={`/api/v1/import/batches/${detail.batch_id}/errors.csv`}
@@ -267,12 +268,14 @@ export default function ImportCenter() {
               {" "}· 跳过 {detail.commit.stats.skipped ?? 0}
               {" "}· 失败 {detail.commit.stats.failed ?? 0}</p>)}
           {detail.commit?.receipts?.map((r, i) => (
-            r.initial_password_once ? (
+            r.initial_password_once && r.initial_password_once
+              !== "[REDACTED]" ? (
               <p key={i} className="v"
                 style={{ color: "var(--warn)", marginTop: 4 }}>
                 ⚠ 用户 {r.username} 的一次性初始口令：
                 <code>{r.initial_password_once}</code>
-                （仅显示一次，请尽快修改）</p>
+                （仅在提交成功的当次响应中显示；系统不落库明文，
+                刷新或重读详情后不再可见，请尽快修改）</p>
             ) : (
               <p key={i} className="v" style={{ marginTop: 4 }}>
                 回执：{JSON.stringify(r).slice(0, 160)}</p>)))}

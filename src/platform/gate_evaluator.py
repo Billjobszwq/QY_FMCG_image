@@ -490,6 +490,31 @@ def evaluate_gate_from_evidence(*, store=None,
                 chk("quarantine_execution_escape", esc == 0,
                     f"post_quarantine_modified={esc}",
                     BLOCKED_IMPORT_SECURITY)
+                # OSV51 C-2：递归 secret 扫描——import 批次全部 JSON 列
+                # 不得携带敏感键明文（password/token/api_key/secret 等）。
+                from .import_center import redact_secrets as _redact
+                leak = 0
+                leak_batches: list = []
+                for _brow in conn.execute(
+                        "SELECT batch_id, mapping_json, dry_run_json,"
+                        " error_report_json, commit_json FROM"
+                        " import_batch_v1"):
+                    for _col in ("mapping_json", "dry_run_json",
+                                 "error_report_json", "commit_json"):
+                        try:
+                            _p = json.loads(_brow[_col] or "{}")
+                        except Exception:
+                            continue
+                        if json.dumps(_redact(_p), sort_keys=True,
+                                      ensure_ascii=False) != \
+                                json.dumps(_p, sort_keys=True,
+                                           ensure_ascii=False):
+                            leak += 1
+                            if _brow["batch_id"] not in leak_batches:
+                                leak_batches.append(_brow["batch_id"])
+                chk("recursive_secret_scan", leak == 0,
+                    f"leak_columns={leak} batches={leak_batches[:5]}",
+                    BLOCKED_IMPORT_SECURITY)
                 from .analytics import bi_effective_counts as _eff2
                 eff_imp = _eff2(conn)["import_batch_v1"]
                 db_eff = conn.execute(

@@ -294,6 +294,27 @@ def main() -> int:
                      " WHERE batch_id='neg13'")
         conn.commit()
 
+        # 15) OSV51 C-2：递归 secret 扫描——嵌套明文密码必须被 Gate 拦
+        conn.execute(
+            "INSERT INTO import_batch_v1 (batch_id, template_id,"
+            " filename, file_format, file_hash, status, actor,"
+            " row_count, mapping_json, dry_run_json, error_report_json,"
+            " commit_json, created_at, updated_at, data_scope)"
+            " VALUES ('neg15','users_v1','s.csv','csv','h','committed',"
+            "'admin',1,'{}','{}','[]',"
+            "'{\"receipts\":[{\"username\":\"u\",\"nested\":"
+            "{\"initial_password_once\":\"Init-leak\"}}]}',"
+            "'','' ,'operational')")
+        conn.commit()
+        res = _eval(store)
+        neg("recursive_secret_scan",
+            "recursive_secret_scan" in _failed_checks(res)
+            and res["gate"] != "READY_FOR_REAL_DATA_UAT",
+            f"gate={res['gate']}")
+        conn.execute("DELETE FROM import_batch_v1"
+                     " WHERE batch_id='neg15'")
+        conn.commit()
+
     OUT.parent.mkdir(parents=True, exist_ok=True)
     OUT.write_text(json.dumps(
         {"gate_negative_tests": results,
