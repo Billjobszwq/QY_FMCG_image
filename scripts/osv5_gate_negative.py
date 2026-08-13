@@ -18,6 +18,9 @@
 12 Gate evidence 使用旧 HEAD / 旧 DB fingerprint → STALE
 13 OSV51 quarantine 批次执行逃逸（commit/dry-run 必须 409 + 零写入）
 14 OSV51 隔离后被改写的 quarantine 批次 → Gate quarantine_execution_escape 拦截
+15 OSV51 批次 JSON 列嵌套明文密码 → Gate recursive_secret_scan 拦截
+16 OSV51 quarantine 批次可归因的 operational 对象写入 →
+   Gate quarantine_no_operational_writes 拦截
 """
 from __future__ import annotations
 
@@ -313,6 +316,33 @@ def main() -> int:
             f"gate={res['gate']}")
         conn.execute("DELETE FROM import_batch_v1"
                      " WHERE batch_id='neg15'")
+        conn.commit()
+
+        # 16) OSV51 W2-a：quarantine 批次可归因的 operational 对象写入
+        #     → Gate quarantine_no_operational_writes 必须拦（C-1 §8）
+        client.post("/api/v1/master/customers", headers=h,
+                    json={"customer_id": "neg16-cust", "name": "逃逸客户"})
+        conn.execute(
+            "INSERT INTO import_batch_v1 (batch_id, template_id,"
+            " filename, file_format, file_hash, status, actor,"
+            " row_count, mapping_json, dry_run_json, error_report_json,"
+            " commit_json, created_at, updated_at, data_scope,"
+            " visibility, archived_at) VALUES ('neg16','customers_v1',"
+            "'q.csv','csv','h','committed','admin',1,"
+            "'{\"header\": [\"customer_id\"],"
+            " \"rows\": [[\"neg16-cust\"]]}','{}','[]','{}',"
+            "'2026-08-11T00:00:00+00:00','2026-08-11T00:00:00+00:00',"
+            "'quarantine','current','2026-08-13T05:28:36+00:00')")
+        conn.commit()
+        res = _eval(store)
+        neg("quarantine_operational_object_write_detected",
+            "quarantine_no_operational_writes" in _failed_checks(res)
+            and res["gate"] != "READY_FOR_REAL_DATA_UAT",
+            f"gate={res['gate']}")
+        conn.execute("DELETE FROM import_batch_v1"
+                     " WHERE batch_id='neg16'")
+        conn.execute("DELETE FROM md_customer_v1"
+                     " WHERE customer_id='neg16-cust'")
         conn.commit()
 
     OUT.parent.mkdir(parents=True, exist_ok=True)

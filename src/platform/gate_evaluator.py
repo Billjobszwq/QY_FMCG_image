@@ -172,6 +172,138 @@ def scan_terminal_drift(store) -> list[dict]:
 
 
 # --------------------------------------------------------------------
+# OSV51 W2-a（契约 C-1 §8）：quarantine 批次 → operational 对象写入
+# 归因断言。只用结构化键（批次行内自然键 / commit receipts），不做
+# 任何名称猜测。
+# --------------------------------------------------------------------
+
+_QUARANTINE_ATTR_NATURAL: dict[str, tuple[str, str, str]] = {
+    # template_id → (目标表, 主键列, 批次行内列)
+    "customers_v1": ("md_customer_v1", "customer_id", "customer_id"),
+    "projects_v1": ("md_project_v1", "project_id", "project_id"),
+    "skus_v1": ("md_sku_v1", "sku_id", "sku_id"),
+    "users_v1": ("iam_principal_v1", "username", "username"),
+}
+_QUARANTINE_ATTR_RECEIPT: dict[str, tuple[str, str]] = {
+    # template_id → (目标表, receipt 键)
+    "stores_addresses_v1": ("geo_address_v1", "address_id"),
+    "employees_v1": ("geo_employee_v1", "employee_id"),
+}
+
+
+def _has_column(conn, table: str, column: str) -> bool:
+    try:
+        return any(r[1] == column for r in conn.execute(
+            f"PRAGMA table_info({table})"))
+    except Exception:
+        return False
+
+
+def quarantine_operational_write_violations(conn) -> list[dict]:
+    """DB 级断言：可归因于 quarantine 批次的目标对象行不得处于
+    operational 作用域。
+
+    归因（保守、结构化、sound）：
+    1) mapping_json 行内自然键（customers/projects/skus/users）；
+    2) commit receipts 的 address_id/employee_id（stores/employees）；
+    3) receipts 为空时 stores/employees 退回 _classify 同款幂等自然键
+       （customer_id+store_name raw LIKE / customer_id+name 等值）。
+
+    假设：目标表均带 data_scope 列（缺失则跳过该表，不误报）；归因
+    只用结构化键，不按时间戳反推历史——批次仍 operational 时合法产生
+    的对象应已由 reconcile/backfill 重新打标，残留 operational 即视为
+    逃逸写入（现场 imp-bf333d101db6 重放因地址已存在被幂等跳过，属
+    运气非设计；本断言捕获其下一次真正插入）。
+    """
+    out: list[dict] = []
+    batches = conn.execute(
+        "SELECT batch_id, template_id, mapping_json, commit_json FROM"
+        " import_batch_v1 WHERE COALESCE(data_scope,'')='quarantine'"
+    ).fetchall()
+    for b in batches:
+        tpl = b["template_id"]
+        try:
+            mapping = json.loads(b["mapping_json"] or "{}")
+        except Exception:
+            mapping = {}
+        try:
+            commit = json.loads(b["commit_json"] or "{}")
+        except Exception:
+            commit = {}
+        header = mapping.get("header") or []
+        mrows = mapping.get("rows") or []
+
+        def _flag(table: str, key: str, n: int) -> None:
+            if n:
+                out.append({"batch_id": b["batch_id"], "table": table,
+                            "key": key, "count": int(n)})
+
+        if tpl in _QUARANTINE_ATTR_NATURAL:
+            table, pkcol, col = _QUARANTINE_ATTR_NATURAL[tpl]
+            if _has_column(conn, table, "data_scope") and col in header:
+                idx = header.index(col)
+                keys = sorted({str(r[idx]).strip() for r in mrows
+                               if idx < len(r) and str(r[idx]).strip()})
+                for k in keys:
+                    n = conn.execute(
+                        f"SELECT count(*) c FROM {table} WHERE {pkcol}=?"
+                        " AND COALESCE(data_scope,'operational')"
+                        "='operational'", (k,)).fetchone()["c"]
+                    _flag(table, k, n)
+        if tpl in _QUARANTINE_ATTR_RECEIPT:
+            table, rkey = _QUARANTINE_ATTR_RECEIPT[tpl]
+            if not _has_column(conn, table, "data_scope"):
+                continue
+            ids = sorted({str(r.get(rkey)) for r in
+                          (commit.get("receipts") or [])
+                          if r.get(rkey)})
+            for oid in ids:
+                n = conn.execute(
+                    f"SELECT count(*) c FROM {table} WHERE {rkey}=?"
+                    " AND COALESCE(data_scope,'operational')"
+                    "='operational'", (oid,)).fetchone()["c"]
+                _flag(table, oid, n)
+            if ids:
+                continue
+            # receipts 为空（如重放被幂等跳过覆写）→ 自然键回退
+            if tpl == "stores_addresses_v1" and "customer_id" in header \
+                    and "store_name" in header:
+                ci = header.index("customer_id")
+                si = header.index("store_name")
+                for r in mrows:
+                    if max(ci, si) >= len(r):
+                        continue
+                    cid = str(r[ci]).strip()
+                    sn = str(r[si]).strip()
+                    if not cid or not sn:
+                        continue
+                    n = conn.execute(
+                        "SELECT count(*) c FROM geo_address_v1 WHERE"
+                        " customer_id=? AND raw LIKE ? AND COALESCE("
+                        "data_scope,'operational')='operational'",
+                        (cid, f"%{sn}%")).fetchone()["c"]
+                    _flag("geo_address_v1", f"{cid}|{sn}", n)
+            if tpl == "employees_v1" and "customer_id" in header \
+                    and "name" in header:
+                ci = header.index("customer_id")
+                ni = header.index("name")
+                for r in mrows:
+                    if max(ci, ni) >= len(r):
+                        continue
+                    cid = str(r[ci]).strip()
+                    nm = str(r[ni]).strip()
+                    if not cid or not nm:
+                        continue
+                    n = conn.execute(
+                        "SELECT count(*) c FROM geo_employee_v1 WHERE"
+                        " customer_id=? AND name=? AND COALESCE("
+                        "data_scope,'operational')='operational'",
+                        (cid, nm)).fetchone()["c"]
+                    _flag("geo_employee_v1", f"{cid}|{nm}", n)
+    return out
+
+
+# --------------------------------------------------------------------
 # SI3 T7：数据库绑定 fingerprint（Gate 3.0 freshness，指令九.2/3）
 # --------------------------------------------------------------------
 
@@ -514,6 +646,13 @@ def evaluate_gate_from_evidence(*, store=None,
                                 leak_batches.append(_brow["batch_id"])
                 chk("recursive_secret_scan", leak == 0,
                     f"leak_columns={leak} batches={leak_batches[:5]}",
+                    BLOCKED_IMPORT_SECURITY)
+                # OSV51 W2-a（C-1 §8）：quarantine 批次不得有任何可
+                # 归因的 operational 对象写入（DB 级断言，归因见
+                # quarantine_operational_write_violations 文档）。
+                qw = quarantine_operational_write_violations(conn)
+                chk("quarantine_no_operational_writes", not qw,
+                    f"violations={len(qw)} {qw[:3]}",
                     BLOCKED_IMPORT_SECURITY)
                 from .analytics import bi_effective_counts as _eff2
                 eff_imp = _eff2(conn)["import_batch_v1"]
@@ -920,6 +1059,7 @@ def evaluate_gate_from_evidence(*, store=None,
         for prio in (STALE, "BLOCKED_BY_P0", "BLOCKED_BY_P1",
                      "BLOCKED_BY_BROWSER_SEMANTICS",
                      "BLOCKED_BY_IAM_IDENTITY",
+                     BLOCKED_IMPORT_SECURITY,
                      "BLOCKED_BY_BI_EFFECTIVE",
                      "BLOCKED_BY_FINANCE_CONTEXT",
                      BLOCKED_IMPORT_LINEAGE,
