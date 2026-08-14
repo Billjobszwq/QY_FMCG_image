@@ -497,7 +497,7 @@ git commit -m "chore: remove user and runtime data from release tree"
 - Create: `docs/PROJECT-STRUCTURE.md`, `docs/LOCAL-ASSETS.md`
 - Create: `tests/contract/test_project_structure_docs.py`
 
-- [ ] **Step 1: 写文档契约红测试**
+- [x] **Step 1: 写文档契约红测试**
 
 ```python
 REQUIRED_DOMAINS = {
@@ -507,17 +507,17 @@ REQUIRED_DOMAINS = {
 REQUIRED_LOCAL_ZONES = {"training-data", "recognition-models", "runtime"}
 ```
 
-- [ ] **Step 2: 运行红测试**
+- [x] **Step 2: 运行红测试**
 
 Run: `pytest tests/contract/test_project_structure_docs.py -q`
 
 Expected: FAIL，新结构文档尚未创建。
 
-- [ ] **Step 3: 编写开发入口和本地资产恢复指南**
+- [x] **Step 3: 编写开发入口和本地资产恢复指南**
 
 README 列出 Python/Web 安装、asset bootstrap、测试、构建和敏感数据约束。`PROJECT-STRUCTURE.md` 列出 20 个 Python 一级包、29 个 Web 页面业务分组和 4 类测试套件。`LOCAL-ASSETS.md` 不列用户文件名或绝对路径。
 
-- [ ] **Step 4: 跑绿测试并提交**
+- [x] **Step 4: 跑绿测试并提交**
 
 ```bash
 pytest tests/contract/test_project_structure_docs.py -q
@@ -531,7 +531,7 @@ git commit -m "docs: document complete system and local asset layout"
 - Verify: entire repository
 - Generated local only: `.venv/`, `web/node_modules/`, `web/dist/`
 
-- [ ] **Step 1: 安装并运行 Python 默认套件**
+- [x] **Step 1: 安装并运行 Python 默认套件**
 
 ```bash
 python3 -m venv .venv
@@ -541,7 +541,7 @@ python3 -m venv .venv
 
 Expected: pytest 退出码 0，失败数 0。
 
-- [ ] **Step 2: 安装并构建 Web 应用**
+- [x] **Step 2: 安装并构建 Web 应用**
 
 ```bash
 npm --prefix web ci
@@ -550,7 +550,7 @@ npm --prefix web run build
 
 Expected: Vite/TypeScript 生产构建退出码 0。
 
-- [ ] **Step 3: 运行源码对账和禁止类型扫描**
+- [x] **Step 3: 运行源码对账和禁止类型扫描**
 
 ```bash
 comm -23 /tmp/taas-source-files.txt <(git ls-files 'src/**' 'web/**' 'tests/**' 'scripts/**' | sort)
@@ -561,7 +561,7 @@ git diff --check
 
 Expected: `comm` 无输出；禁止类型无输出；finding=0；`git diff --check` 通过。
 
-- [ ] **Step 4: 扫描凭据、用户运行证据和绝对路径**
+- [x] **Step 4: 扫描凭据、用户运行证据和绝对路径**
 
 ```bash
 rg -n --hidden -g '!**/.git/**' -g '!training-data/**' -g '!recognition-models/**' -g '!runtime/**' -g '!web/node_modules/**' -g '!.venv/**' '(gh[pousr]_[A-Za-z0-9_]{20,}|AKIA[0-9A-Z]{16}|BEGIN (RSA |EC |OPENSSH )?PRIVATE KEY|/Users/[^/]+/Documents/QY/项目/LLM-Image|"trace_id"\s*:|"created_by"\s*:|"file_count"\s*:)' .
@@ -576,11 +576,11 @@ Expected: 没有经确认的真实凭据、用户运行记录或旧工作区绝�
 - Tag: `app-v0.3.0-taas.1`
 - Remote branch: `origin/codex/taas-agent-operation-v1`
 
-- [ ] **Step 1: 写入冻结版发布记录**
+- [x] **Step 1: 写入冻结版发布记录**
 
 `docs/releases/app-v0.3.0-taas.1.md` 记录基线提交、模块计数、测试结果、Web 构建结果、发布树审计结果、本地资产排除策略和“未合并 main / 未部署 / 未切换生产模型”声明。
 
-- [ ] **Step 2: 生成冻结提交**
+- [x] **Step 2: 生成冻结提交**
 
 ```bash
 git add docs/releases/app-v0.3.0-taas.1.md
@@ -588,7 +588,7 @@ git diff --cached --check
 git commit -m "release: freeze clean TaaS agent operation baseline"
 ```
 
-- [ ] **Step 3: 从 HEAD 创建无本地资产的临时克隆**
+- [x] **Step 3: 从 HEAD 创建无本地资产的临时克隆**
 
 ```bash
 VERIFY_DIR=$(mktemp -d /tmp/taas-clean-verify.XXXXXX)
@@ -599,7 +599,7 @@ python "$VERIFY_DIR/repo/scripts/audit_release_tree.py" --root "$VERIFY_DIR/repo
 
 Expected: 临时克隆工作树为空，finding=0。
 
-- [ ] **Step 4: 推送分支和注释标签**
+- [x] **Step 4: 推送分支和注释标签**
 
 ```bash
 git push -u origin codex/taas-agent-operation-v1
@@ -607,7 +607,7 @@ git tag -a app-v0.3.0-taas.1 -m 'Clean TaaS by Agent Operation development basel
 git push origin app-v0.3.0-taas.1
 ```
 
-- [ ] **Step 5: 最终远端对账**
+- [x] **Step 5: 最终远端对账**
 
 ```bash
 test "$(git rev-parse HEAD)" = "$(git ls-remote origin refs/heads/codex/taas-agent-operation-v1 | awk '{print $1}')"
