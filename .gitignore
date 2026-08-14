@@ -28,6 +28,32 @@ runs/
 .runs/
 .data_protocol/*.bak.json
 
+# 兼容旧路径（目录、文件或本地符号链接均不得入库）
+/.models
+/.sam_checkpoints
+/.datasets
+/.datasets_nextgen
+/.training_data
+/.batch3_clean
+/.kb
+/.micro_gold_v1
+/.micro_gold_v2
+/.data_protocol
+/.eval
+/.platform
+/.label-studio
+
+# 本地资产分区：仅保留每个分区的说明文档
+training-data/**
+!training-data/
+!training-data/README.md
+recognition-models/**
+!recognition-models/
+!recognition-models/README.md
+runtime/**
+!runtime/
+!runtime/README.md
+
 # 运行数据库、日志与 PID
 *.db
 *.db-*
