@@ -395,15 +395,22 @@ requirements-lock.txt   -> runtime/legacy-project-assets/requirements-lock.txt
 - [ ] **Step 4: 校验归档并只读预演兼容链接**
 
 ```bash
-python -m src.models.bundle verify --bundle-id prod_20260805_v5_r1
 python scripts/bootstrap_local_assets.py --dry-run
 git status --short --ignored
 ```
 
+Task 4 时 `.models` 兼容链接尚未创建，因此不运行 bundle CLI。必须直接读取
+`recognition-models/registry/bundles/CURRENT.json`，记录指针 SHA-256，并断言它把
+`prod_v4_best_r1` 指定为当前 bundle、把 `prod_20260805_v5_r1` 指定为上一个/回滚
+bundle。随后直接校验两个 bundle 目录的 `MANIFEST.json`：每个 manifest 必须可读，
+`bundle_id` 必须与目录一致，其声明的每个文件必须可读且 size/SHA-256 一致。
+校验前后 `CURRENT.json` 指针哈希必须不变，不得执行生产切换。
+
 Task 4 只归档和校验资产，不创建 live 兼容链接。`bootstrap --dry-run` 预期返回
 `dry_run: true` 且退出码为 1，因为此时仍有被 Git 跟踪的
 `.datasets_nextgen`、`.micro_gold_v2`、`.data_protocol` 真实目录；三者必须明确报告为
-`conflict`。Expected: 生产 bundle 验证通过；资产实体全部被 Git 忽略；工作树不新增任何兼容链接。
+`conflict`。Expected: `CURRENT.json` 指针未变，当前和上一个 bundle 的直接 manifest
+验证都通过；资产实体全部被 Git 忽略；工作树不新增任何兼容链接。
 
 ### Task 5: 清理新 Git 文件树中的用户数据和运行证据
 
@@ -428,15 +435,20 @@ Task 4 只归档和校验资产，不创建 live 兼容链接。`bootstrap --dry
 旧实体后，才运行真实 bootstrap：
 
 ```bash
+pointer_sha_before="$(shasum -a 256 recognition-models/registry/bundles/CURRENT.json | awk '{print $1}')"
 python scripts/bootstrap_local_assets.py
 python scripts/bootstrap_local_assets.py --dry-run
 python scripts/bootstrap_local_assets.py
+python -m src.models.bundle verify --bundle-id prod_v4_best_r1
 python -m src.models.bundle verify --bundle-id prod_20260805_v5_r1
+test "$pointer_sha_before" = "$(shasum -a 256 recognition-models/registry/bundles/CURRENT.json | awk '{print $1}')"
 ```
 
 首次真实运行必须退出 0，全部 13 项只能是 `created` 或 `unchanged`，且不得有
 `conflict`。随后 dry-run 和再次真实运行都必须退出 0、全部 13 项为 `unchanged`。
-只有 bootstrap 成功后才执行生产 bundle 校验。
+只有 bootstrap 成功后才执行 bundle CLI：当前 `prod_v4_best_r1` 和上一个/回滚
+`prod_20260805_v5_r1` 都必须通过。全流程前后 `CURRENT.json` 指针 SHA-256 必须不变，
+本任务不执行生产模型切换。
 
 - [ ] **Step 3: 用中性 SVG 替换来源不可证明的货架照片**
 

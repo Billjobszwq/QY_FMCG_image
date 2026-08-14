@@ -9,10 +9,12 @@ model weights or exported bundles.
 - `foundation/` holds shared foundation-model assets and checkpoints.
 - `registry/` holds local registry metadata and legacy model layouts.
 
-The current production bundle ID is `prod_20260805_v5_r1`. This is metadata only:
-no weights are included here, and neither this document nor the bootstrap changes
-the selected production model. Production switches must remain an explicit,
-separately reviewed operation.
+`registry/bundles/CURRENT.json` is the source of truth for the local selection. It
+currently identifies `prod_v4_best_r1` as the production bundle and
+`prod_20260805_v5_r1` as the previous rollback bundle. Both bundles remain
+machine-local: this extraction uploads or commits neither one, and neither this
+document nor the bootstrap changes the selected production model. Production
+switches must remain an explicit, separately reviewed operation.
 
 Bootstrap the local zones and compatibility links, then verify them without making
 changes:

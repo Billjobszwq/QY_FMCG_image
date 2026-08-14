@@ -94,7 +94,9 @@ TaaS by Agent Operation/
 
 以下资产只放入 `recognition-models/`，由 `.gitignore` 硬性排除：
 
-- 当前生产 bundle `prod_20260805_v5_r1`；
+- 以 `registry/bundles/CURRENT.json` 为选择状态的唯一事实源：当前生产 bundle 为
+  `prod_v4_best_r1`，上一个/回滚 bundle 为 `prod_20260805_v5_r1`；两者都只作为本地资产，
+  本次剥离不上传权重、不修改 `CURRENT.json`、不执行模型切换；
 - 候选 detector、classifier、segmenter 和 VLM adapter；
 - YOLO 基础权重和 SAM checkpoint；
 - 历史可恢复权重。
