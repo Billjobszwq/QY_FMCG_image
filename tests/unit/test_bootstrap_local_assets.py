@@ -154,6 +154,40 @@ def test_correct_relative_symlink_is_unchanged(tmp_path: Path) -> None:
     assert os.readlink(legacy) == target_path
 
 
+@pytest.mark.parametrize("replacement_kind", ["file", "directory", "wrong_symlink"])
+def test_preflight_unchanged_link_is_reinspected_before_commit(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, replacement_kind: str
+) -> None:
+    root = _make_project_root(tmp_path / "project")
+    target = root / EXPECTED_LEGACY_LINKS[".models"]
+    target.mkdir(parents=True)
+    legacy = root / ".models"
+    legacy.symlink_to(EXPECTED_LEGACY_LINKS[".models"])
+    original_preflight = bootstrap_module._preflight
+
+    def replace_after_preflight(project_root: Path) -> list[dict[str, str]]:
+        plan = original_preflight(project_root)
+        legacy.unlink()
+        if replacement_kind == "file":
+            legacy.write_text("racer", encoding="utf-8")
+        elif replacement_kind == "directory":
+            legacy.mkdir()
+        else:
+            legacy.symlink_to("wrong-target")
+        return plan
+
+    monkeypatch.setattr(bootstrap_module, "_preflight", replace_after_preflight)
+
+    payload = bootstrap_local_assets(root)
+
+    assert payload["ok"] is False
+    assert payload["error"] is None
+    assert [(result["legacy_path"], result["status"]) for result in payload["results"]] == [
+        (".models", "conflict")
+    ]
+    assert not (root / ".sam_checkpoints").exists()
+
+
 @pytest.mark.parametrize("link_target", ["elsewhere", "missing/place"])
 def test_wrong_or_broken_symlink_is_a_conflict_without_replacement(
     tmp_path: Path, link_target: str
@@ -301,6 +335,37 @@ def test_concurrent_legacy_creation_is_rechecked_and_preserved(
         (".models", "conflict")
     ]
     assert (root / ".models").read_text(encoding="utf-8") == "racer"
+    assert not (root / ".sam_checkpoints").exists()
+
+
+def test_disappearing_file_exists_race_returns_structured_operational_error(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    root = _make_project_root(tmp_path / "project")
+
+    def competitor_disappears(
+        path: Path, target: str | Path, target_is_directory: bool = False
+    ) -> None:
+        raise FileExistsError("competitor disappeared")
+
+    monkeypatch.setattr(Path, "symlink_to", competitor_disappears)
+
+    exit_code = bootstrap_module.main(["--root", str(root)])
+    captured = capsys.readouterr()
+    payload = json.loads(captured.out)
+
+    assert exit_code == 2
+    assert payload["ok"] is False
+    assert payload["error"] == {
+        "type": "RaceLostError",
+        "message": "legacy path disappeared after FileExistsError: .models",
+    }
+    assert [(result["legacy_path"], result["status"]) for result in payload["results"]] == [
+        (".models", "error")
+    ]
+    assert not (root / ".models").exists()
     assert not (root / ".sam_checkpoints").exists()
 
 

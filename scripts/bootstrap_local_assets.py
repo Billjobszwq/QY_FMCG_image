@@ -31,6 +31,10 @@ class InvalidProjectRootError(RuntimeError):
     """Raised when --root is not recognizably this project's repository root."""
 
 
+class RaceLostError(RuntimeError):
+    """Raised when a competing filesystem entry disappears during commit."""
+
+
 def _resolved_root(root: Path | str | None) -> Path:
     candidate = Path(__file__).resolve().parents[1] if root is None else Path(root)
     return candidate.expanduser().resolve()
@@ -229,9 +233,37 @@ def _mutate(root: Path, plan: list[dict[str, str]], *, dry_run: bool) -> dict[st
     for planned in plan:
         legacy_path = planned["legacy_path"]
         target_path = planned["target_path"]
-        if planned["status"] == "unchanged":
-            journal.append(planned)
+
+        try:
+            precommit_target_conflict = _target_conflict(root, target_path)
+            precommit = _inspect_legacy(
+                root, legacy_path, target_path, precommit_target_conflict
+            )
+        except (OSError, RuntimeError) as exc:
+            journal.append(_operation_error_result(legacy_path, target_path, exc))
+            return _payload(
+                root,
+                dry_run=False,
+                results=journal,
+                error=_error(exc),
+            )
+        if precommit["status"] == "unchanged":
+            journal.append(precommit)
             continue
+        if precommit["status"] == "conflict":
+            journal.append(precommit)
+            return _payload(root, dry_run=False, results=journal)
+        if planned["status"] == "unchanged":
+            exc = RaceLostError(
+                f"unchanged legacy path disappeared before commit: {legacy_path}"
+            )
+            journal.append(_operation_error_result(legacy_path, target_path, exc))
+            return _payload(
+                root,
+                dry_run=False,
+                results=journal,
+                error=_error(exc),
+            )
 
         try:
             target_conflict = _ensure_target_directory(root, target_path)
@@ -294,7 +326,19 @@ def _mutate(root: Path, plan: list[dict[str, str]], *, dry_run: bool) -> dict[st
             journal.append(raced)
             if raced["status"] == "unchanged":
                 continue
-            return _payload(root, dry_run=False, results=journal)
+            if raced["status"] == "conflict":
+                return _payload(root, dry_run=False, results=journal)
+            journal.pop()
+            exc = RaceLostError(
+                f"legacy path disappeared after FileExistsError: {legacy_path}"
+            )
+            journal.append(_operation_error_result(legacy_path, target_path, exc))
+            return _payload(
+                root,
+                dry_run=False,
+                results=journal,
+                error=_error(exc),
+            )
         except (OSError, RuntimeError) as exc:
             journal.append(_operation_error_result(legacy_path, target_path, exc))
             return _payload(
