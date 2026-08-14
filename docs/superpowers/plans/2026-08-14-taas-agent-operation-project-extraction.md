@@ -214,7 +214,7 @@ def scan_blob(path: str, raw: bytes) -> list[Finding]:
             if pattern.search(text):
                 findings.append(Finding(path, content_rule, "forbidden tracked content"))
         for match in URI_CREDENTIALS.finditer(text):
-            if not is_placeholder(match.group(1)) and not is_placeholder(match.group(2)):
+            if not is_placeholder(match.group(1)) or not is_placeholder(match.group(2)):
                 findings.append(Finding(path, "credential-pattern", "URI embeds credentials"))
     return findings
 

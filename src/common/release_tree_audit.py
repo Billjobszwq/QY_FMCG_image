@@ -179,7 +179,7 @@ def _is_placeholder(value: str) -> bool:
 
 def _has_uri_credentials(content: str) -> bool:
     return any(
-        not _is_placeholder(match.group(1)) and not _is_placeholder(match.group(2))
+        not _is_placeholder(match.group(1)) or not _is_placeholder(match.group(2))
         for match in _URI_CREDENTIALS.finditer(content)
     )
 

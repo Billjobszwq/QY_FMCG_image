@@ -267,6 +267,23 @@ def test_audit_paths_finds_embedded_uri_credentials(tmp_path: Path, scheme: str)
 @pytest.mark.parametrize(
     ("user", "password"),
     [
+        ("user", "real-password"),
+        ("alice", "password"),
+    ],
+)
+def test_audit_paths_rejects_mixed_placeholder_uri_credentials(
+    tmp_path: Path, user: str, password: str
+) -> None:
+    _write(tmp_path, "docs/config.txt", _credential_uri(user=user, password=password))
+
+    assert [finding.rule for finding in audit_paths(tmp_path, ["docs/config.txt"])] == [
+        "credential-pattern"
+    ]
+
+
+@pytest.mark.parametrize(
+    ("user", "password"),
+    [
         ("user", "password"),
         ("username", "changeme"),
         ("example-user", "example-password"),
