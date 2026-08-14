@@ -16,7 +16,7 @@
 - Source repository: `/Users/zhangweiqi/Documents/QY/项目/LLM-Image`
 - Create repository: `/Users/zhangweiqi/Documents/QY/TaaS by Agent Operation`
 
-- [ ] **Step 1: 记录源基线和源码清单**
+- [x] **Step 1: 记录源基线和源码清单**
 
 ```bash
 git -C '/Users/zhangweiqi/Documents/QY/项目/LLM-Image' rev-parse HEAD
@@ -25,7 +25,7 @@ git -C '/Users/zhangweiqi/Documents/QY/项目/LLM-Image' ls-files 'src/**' 'web/
 
 Expected: HEAD 包含设计文档提交 `cef2998e`。
 
-- [ ] **Step 2: 克隆到指定目录并创建分支**
+- [x] **Step 2: 克隆到指定目录并创建分支**
 
 ```bash
 git clone --no-hardlinks '/Users/zhangweiqi/Documents/QY/项目/LLM-Image' '/Users/zhangweiqi/Documents/QY/TaaS by Agent Operation'
@@ -35,7 +35,7 @@ git -C '/Users/zhangweiqi/Documents/QY/TaaS by Agent Operation' switch -c codex/
 
 Expected: 新目录 HEAD 与源目录 HEAD 相同，`origin` 只指向 GitHub。
 
-- [ ] **Step 3: 核对模块数**
+- [x] **Step 3: 核对模块数**
 
 ```bash
 test "$(rg --files src -g '*.py' | wc -l | tr -d ' ')" = 272
@@ -53,7 +53,7 @@ Expected: 四个断言全部通过。
 - Create: `scripts/audit_release_tree.py`
 - Create: `tests/unit/test_release_tree_audit.py`
 
-- [ ] **Step 1: 写禁止路径、内容和 index 绕过的红测试**
+- [x] **Step 1: 写禁止路径、内容和 index 绕过的红测试**
 
 ```python
 TRACKED_PATH_CASES = {
@@ -99,13 +99,13 @@ def test_scanner_and_test_sources_are_self_clean():
 
 测试必须同时覆盖每个新增后缀的大小写、`.env.example` 占位连接串、含 NUL 和无效 UTF-8 的 blob、暂存凭据但工作树已改回安全文本、工作树已删除但 index 仍保留 blob、symlink、gitlink、非零 stage、`cat-file` 失败和确定性 JSON/CLI 退出码。所有禁止 marker 都由片段拼接；不得在 scanner 或测试源码中写入会被自身规则命中的完整负例。
 
-- [ ] **Step 2: 运行红测试**
+- [x] **Step 2: 运行红测试**
 
 Run: `pytest tests/unit/test_release_tree_audit.py -q`
 
 Expected: FAIL，因为 `src.common.release_tree_audit` 尚不存在。
 
-- [ ] **Step 3: 实现审计器和 CLI**
+- [x] **Step 3: 实现审计器和 CLI**
 
 ```python
 ALLOWED_LOCAL_DOCS = {
@@ -278,7 +278,7 @@ def findings_as_json(findings: Sequence[Finding]) -> str:
 
 规则区分可提交的三个 `README.md` 和目录内被禁止的资产实体。发布审计只遍历 Git index，因此不读取被忽略的本地训练数据，但必须扫描每个 index blob 的实际字节，而不是可被修改或删除的工作树副本。任何 tracked 文件（包括 scanner 和测试）都不得全局豁免；symlink、gitlink、非零 stage、缺失或不可读 blob 都必须 fail closed 并生成 finding。
 
-- [ ] **Step 4: 跑绿测试并提交**
+- [x] **Step 4: 跑绿测试并提交**
 
 ```bash
 pytest tests/unit/test_release_tree_audit.py -q
@@ -299,7 +299,7 @@ Expected: 测试 PASS；CLI 在清理前精确报出现有违规文件。
 - Create: `scripts/bootstrap_local_assets.py`
 - Create: `tests/unit/test_bootstrap_local_assets.py`
 
-- [ ] **Step 1: 写链接映射红测试**
+- [x] **Step 1: 写链接映射红测试**
 
 ```python
 LEGACY_LINKS = {
@@ -319,13 +319,13 @@ LEGACY_LINKS = {
 }
 ```
 
-- [ ] **Step 2: 运行红测试**
+- [x] **Step 2: 运行红测试**
 
 Run: `pytest tests/unit/test_bootstrap_local_assets.py -q`
 
 Expected: FAIL，bootstrap 脚本尚不存在。
 
-- [ ] **Step 3: 实现幂等 bootstrap 脚本和忽略白名单**
+- [x] **Step 3: 实现幂等 bootstrap 脚本和忽略白名单**
 
 bootstrap 只创建相对符号链接，不覆盖真实文件；支持 `--dry-run` 和 JSON 输出。`.gitignore` 加入：
 
@@ -338,7 +338,7 @@ runtime/**
 !runtime/README.md
 ```
 
-- [ ] **Step 4: 跑绿测试并提交**
+- [x] **Step 4: 跑绿测试并提交**
 
 ```bash
 pytest tests/unit/test_bootstrap_local_assets.py -q
@@ -358,7 +358,7 @@ Task 4 只归档 38 个静态资产映射（原 43 个映射中排除 5 个正�
 运行时/用户状态，仅保留在旧工作区，不复制到新工作区。执行归档时不停止任何服务。
 新工作区的 `runtime/` 分区仍保留，仅用于未来在新工作区中清洁生成的运行时状态以及下述静态旧项目资产。
 
-- [ ] **Step 1: 用 macOS APFS `cp -cR` 归档训练数据**
+- [x] **Step 1: 用 macOS APFS `cp -cR` 归档训练数据**
 
 ```text
 原始照片目录与 xlsx                       -> training-data/raw/
@@ -371,7 +371,7 @@ crop_dataset*/cropped_images/batch3_gray/    -> training-data/processed/
 .micro_gold*/.data_protocol/.eval/.sam_runs/ -> training-data/evaluation/
 ```
 
-- [ ] **Step 2: 归档识别模型**
+- [x] **Step 2: 归档识别模型**
 
 ```text
 .models/             -> recognition-models/registry/
@@ -380,7 +380,7 @@ crop_dataset*/cropped_images/batch3_gray/    -> training-data/processed/
 best/                -> recognition-models/candidates/legacy-best/
 ```
 
-- [ ] **Step 3: 仅归档静态旧项目资产**
+- [x] **Step 3: 仅归档静态旧项目资产**
 
 ```text
 UI风格设计-1/          -> runtime/legacy-project-assets/ui-design/
@@ -392,7 +392,7 @@ requirements-lock.txt   -> runtime/legacy-project-assets/requirements-lock.txt
 `.env`/`.env.*`、`.venv*`、`node_modules`、`__pycache__`、`.pytest_cache`、`.DS_Store`、`.claude`、`.gstack`
 和异常 `~/`。这些排除项不会先复制后删除，而是在复制边界直接过滤。
 
-- [ ] **Step 4: 校验归档并只读预演兼容链接**
+- [x] **Step 4: 校验归档并只读预演兼容链接**
 
 ```bash
 python scripts/bootstrap_local_assets.py --dry-run
@@ -411,6 +411,22 @@ Task 4 只归档和校验资产，不创建 live 兼容链接。`bootstrap --dry
 `.datasets_nextgen`、`.micro_gold_v2`、`.data_protocol` 真实目录；三者必须明确报告为
 `conflict`。Expected: `CURRENT.json` 指针未变，当前和上一个 bundle 的直接 manifest
 验证都通过；资产实体全部被 Git 忽略；工作树不新增任何兼容链接。
+
+- [x] **Step 5: 将资产内部绝对符号链接规范化为可移植相对链接**
+
+先用 38 个资产映射构建“旧源前缀 → 新本地分区”的最长前缀映射，完成全量 dry-run；
+只有在每条旧链接当前可解析、新目标存在且解析到 `training-data/**` 时才允许改写。
+改写前在 `.git/taas-extraction/assets/` 生成权限仅限当前用户的详细回滚计划和完成日志；
+每条链接在同目录创建临时相对链接，立即重验原始 raw target 和 precondition fingerprint 后
+用 `os.replace` 原子替换，不替换真实文件或目录。
+
+Hard gates: 归档分区内部符号链接总数精确为 92,905，其中绝对链接、断链、解析到
+新项目外和解析到 `training-data/**` 外的数量都必须为 0；不得有额外未分类链接或遗留临时项。
+在不创建 live 兼容链接的前提下，等价验证 `.datasets`、`.datasets_nextgen`、`.training_data` 和
+`.batch3_clean` 四个未来入口的代表性读取都保持在新项目 `training-data/**` 内。
+
+详细文件名、旧 raw target、改写计划和每条完成记录只保留在本地 `.git` 证据区，
+不进入 Git。最终发布记录只携带脱敏的聚合计数、journal SHA-256 和本地验证报告 SHA-256。
 
 ### Task 5: 清理新 Git 文件树中的用户数据和运行证据
 
@@ -449,6 +465,9 @@ test "$pointer_sha_before" = "$(shasum -a 256 recognition-models/registry/bundle
 只有 bootstrap 成功后才执行 bundle CLI：当前 `prod_v4_best_r1` 和上一个/回滚
 `prod_20260805_v5_r1` 都必须通过。全流程前后 `CURRENT.json` 指针 SHA-256 必须不变，
 本任务不执行生产模型切换。
+在 bootstrap 之后再次全量扫描：38 个归档分区内部链接仍必须为 92,905 条，绝对、断链、
+解析到项目外和解析到 `training-data/**` 外的数量仍必须为 0；bootstrap 新建的 13 条
+顶层兼容链接必须全部为相对链接且解析在新项目内。
 
 - [ ] **Step 3: 用中性 SVG 替换来源不可证明的货架照片**
 
