@@ -53,7 +53,7 @@ Expected: 四个断言全部通过。
 - Create: `scripts/audit_release_tree.py`
 - Create: `tests/unit/test_release_tree_audit.py`
 
-- [ ] **Step 1: 写禁止路径和内容的红测试**
+- [ ] **Step 1: 写禁止路径、内容和 index 绕过的红测试**
 
 ```python
 TRACKED_PATH_CASES = {
@@ -63,15 +63,41 @@ TRACKED_PATH_CASES = {
     "training-data/raw/photo.jpg": "training-data-entity",
     "recognition-models/production/model.pt": "model-weight",
     "runtime/platform.sqlite3": "runtime-state",
-    "docs/demo/customer.xlsx": "business-data-file",
+    "docs/demo/customer.xlsx": "forbidden-binary-or-business-data",
+    ".env.production": "credential-file",
+    "secrets/service.pem": "credential-file",
+    "exports/cookies-browser.json": "credential-file",
 }
+
+github_token = "gh" + "p_" + "a_" + "b" * 18
+aws_key = "AK" + "IA" + "1234567890ABCDEF"
+private_key_marker = "BEGIN " + "PRIVATE" + " KEY"
+legacy_path = "/" + "/".join(["Users", "developer name", "Documents", "QY", "项目", "LLM-Image"])
+credential_uri = "postgresql" + ":" + "//" + "alice:real-password@host/db"
 TRACKED_CONTENT_CASES = {
-    "TOKEN=ghp_example": "credential-pattern",
-    "/Users/zhangweiqi/Documents/QY/项目/LLM-Image": "legacy-absolute-path",
-    '\"trace_id\":\"tr-real-example\"': "runtime-evidence",
-    '\"created_by\":\"admin\"': "runtime-evidence",
+    github_token: "credential-pattern",
+    aws_key: "credential-pattern",
+    private_key_marker: "credential-pattern",
+    credential_uri: "credential-pattern",
+    legacy_path + '\",': "legacy-absolute-path",
+    json.dumps({"trace" + "_id": "tr-real-example"}): "runtime-evidence",
+    json.dumps({"created" + "_by": "admin"}): "runtime-evidence",
 }
+
+NEW_BLOCKED_SUFFIXES = {
+    ".mp4", ".mov", ".avi", ".mkv", ".wav", ".mp3", ".m4a",
+    ".webp", ".gif", ".zip", ".tar", ".gz", ".bz2", ".7z", ".rar",
+    ".ckpt", ".bin", ".engine", ".npy", ".npz", ".parquet",
+}
+
+def test_scanner_and_test_sources_are_self_clean():
+    assert audit_paths(
+        REPO_ROOT,
+        ["src/common/release_tree_audit.py", "tests/unit/test_release_tree_audit.py"],
+    ) == []
 ```
+
+测试必须同时覆盖每个新增后缀的大小写、`.env.example` 占位连接串、含 NUL 和无效 UTF-8 的 blob、暂存凭据但工作树已改回安全文本、工作树已删除但 index 仍保留 blob、symlink、gitlink、非零 stage、`cat-file` 失败和确定性 JSON/CLI 退出码。所有禁止 marker 都由片段拼接；不得在 scanner 或测试源码中写入会被自身规则命中的完整负例。
 
 - [ ] **Step 2: 运行红测试**
 
@@ -100,12 +126,33 @@ BLOCKED_ROOTS = {
 BLOCKED_SUFFIXES = {
     ".pt", ".pth", ".onnx", ".safetensors", ".sqlite", ".sqlite3",
     ".db", ".xlsx", ".xls", ".csv", ".jsonl", ".jpg", ".jpeg", ".png",
+    ".mp4", ".mov", ".avi", ".mkv", ".wav", ".mp3", ".m4a",
+    ".webp", ".gif", ".zip", ".tar", ".gz", ".bz2", ".7z", ".rar",
+    ".ckpt", ".bin", ".engine", ".npy", ".npz", ".parquet",
 }
+PRIVATE_KEY_WORDS = "PRIVATE" + " KEY"
 CONTENT_RULES = (
-    ("credential-pattern", re.compile(r"gh[pousr]_[A-Za-z0-9_]{20,}|AKIA[0-9A-Z]{16}|BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY")),
+    ("credential-pattern", re.compile(r"gh[pousr]_[A-Za-z0-9_]{20,}")),
+    ("credential-pattern", re.compile(r"AKIA[0-9A-Z]{16}")),
+    ("credential-pattern", re.compile(rf"BEGIN (?:(?:RSA|EC|OPENSSH) )?{PRIVATE_KEY_WORDS}")),
     ("legacy-absolute-path", re.compile(r"/Users/[^/]+/Documents/QY/项目/LLM-Image")),
-    ("runtime-evidence", re.compile(r'"(?:trace_id|created_by|file_count)"\\s*:')),
+    ("runtime-evidence", re.compile(r'"(?:trace_id|created_by|file_count)"\s*:')),
 )
+URI_CREDENTIALS = re.compile(
+    r"\b[A-Za-z][A-Za-z0-9+.-]*:" + r"//" + r"([^\s/:@]+):([^\s/@]+)@"
+)
+PLACEHOLDER_VALUES = {
+    "user", "username", "password", "changeme", "example-user",
+    "example-password", "your-user", "your-password", "replace-me",
+}
+
+def is_placeholder(value: str) -> bool:
+    normalized = value.strip().lower()
+    return (
+        normalized in PLACEHOLDER_VALUES
+        or normalized.startswith(("${", "{{", "<"))
+        or "placeholder" in normalized
+    )
 
 @dataclass(frozen=True)
 class Finding:
@@ -113,52 +160,123 @@ class Finding:
     rule: str
     detail: str
 
+@dataclass(frozen=True)
+class IndexEntry:
+    mode: str
+    object_id: str
+    stage: int
+    path: str
+
 def blocked_path_rule(path: PurePosixPath) -> str | None:
     raw_path = path.as_posix()
     if raw_path in ALLOWED_LOCAL_DOCS:
         return None
+    name = path.name
+    lower_name = name.lower()
+    if name != ".env.example" and (
+        lower_name == ".env"
+        or lower_name.startswith(".env.")
+        or path.suffix.lower() in {".pem", ".key"}
+        or re.fullmatch(r"(?:credentials|cookies).*\.json", lower_name)
+    ):
+        return "credential-file"
     if path.parts and path.parts[0] in BLOCKED_ROOTS:
         return BLOCKED_ROOTS[path.parts[0]]
     if path.suffix.lower() in BLOCKED_SUFFIXES:
         return "forbidden-binary-or-business-data"
     if "/execution/evidence/" in f"/{raw_path}" or "before-snapshots" in path.parts or "after-snapshots" in path.parts:
         return "runtime-evidence"
-    if path.name in {"EXECUTION-LOG.md", "FINAL-REPORT.md", "STATUS.md"} and "implementation" in path.parts:
+    if path.parts[:2] == ("docs", "implementation") and path.name in {"EXECUTION-LOG.md", "FINAL-REPORT.md", "STATUS.md"}:
         return "runtime-evidence"
     return None
+
+def parse_index_entries(raw: bytes) -> list[IndexEntry]:
+    entries = []
+    for record in raw.split(b"\0"):
+        if not record:
+            continue
+        metadata, encoded_path = record.split(b"\t", 1)
+        mode, object_id, stage = metadata.decode("ascii").split(" ")
+        entries.append(IndexEntry(mode, object_id, int(stage), encoded_path.decode("utf-8")))
+    return entries
+
+def scan_blob(path: str, raw: bytes) -> list[Finding]:
+    findings: list[Finding] = []
+    if b"\0" in raw:
+        return [Finding(path, "unclassified-binary", "tracked blob contains NUL bytes")]
+    try:
+        text = raw.decode("utf-8")
+    except UnicodeDecodeError:
+        text = raw.decode("utf-8", errors="ignore")
+        findings.append(Finding(path, "unclassified-binary", "tracked blob is not valid UTF-8 text"))
+    if len(raw) <= 2_000_000:
+        for content_rule, pattern in CONTENT_RULES:
+            if pattern.search(text):
+                findings.append(Finding(path, content_rule, "forbidden tracked content"))
+        for match in URI_CREDENTIALS.finditer(text):
+            if not is_placeholder(match.group(1)) and not is_placeholder(match.group(2)):
+                findings.append(Finding(path, "credential-pattern", "URI embeds credentials"))
+    return findings
 
 def audit_paths(root: Path, tracked_paths: Iterable[str]) -> list[Finding]:
     findings: list[Finding] = []
     for raw_path in sorted(set(tracked_paths)):
         path = PurePosixPath(raw_path)
-        rule = blocked_path_rule(path)
-        if rule:
-            findings.append(Finding(raw_path, rule, "tracked path is forbidden"))
+        path_rule = blocked_path_rule(path)
+        if path_rule:
+            findings.append(Finding(raw_path, path_rule, "tracked path is forbidden"))
+        try:
+            raw = (root / path).read_bytes()
+        except OSError:
+            findings.append(Finding(raw_path, "audit-read-error", "file cannot be read"))
             continue
-        disk_path = root / path
-        is_negative_fixture = raw_path == "tests/unit/test_release_tree_audit.py"
-        if not is_negative_fixture and disk_path.is_file() and disk_path.stat().st_size <= 2_000_000:
-            text = disk_path.read_text(encoding="utf-8", errors="ignore")
-            for content_rule, pattern in CONTENT_RULES:
-                if pattern.search(text):
-                    findings.append(Finding(raw_path, content_rule, "forbidden tracked content"))
-    return findings
+        findings.extend(scan_blob(raw_path, raw))
+    return sorted(set(findings), key=lambda item: (item.path, item.rule, item.detail))
+
+def read_index_blob(root: Path, object_id: str) -> tuple[bytes | None, str | None]:
+    try:
+        completed = subprocess.run(
+            ["git", "-C", str(root), "cat-file", "blob", object_id],
+            check=False,
+            capture_output=True,
+        )
+    except OSError as exc:
+        return None, str(exc)
+    if completed.returncode != 0:
+        return None, completed.stderr.decode("utf-8", errors="replace")
+    return completed.stdout, None
 
 def audit_git_tree(root: Path) -> list[Finding]:
     completed = subprocess.run(
-        ["git", "-C", str(root), "ls-files", "-z"],
+        ["git", "-C", str(root), "ls-files", "--stage", "-z", "--"],
         check=True,
         capture_output=True,
     )
-    tracked = [item.decode("utf-8") for item in completed.stdout.split(b"\\0") if item]
-    return audit_paths(root, tracked)
+    findings: list[Finding] = []
+    for entry in parse_index_entries(completed.stdout):
+        path_rule = blocked_path_rule(PurePosixPath(entry.path))
+        if path_rule:
+            findings.append(Finding(entry.path, path_rule, "tracked path is forbidden"))
+        if entry.stage != 0:
+            findings.append(Finding(entry.path, "unmerged-index-entry", "nonzero index stage"))
+        if entry.mode == "160000":
+            findings.append(Finding(entry.path, "gitlink", "tracked Git submodule link"))
+            continue
+        blob, read_error = read_index_blob(root, entry.object_id)
+        if blob is None:
+            findings.append(Finding(entry.path, "audit-read-error", read_error or "index blob cannot be read"))
+            continue
+        findings.extend(scan_blob(entry.path, blob))
+        if entry.mode == "120000":
+            findings.append(Finding(entry.path, "tracked-symlink", "tracked symbolic link"))
+    return sorted(set(findings), key=lambda item: (item.path, item.rule, item.detail))
 
 def findings_as_json(findings: Sequence[Finding]) -> str:
     payload = {"ok": not findings, "finding_count": len(findings), "findings": [asdict(item) for item in findings]}
     return json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True)
 ```
 
-规则区分可提交的三个 `README.md` 和目录内被禁止的资产实体；只扫描 `git ls-files`，不读取被忽略的本地训练数据。
+规则区分可提交的三个 `README.md` 和目录内被禁止的资产实体。发布审计只遍历 Git index，因此不读取被忽略的本地训练数据，但必须扫描每个 index blob 的实际字节，而不是可被修改或删除的工作树副本。任何 tracked 文件（包括 scanner 和测试）都不得全局豁免；symlink、gitlink、非零 stage、缺失或不可读 blob 都必须 fail closed 并生成 finding。
 
 - [ ] **Step 4: 跑绿测试并提交**
 
