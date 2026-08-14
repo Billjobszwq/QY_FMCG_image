@@ -92,6 +92,15 @@ _CREDENTIAL_PATTERNS = (
 )
 _LEGACY_ABSOLUTE_PATH = re.compile(r"/Users/[^/\r\n]+/Documents/QY/项目/LLM-Image")
 _RUNTIME_JSON_KEY = re.compile(r'"(?:trace_id|created_by|file_count)"\s*:')
+_RUNTIME_SCHEMA_SOURCE_ROOTS = {"src", "tests", "scripts", "web"}
+_ARCHITECTURE_DOC_PREFIXES = (
+    ("docs", "architecture"),
+    ("docs", "decisions"),
+    ("docs", "design"),
+    ("docs", "implementation"),
+    ("docs", "superpowers", "plans"),
+    ("docs", "superpowers", "specs"),
+)
 _URI_CREDENTIALS = re.compile(
     r"\b[A-Za-z][A-Za-z0-9+.-]*:" + r"//" + r"([^\s/:@]+):([^\s/@]+)@"
 )
@@ -184,6 +193,15 @@ def _has_uri_credentials(content: str) -> bool:
     )
 
 
+def _allows_runtime_schema_definition(relative_path: str) -> bool:
+    path = PurePosixPath(relative_path)
+    if path.parts and path.parts[0] in _RUNTIME_SCHEMA_SOURCE_ROOTS:
+        return True
+    return path.suffix.lower() == ".md" and any(
+        path.parts[: len(prefix)] == prefix for prefix in _ARCHITECTURE_DOC_PREFIXES
+    )
+
+
 def _text_findings(relative_path: str, content: str) -> list[Finding]:
     findings: list[Finding] = []
     if any(pattern.search(content) for pattern in _CREDENTIAL_PATTERNS) or _has_uri_credentials(
@@ -200,7 +218,9 @@ def _text_findings(relative_path: str, content: str) -> list[Finding]:
                 "text contains an absolute path to the legacy repository",
             )
         )
-    if _RUNTIME_JSON_KEY.search(content):
+    if _RUNTIME_JSON_KEY.search(content) and not _allows_runtime_schema_definition(
+        relative_path
+    ):
         findings.append(
             Finding(relative_path, "runtime-evidence", "text contains a runtime evidence JSON key")
         )

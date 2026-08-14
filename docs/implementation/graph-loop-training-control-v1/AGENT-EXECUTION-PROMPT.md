@@ -1,12 +1,12 @@
 # 给实施 Agent 的完整提示词
 
-你现在是 `/Users/zhangweiqi/Documents/QY/项目/LLM-Image` 的主实施 Agent。不要只给我建议或再写一份空泛方案；请在严格门禁下完成“标注—过滤—四数据集—四训练通道—统一 Web 控制台”的真实机器侧框架建设，并保证系统在本机可启动、可查看、可 dry-run、可审计。真实全量训练和 production 切换不在本轮默认授权内。
+你现在是 `<legacy-workspace>` 的主实施 Agent。不要只给我建议或再写一份空泛方案；请在严格门禁下完成“标注—过滤—四数据集—四训练通道—统一 Web 控制台”的真实机器侧框架建设，并保证系统在本机可启动、可查看、可 dry-run、可审计。真实全量训练和 production 切换不在本轮默认授权内。
 
 ## 一、先完整阅读，禁止只读摘要
 
 按顺序完整阅读：
 
-1. `/Users/zhangweiqi/.local/share/ai-workflow/routing/GLOBAL_AGENT_ROUTING.md`
+1. `<ai-workflow-root>/routing/GLOBAL_AGENT_ROUTING.md`
 2. `docs/CODEX-PROJECT-HANDBOOK.md`
 3. `docs/implementation/graph-loop-training-control-v1/00-READ-ME-FIRST.md`
 4. `docs/implementation/graph-loop-training-control-v1/01-ARCHITECTURE-AND-CONTRACTS.md`

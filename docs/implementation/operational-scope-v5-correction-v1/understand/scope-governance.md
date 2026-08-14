@@ -22,7 +22,7 @@
 
 ## Findings
 ## Repo state
-Project root `/Users/zhangweiqi/Documents/QY/项目/LLM-Image`, branch `feat/nextgen-training-cycle-v2`, HEAD `8e31708d` = OSV5 T10 governance-closure commit; tracked tree clean. All V5 issues OSV5-001…012 marked CLOSED; current `.eval/scope_v5/gate.json` = READY_FOR_REAL_DATA_UAT, evaluator 3.2.0, bound to source_commit 8e31708d with db_fingerprint.
+Project root `<legacy-workspace>`, branch `feat/nextgen-training-cycle-v2`, HEAD `8e31708d` = OSV5 T10 governance-closure commit; tracked tree clean. All V5 issues OSV5-001…012 marked CLOSED; current `.eval/scope_v5/gate.json` = READY_FOR_REAL_DATA_UAT, evaluator 3.2.0, bound to source_commit 8e31708d with db_fingerprint.
 
 ## 1. data_scope model (operational / uat_fixture / quarantine)
 - V2 (uat-scope-isolation-v2, `01-EXECUTION-SCOPE-CONTRACT.md`): introduced `ExecutionScopeV1` in `src/platform/scope.py` as single source of truth; domain `operational | uat_fixture | demo_fixture | system | archived`; server-side ScopeResolver only (client may not self-assert operational); resolution order explicit Test Run → parent Run → parent WorkItem → `md_customer_v1` → default operational; runtime `LIKE 'uat%'` name matching banned.

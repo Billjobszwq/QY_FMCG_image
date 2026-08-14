@@ -21,7 +21,7 @@
 
 修改任何文件前，完整阅读：
 
-1. `/Users/zhangweiqi/.local/share/ai-workflow/routing/GLOBAL_AGENT_ROUTING.md`
+1. `<ai-workflow-root>/routing/GLOBAL_AGENT_ROUTING.md`
 2. `docs/CODEX-PROJECT-HANDBOOK.md`
 3. `docs/README.md`
 4. `docs/implementation/candidate-evidence-convergence-and-microgold-v1/` 全部文件
@@ -738,7 +738,7 @@ Micro-Gold V2 构建完成但未导入：
 
 ```
 PYTHONDONTWRITEBYTECODE=1 XONSH_HISTORY_BACKEND=dummy \
-/Users/zhangweiqi/miniconda3/bin/python -m pytest \
+python3 -m pytest \
 -q -p no:cacheprovider -m "not host_mps"
 ```
 
@@ -746,7 +746,7 @@ PYTHONDONTWRITEBYTECODE=1 XONSH_HISTORY_BACKEND=dummy \
 
 ```
 PYTHONDONTWRITEBYTECODE=1 XONSH_HISTORY_BACKEND=dummy \
-/Users/zhangweiqi/miniconda3/bin/python -m pytest \
+python3 -m pytest \
 -q -p no:cacheprovider -m host_mps
 ```
 

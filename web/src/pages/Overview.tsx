@@ -35,7 +35,7 @@ export default function Overview({ health }: { health: HealthBody | null }) {
             等待唯一的人工动作。</p>
         </div>
         <div className="blk img span4">
-          <img src="img/shelf1.jpg" alt="货架实景" />
+          <img src="/img/shelf-demo.svg" alt="货架识别演示占位图" />
         </div>
         <div className="blk c-green span3">
           <h2>Cycle</h2>
@@ -56,7 +56,7 @@ export default function Overview({ health }: { health: HealthBody | null }) {
           <p>条待人工 · LS 项目 22 · 唯一有效入口 · 项目 21 已失效</p>
         </div>
         <div className="blk img span4">
-          <img src="img/shelf2.jpg" alt="货架实景 2" />
+          <img src="/img/shelf-demo.svg" alt="货架识别演示占位图" />
         </div>
         <div className="blk c-blue span4">
           <h2>候选模型</h2>

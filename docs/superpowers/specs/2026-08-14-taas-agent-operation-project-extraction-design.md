@@ -3,8 +3,8 @@
 ## 1. 目标
 
 将截至 2026-08-14 的完整开发状态从
-`/Users/zhangweiqi/Documents/QY/项目/LLM-Image` 剥离到
-`/Users/zhangweiqi/Documents/QY/TaaS by Agent Operation`，后者作为后续开发主目录。
+`<legacy-workspace>` 剥离到
+`<project-root>`，后者作为后续开发主目录。
 
 新目录必须：
 

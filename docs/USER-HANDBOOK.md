@@ -21,7 +21,7 @@
 ## 1. 冷启动（任何角色通用）
 
 ```bash
-cd /Users/zhangweiqi/Documents/QY/项目/LLM-Image
+cd <legacy-workspace>
 ./bin/abos doctor      # 环境体检：Python/DB/dist/端口/无训练进程
 ./bin/abos start       # 幂等启动 8091/8092/8300/8400
 ./bin/abos status      # 四服务应全部 UP

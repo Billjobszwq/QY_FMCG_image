@@ -4,8 +4,8 @@
 feat/nextgen-training-cycle-v2
 untracked_count=32
 --- worktrees ---
-/Users/zhangweiqi/Documents/QY/项目/LLM-Image                                               8e31708d [feat/nextgen-training-cycle-v2]
-/Users/zhangweiqi/Documents/QY/项目/LLM-Image/.claude/worktrees/upbeat-archimedes-158fe1    3f559911 [claude/upbeat-archimedes-158fe1]
+<legacy-workspace>                                               8e31708d [feat/nextgen-training-cycle-v2]
+<legacy-workspace>/.claude/worktrees/upbeat-archimedes-158fe1    3f559911 [claude/upbeat-archimedes-158fe1]
 --- services ---
 [abos] recognize: UP
 [abos] monitor: UP
@@ -16,9 +16,9 @@ untracked_count=32
 [abos] 训练进程：无
 [abos] 看门狗：未运行
 --- training procs ---
-zhangweiqi        5480   0.9  0.2 439081584 253920   ??  S    Mon10PM 260:18.49 omlx-server       
-zhangweiqi       16515   0.0  0.2 412631232 260752   ??  S     1:42PM   0:02.74 /Users/zhangweiqi/miniconda3/bin/python -m src.training.monitor --port 8092
-zhangweiqi        5478   0.0  0.2 435780992 210016   ??  S    Mon10PM  60:34.21 /Applications/oMLX.app/Contents/MacOS/oMLX
+<user>        5480   0.9  0.2 439081584 253920   ??  S    Mon10PM 260:18.49 omlx-server
+<user>       16515   0.0  0.2 412631232 260752   ??  S     1:42PM   0:02.74 python3 -m src.training.monitor --port 8092
+<user>        5478   0.0  0.2 435780992 210016   ??  S    Mon10PM  60:34.21 /Applications/oMLX.app/Contents/MacOS/oMLX
 --- CURRENT bundle ---
 app.pid
 label_studio.pid

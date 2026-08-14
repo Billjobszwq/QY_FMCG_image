@@ -8,7 +8,7 @@
 - 旧 tilt reject 历史 JSON 不改写；本脚本只新建带时间戳证据文件。
 
 用法：
-  /Users/zhangweiqi/miniconda3/bin/python3 -m scripts.run_quality_screen
+  python3 -m scripts.run_quality_screen
 """
 from __future__ import annotations
 

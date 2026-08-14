@@ -12,7 +12,7 @@
 
 ## File Structure
 
-- Create: `/Users/zhangweiqi/.codex/visualizations/2026/08/12/019ff54f-37e2-7631-a034-9764f153b65b/ai-native-business-os-architecture.html` — the complete in-conversation visualization, including all eight diagrams, descriptions, navigation, responsive behavior, and accessibility text.
+- Create: `<visualization-root>/2026/08/12/019ff54f-37e2-7631-a034-9764f153b65b/ai-native-business-os-architecture.html` — the complete in-conversation visualization, including all eight diagrams, descriptions, navigation, responsive behavior, and accessibility text.
 - Create: `docs/promotion/ai-native-business-os-architecture-narrative.md` — durable Chinese presenter narrative, per-diagram explanation, disclosure boundary, and suggested presentation order.
 - Modify: `docs/superpowers/plans/2026-08-12-ai-native-business-os-promotion-architecture.md` — check completed tasks while executing.
 
@@ -86,7 +86,7 @@ git commit -m "docs: add AI native business OS promotion narrative"
 ### Task 2: Build the New Experience and Overall Architecture Diagrams
 
 **Files:**
-- Create: `/Users/zhangweiqi/.codex/visualizations/2026/08/12/019ff54f-37e2-7631-a034-9764f153b65b/ai-native-business-os-architecture.html`
+- Create: `<visualization-root>/2026/08/12/019ff54f-37e2-7631-a034-9764f153b65b/ai-native-business-os-architecture.html`
 
 - [x] **Step 1: Create the visualization shell**
 
@@ -125,8 +125,8 @@ Place `生态连接` and `灵活部署` as side rails rather than core layers. S
 Run:
 
 ```bash
-rg -n '<section|aria-current|scrollIntoView|从提出目标|智能执行与持续进化内核|可信业务底座' /Users/zhangweiqi/.codex/visualizations/2026/08/12/019ff54f-37e2-7631-a034-9764f153b65b/ai-native-business-os-architecture.html
-rg -n 'Qwen|YOLO|SAM|DeepSeek|PostgreSQL|Redis|MinIO|Label Studio|FastAPI|React Flow|localhost|/api/|阈值|提示词|路由策略' /Users/zhangweiqi/.codex/visualizations/2026/08/12/019ff54f-37e2-7631-a034-9764f153b65b/ai-native-business-os-architecture.html
+rg -n '<section|aria-current|scrollIntoView|从提出目标|智能执行与持续进化内核|可信业务底座' <visualization-root>/2026/08/12/019ff54f-37e2-7631-a034-9764f153b65b/ai-native-business-os-architecture.html
+rg -n 'Qwen|YOLO|SAM|DeepSeek|PostgreSQL|Redis|MinIO|Label Studio|FastAPI|React Flow|localhost|/api/|阈值|提示词|路由策略' <visualization-root>/2026/08/12/019ff54f-37e2-7631-a034-9764f153b65b/ai-native-business-os-architecture.html
 ```
 
 Expected: the first command finds the required structure; the second command returns no output.
@@ -134,7 +134,7 @@ Expected: the first command finds the required structure; the second command ret
 ### Task 3: Add the Four Architecture Detail Diagrams
 
 **Files:**
-- Modify: `/Users/zhangweiqi/.codex/visualizations/2026/08/12/019ff54f-37e2-7631-a034-9764f153b65b/ai-native-business-os-architecture.html`
+- Modify: `<visualization-root>/2026/08/12/019ff54f-37e2-7631-a034-9764f153b65b/ai-native-business-os-architecture.html`
 
 - [x] **Step 1: Add diagram 3 — intelligent execution loop**
 
@@ -157,7 +157,7 @@ Draw two connected loops: `业务运行闭环` and `能力升级闭环`. The onl
 Run:
 
 ```bash
-for term in '理解目标' '形成计划' '人机协同' '一个目标跨域完成' '身份与边界' '用量与价值' '人工批准' '不直接改写业务事实'; do rg -q "$term" /Users/zhangweiqi/.codex/visualizations/2026/08/12/019ff54f-37e2-7631-a034-9764f153b65b/ai-native-business-os-architecture.html || exit 1; done
+for term in '理解目标' '形成计划' '人机协同' '一个目标跨域完成' '身份与边界' '用量与价值' '人工批准' '不直接改写业务事实'; do rg -q "$term" <visualization-root>/2026/08/12/019ff54f-37e2-7631-a034-9764f153b65b/ai-native-business-os-architecture.html || exit 1; done
 ```
 
 Expected: exit code 0.
@@ -165,7 +165,7 @@ Expected: exit code 0.
 ### Task 4: Add the Proof Story and Experience Leap Diagrams
 
 **Files:**
-- Modify: `/Users/zhangweiqi/.codex/visualizations/2026/08/12/019ff54f-37e2-7631-a034-9764f153b65b/ai-native-business-os-architecture.html`
+- Modify: `<visualization-root>/2026/08/12/019ff54f-37e2-7631-a034-9764f153b65b/ai-native-business-os-architecture.html`
 
 - [x] **Step 1: Add diagram 7 — industry closed-loop example**
 
@@ -186,7 +186,7 @@ Every SVG must have `role="img"`, a unique `aria-labelledby`, and matching `<tit
 ### Task 5: Render, Inspect, and Harden the Final Visualization
 
 **Files:**
-- Modify: `/Users/zhangweiqi/.codex/visualizations/2026/08/12/019ff54f-37e2-7631-a034-9764f153b65b/ai-native-business-os-architecture.html`
+- Modify: `<visualization-root>/2026/08/12/019ff54f-37e2-7631-a034-9764f153b65b/ai-native-business-os-architecture.html`
 - Modify: `docs/superpowers/plans/2026-08-12-ai-native-business-os-promotion-architecture.md`
 
 - [x] **Step 1: Validate HTML fragment rules**
@@ -194,7 +194,7 @@ Every SVG must have `role="img"`, a unique `aria-labelledby`, and matching `<tit
 Run:
 
 ```bash
-rg -n '<!doctype|<html|<head|<body|fetch\(|XMLHttpRequest|WebSocket|document\.currentScript|\\n|\\"' /Users/zhangweiqi/.codex/visualizations/2026/08/12/019ff54f-37e2-7631-a034-9764f153b65b/ai-native-business-os-architecture.html
+rg -n '<!doctype|<html|<head|<body|fetch\(|XMLHttpRequest|WebSocket|document\.currentScript|\\n|\\"' <visualization-root>/2026/08/12/019ff54f-37e2-7631-a034-9764f153b65b/ai-native-business-os-architecture.html
 ```
 
 Expected: no output.
@@ -204,7 +204,7 @@ Expected: no output.
 Run:
 
 ```bash
-python3 /Users/zhangweiqi/.codex/plugins/cache/openai-bundled/visualize/1.0.20/skills/visualize/scripts/render.py /Users/zhangweiqi/.codex/visualizations/2026/08/12/019ff54f-37e2-7631-a034-9764f153b65b/ai-native-business-os-architecture.html /tmp/ai-native-business-os-architecture-preview.html
+python3 <user-home>/.codex/plugins/cache/openai-bundled/visualize/1.0.20/skills/visualize/scripts/render.py <visualization-root>/2026/08/12/019ff54f-37e2-7631-a034-9764f153b65b/ai-native-business-os-architecture.html /tmp/ai-native-business-os-architecture-preview.html
 ```
 
 Expected: the renderer reports a successfully written standalone HTML file.
@@ -218,8 +218,8 @@ Open the rendered copy at 736px and 360px. Verify: no clipped Chinese labels, no
 Run:
 
 ```bash
-for term in '从提出目标，到获得可验证结果' 'AI 原生业务操作系统总体架构' '智能执行闭环' '可组合业务能力网络' '可信业务底座' '持续进化但始终受控' '行业闭环示例' '从使用软件，走向运营一套会工作的系统'; do rg -q "$term" /Users/zhangweiqi/.codex/visualizations/2026/08/12/019ff54f-37e2-7631-a034-9764f153b65b/ai-native-business-os-architecture.html || exit 1; done
-rg -n 'Qwen|YOLO|SAM|DeepSeek|PostgreSQL|Redis|MinIO|Label Studio|FastAPI|React Flow|localhost|/api/|阈值|提示词|路由策略|数据库表' /Users/zhangweiqi/.codex/visualizations/2026/08/12/019ff54f-37e2-7631-a034-9764f153b65b/ai-native-business-os-architecture.html docs/promotion/ai-native-business-os-architecture-narrative.md
+for term in '从提出目标，到获得可验证结果' 'AI 原生业务操作系统总体架构' '智能执行闭环' '可组合业务能力网络' '可信业务底座' '持续进化但始终受控' '行业闭环示例' '从使用软件，走向运营一套会工作的系统'; do rg -q "$term" <visualization-root>/2026/08/12/019ff54f-37e2-7631-a034-9764f153b65b/ai-native-business-os-architecture.html || exit 1; done
+rg -n 'Qwen|YOLO|SAM|DeepSeek|PostgreSQL|Redis|MinIO|Label Studio|FastAPI|React Flow|localhost|/api/|阈值|提示词|路由策略|数据库表' <visualization-root>/2026/08/12/019ff54f-37e2-7631-a034-9764f153b65b/ai-native-business-os-architecture.html docs/promotion/ai-native-business-os-architecture-narrative.md
 ```
 
 Expected: the loop exits 0 and the final `rg` returns no output.

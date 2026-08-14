@@ -519,18 +519,18 @@ deleted_files=false
 ```text
 你现在负责 LLM-Image 项目的统一框架持续可用建设。不要继续采用“先完成全部 Foundation 再给用户看”的大阶段方式；按照新手册做纵向交付，每个里程碑必须保持系统可启动、可浏览、可执行真实流程。
 
-仓库：/Users/zhangweiqi/Documents/QY/项目/LLM-Image
+仓库：<legacy-workspace>
 当前审计基线：feat/sam-reannotation@c9998af
 
 开工前必须完整阅读，不能只搜索关键词：
-1. /Users/zhangweiqi/Documents/QY/项目/LLM-Image/docs/superpowers/specs/2026-08-04-fmcg-vision-saas-platform-design.md
-2. /Users/zhangweiqi/Documents/QY/项目/LLM-Image/docs/superpowers/plans/2026-08-04-continuous-usable-framework-execution-manual.md
-3. /Users/zhangweiqi/Documents/QY/项目/LLM-Image/docs/CODEX-PROJECT-HANDBOOK.md
-4. /Users/zhangweiqi/Documents/QY/项目/LLM-Image/docs/implementation/sam-reannotation/STATUS.md
-5. /Users/zhangweiqi/Documents/QY/项目/LLM-Image/docs/implementation/sam-reannotation/DECISIONS.md
-6. /Users/zhangweiqi/Documents/QY/项目/LLM-Image/docs/training-history-and-decisions.md
-7. /Users/zhangweiqi/Documents/QY/项目/LLM-Image/docs/superpowers/plans/2026-08-04-git-version-control.md
-8. /Users/zhangweiqi/Documents/QY/项目/LLM-Image/docs/services.json
+1. <legacy-workspace>/docs/superpowers/specs/2026-08-04-fmcg-vision-saas-platform-design.md
+2. <legacy-workspace>/docs/superpowers/plans/2026-08-04-continuous-usable-framework-execution-manual.md
+3. <legacy-workspace>/docs/CODEX-PROJECT-HANDBOOK.md
+4. <legacy-workspace>/docs/implementation/sam-reannotation/STATUS.md
+5. <legacy-workspace>/docs/implementation/sam-reannotation/DECISIONS.md
+6. <legacy-workspace>/docs/training-history-and-decisions.md
+7. <legacy-workspace>/docs/superpowers/plans/2026-08-04-git-version-control.md
+8. <legacy-workspace>/docs/services.json
 
 阅读后先执行只读盘点，再建立：
 docs/implementation/platform-v2/STATUS.md

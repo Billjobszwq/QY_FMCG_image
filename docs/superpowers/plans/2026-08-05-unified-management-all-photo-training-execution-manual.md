@@ -312,7 +312,7 @@ flowchart LR
 
 ### T0：Apple MPS 与训练预检
 
-- 使用 `/Users/zhangweiqi/miniconda3/bin/python`；确认 arm64、torch MPS built/available、矩阵与模型前向。
+- 使用 `python3`；确认 arm64、torch MPS built/available、矩阵与模型前向。
 - AC 电源 + `caffeinate`；不得设置 `PYTORCH_ENABLE_MPS_FALLBACK=1`。
 - 用 100–200 张做 768/960/1024 三档 batch benchmark，选择吞吐/内存最优，不默认 1280。
 - 检查磁盘、run 目录不可覆盖、数据/代码/模型/配置哈希、随机种子、日志路径。
@@ -398,10 +398,10 @@ flowchart LR
 ## 11. 给实施 Agent 的可复制提示词
 
 ```text
-你现在接手 /Users/zhangweiqi/Documents/QY/项目/LLM-Image。
+你现在接手 <legacy-workspace>。
 
 唯一当前执行手册：
-/Users/zhangweiqi/Documents/QY/项目/LLM-Image/docs/superpowers/plans/2026-08-05-unified-management-all-photo-training-execution-manual.md
+<legacy-workspace>/docs/superpowers/plans/2026-08-05-unified-management-all-photo-training-execution-manual.md
 
 先完整阅读手册 §1 列出的所有文件，不得只读摘要。然后只读复核当前 git、服务、数据库、数据、模型、测试和页面；建立/更新 IMPLEMENTATION-LIST、STATUS、ISSUES、DECISIONS、EXECUTION-LOG，再开始实现。
 
@@ -413,7 +413,7 @@ flowchart LR
 5. 完成 qpol_v2 和证据链，覆盖斜拍、反光、翻拍/屏摄、摩尔纹、模糊、大头照误导、裁切、遮挡、场景和价签。先做 500～1,000 张分层人工金标准入口与混淆矩阵；人工未完成时必须如实阻断，不得伪造。
 6. 完成 U4：点坐标引导 SAM2.1 Hiera Small 自动框，疑难样本才升级 Base+；保留 point→prompt→mask→box lineage。实现任务链接、认领、单审、10% 盲抽、异常双审/仲裁、final box 和不可变导出。现有 250 条 pending 不得伪造完成。
 7. 完成 U5：当前 fixed for-loop Graph 只能称 sequential v1。新增 typed edges、条件路由、真实 feedback loop、收敛、每轮预算、人工门、恢复和回放；旧 Graph 兼容保留。用“全照片准备训练”跑通一条真实 Loop。
-8. 完成 T0 Apple MPS 预检和 768/960/1024 batch benchmark。必须使用 /Users/zhangweiqi/miniconda3/bin/python，device=mps，无 fallback，AC+caffeinate，监控 MPS/内存/swap/热状态，并保证 8091/8092/8400 可用。
+8. 完成 T0 Apple MPS 预检和 768/960/1024 batch benchmark。必须使用 python3，device=mps，无 fallback，AC+caffeinate，监控 MPS/内存/swap/热状态，并保证 8091/8092/8400 可用。
 9. 本提示词授权你：仅在所有 P0/G-EVAL/G-SNAPSHOT/G-MPS 门禁有机器证据通过后，执行 T1 的 1 epoch smoke；T1 全绿后执行 T2 的 3 epoch P0/P1 pilot。训练使用全部“已判 eligible 且标签达到 pilot 等级”的货架图；其他照片仍必须登记到正确用途，不得混入错误任务。auto_provisional 只能标 experimental，晋级只看人工 truebox。
 10. T2 完成后立即停止并报告。没有新的明确授权，不得运行 10 epoch、多 seed、正式 classifier，不得开封最终 gold，不得发布/切换 production bundle，不得切换生产 PostgreSQL。
 

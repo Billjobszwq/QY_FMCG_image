@@ -4,7 +4,7 @@
 
 ---
 
-你现在接管 `/Users/zhangweiqi/Documents/QY/项目/LLM-Image`。你的任务不是继续添加演示页面，而是把当前系统改造成用户可以从首页开始，独立导入数据、配置业务、运行任务、查看进度并由 Agent 协助完成工作的 Agentic Business OS。
+你现在接管 `<legacy-workspace>`。你的任务不是继续添加演示页面，而是把当前系统改造成用户可以从首页开始，独立导入数据、配置业务、运行任务、查看进度并由 Agent 协助完成工作的 Agentic Business OS。
 
 你必须持续执行完整任务，不得在 T0、T1 或任一阶段结束后停下来询问“是否继续”。阶段门是你的内部质量控制，不是用户确认点。只在以下情况向用户提问：需要 Secret/外部账号或地图 Key；需要删除/覆盖真实资产；需要远程部署/付费；需要启动未授权的长时间训练；存在两种会永久改变业务口径且无法从现场判断的选择。一个外部阻断不得阻止你继续完成其他独立任务。
 
@@ -31,7 +31,7 @@
 
 先建立 `READING-LIST.md` 并逐项记录已读 hash/结论，完整阅读：
 
-1. `/Users/zhangweiqi/.local/share/ai-workflow/routing/GLOBAL_AGENT_ROUTING.md`；
+1. `<ai-workflow-root>/routing/GLOBAL_AGENT_ROUTING.md`；
 2. 仓库/父目录所有适用 `AGENTS.md`；
 3. `docs/CODEX-PROJECT-HANDBOOK.md`；
 4. `docs/README.md`、`docs/USER-HANDBOOK.md`、`docs/OPERATOR-RUNBOOK.md`、`docs/MODULE-AGENT-DEV-GUIDE.md`；

@@ -166,7 +166,7 @@
 2. 执行只读状态检查：
 
    ~~~bash
-   cd /Users/zhangweiqi/Documents/QY/项目/LLM-Image
+   cd <legacy-workspace>
    git status --short
    git branch --show-current
    git rev-parse HEAD
@@ -178,7 +178,7 @@
 
    ~~~bash
    XONSH_HISTORY_BACKEND=dummy PYTHONDONTWRITEBYTECODE=1 \
-   /Users/zhangweiqi/miniconda3/bin/python3 \
+   python3 \
    -m pytest -p no:cacheprovider -q
    ~~~
 
@@ -190,11 +190,11 @@
 
 | 项目 | 当前快照 |
 |---|---|
-| Repository | `/Users/zhangweiqi/Documents/QY/项目/LLM-Image` |
+| Repository | `<legacy-workspace>` |
 | Branch | `feat/nextgen-training-cycle-v2` |
 | 当前代码基线 HEAD | `47c01c437a5ccae380e0bf80bc0ca016d4010325`；本轮 Codex 只新增/更新文档，后续以实时 `git rev-parse HEAD` 为准 |
 | 最近独立测试 | 2026-08-12 Codex 在 `1c5cfe24` 后独立复核 hermetic `1260 passed, 1 skipped, 6 deselected`、host MPS `6 passed`；HEAD 后续前进到 47c01c43，实施前必须 fresh run |
-| Python | `/Users/zhangweiqi/miniconda3/bin/python3`，3.13.2 |
+| Python | `python3`，3.13.2 |
 | 工作树 | `.datasets_nextgen/`、`.micro_gold*`、`.quality/`、`.sam_*`、`cropped_images/`、`reports/nextgen_v2/` 等历史未跟踪资产不碰、不暂存、不删除 |
 | 当前生产 bundle | `prod_20260805_v5_r1`；V3 获准在本机完成 V4 best 受控切换，必须可回滚 |
 | 数据库 | `.platform/platform.sqlite` integrity ok；107 表；migration 040 |

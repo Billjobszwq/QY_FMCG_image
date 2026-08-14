@@ -34,7 +34,7 @@
 
 修改任何代码前完整阅读：
 
-1. `/Users/zhangweiqi/.local/share/ai-workflow/routing/GLOBAL_AGENT_ROUTING.md`
+1. `<ai-workflow-root>/routing/GLOBAL_AGENT_ROUTING.md`
 2. `docs/implementation/agentic-business-os-workbench-v1/` 全部文件
 3. `docs/superpowers/specs/2026-08-04-fmcg-vision-saas-platform-design.md`
 4. `docs/superpowers/specs/2026-08-04-location-field-operations-design.md`
@@ -401,7 +401,7 @@ BaselineAndSafetyAudit
 
 ```bash
 PYTHONDONTWRITEBYTECODE=1 XONSH_HISTORY_BACKEND=dummy \
-/Users/zhangweiqi/miniconda3/bin/python -m pytest \
+python3 -m pytest \
 -q -p no:cacheprovider -m "not host_mps"
 ```
 
@@ -409,7 +409,7 @@ PYTHONDONTWRITEBYTECODE=1 XONSH_HISTORY_BACKEND=dummy \
 
 ```bash
 PYTHONDONTWRITEBYTECODE=1 XONSH_HISTORY_BACKEND=dummy \
-/Users/zhangweiqi/miniconda3/bin/python -m pytest \
+python3 -m pytest \
 -q -p no:cacheprovider -m host_mps
 ```
 

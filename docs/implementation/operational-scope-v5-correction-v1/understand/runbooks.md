@@ -22,7 +22,7 @@
 ## Findings
 ## 1. Service start/stop/restart/doctor — `bin/abos` (唯一入口)
 
-All commands run from project root `/Users/zhangweiqi/Documents/QY/项目/LLM-Image`. Tool: `bin/abos` (bash; idempotent; PID-file/exact-commandline matching only; never starts training; never lies about health — real HTTP probes).
+All commands run from project root `<legacy-workspace>`. Tool: `bin/abos` (bash; idempotent; PID-file/exact-commandline matching only; never starts training; never lies about health — real HTTP probes).
 
 ```bash
 ./bin/abos status    # 四服务健康 + production bundle + 训练进程 + 看门狗（退出码 0=全 UP）
@@ -89,7 +89,7 @@ python3 scripts/scope_reconcile_imports_v5.py --apply  # 执行纠偏（幂等�
 | UAT 证据 | `python3 scripts/uatv7_rehearsal.py` | `.eval/scope_v5/uatv7/report.json`（真实 multipart Import API；23 项检查；含服务重启稳定性） |
 | 浏览器证据 | `python3 scripts/osv5_browser_evidence.py` | `.eval/scope_v5/browser/browser_evidence.json` + 28 张 PNG（需 8400 运行、真实浏览器角色 owner/read_only/auditor） |
 | 负例账本 | `python3 scripts/osv5_gate_negative.py` | `.eval/scope_v5/gate_negative_tests.json`（12 项负例必须全部 ALL_BLOCKED=True） |
-| 测试报告 | hermetic pytest 运行后入账 `.eval/scope_v5/test_report.json`（手写摘要 JSON，非脚本自动生成）；命令：`/Users/zhangweiqi/miniconda3/bin/python3 -m pytest tests -q -p no:cacheprovider`（marker `not host_mps`）；host MPS 单跑 `-m host_mps` | `.eval/scope_v5/test_report.json` |
+| 测试报告 | hermetic pytest 运行后入账 `.eval/scope_v5/test_report.json`（手写摘要 JSON，非脚本自动生成）；命令：`python3 -m pytest tests -q -p no:cacheprovider`（marker `not host_mps`）；host MPS 单跑 `-m host_mps` | `.eval/scope_v5/test_report.json` |
 | P0/P1 台账 | 手工维护 markdown：`docs/implementation/agentic-business-os-operational-scope-v5/ISSUES.md`（Gate `no_open_p0_p1` 消费；有 open P0 → BLOCKED_BY_P0，open P1 → BLOCKED_BY_P1） | — |
 
 `osv5_gate_evaluate.py` 绑定：HEAD / 代码树 hash(src/platform,web/src,scripts) / migration hash / DB scope-graph fingerprint / 事件与 outbox 水位 / work 投影 hash / 关键表计数；要求 tracked worktree clean。评估后 `GET /api/v1/control/gate`（src/platform/api/control_plane_api.py → `evaluate_gate_from_evidence`）以 gate.json 为基准做**实时 freshness 复评**：DB/代码变化 → STALE_GATE_EVIDENCE。
@@ -110,7 +110,7 @@ python3 scripts/scope_reconcile_imports_v5.py --apply  # 执行纠偏（幂等�
 ## 6. 冷启动/登录（USER-HANDBOOK §1）
 
 ```bash
-cd /Users/zhangweiqi/Documents/QY/项目/LLM-Image
+cd <legacy-workspace>
 ./bin/abos doctor && ./bin/abos start && ./bin/abos status   # 四服务 UP
 # 打开 http://127.0.0.1:8400，登录 bill（凭据已数据库锁定，触发器拒绝 UPDATE/DELETE）
 ```

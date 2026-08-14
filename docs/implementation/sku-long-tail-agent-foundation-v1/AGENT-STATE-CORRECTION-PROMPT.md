@@ -40,7 +40,7 @@
 
 完整阅读：
 
-1. `/Users/zhangweiqi/.local/share/ai-workflow/routing/GLOBAL_AGENT_ROUTING.md`
+1. `<ai-workflow-root>/routing/GLOBAL_AGENT_ROUTING.md`
 2. `docs/CODEX-PROJECT-HANDBOOK.md`
 3. `docs/README.md`
 4. `docs/implementation/sku-long-tail-agent-foundation-v1/` 全部文件

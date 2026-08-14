@@ -1,7 +1,0 @@
-path: /Users/zhangweiqi/Documents/QY/项目/LLM-Image/.datasets_nextgen
-train:
-  - d1_detector_smoke_v1/images/train
-  - d1_pseudo_suntory/images/train
-val: d1_detector_smoke_v1/images/val
-names:
-  0: product

@@ -135,7 +135,7 @@ def test_real_qiyun_logo_is_embedded_for_offline_delivery() -> None:
     assert 'class="qiyun-logo"' in html
     assert 'src="data:image/png;base64,' in html
     assert 'alt="QIYUN 公司标识，DECISION DATA DRIVE"' in html
-    assert "/Users/zhangweiqi/Documents/QY/相关设计文档" not in html
+    assert "<design-assets-root>" not in html
     assert ".brand-mark" not in html
 
 

@@ -1,13 +1,13 @@
 # Agent 一次性执行提示词
 
-你现在负责 `/Users/zhangweiqi/Documents/QY/项目/LLM-Image` 的 NextGen 四模型数据与训练闭环 V2。你不是来再做一轮空框架，也不能把接口单测当成真实训练完成。你的目标是在现有 Graph+Loop Foundation 上，一次性打通三批照片 -> 严格过滤 -> 点提示 SAM -> 四类 DatasetSnapshot -> 四模型真实实验训练 -> 统一评估 -> Web/API/Profile，并保留完整证据和可恢复状态。
+你现在负责 `<legacy-workspace>` 的 NextGen 四模型数据与训练闭环 V2。你不是来再做一轮空框架，也不能把接口单测当成真实训练完成。你的目标是在现有 Graph+Loop Foundation 上，一次性打通三批照片 -> 严格过滤 -> 点提示 SAM -> 四类 DatasetSnapshot -> 四模型真实实验训练 -> 统一评估 -> Web/API/Profile，并保留完整证据和可恢复状态。
 
 ## 一、先完整阅读，禁止跳读
 
 依次全文阅读：
 
-1. `/Users/zhangweiqi/.local/share/ai-workflow/routing/GLOBAL_AGENT_ROUTING.md`
-2. `/Users/zhangweiqi/Documents/QY/项目/LLM-Image/docs/CODEX-PROJECT-HANDBOOK.md`
+1. `<ai-workflow-root>/routing/GLOBAL_AGENT_ROUTING.md`
+2. `<legacy-workspace>/docs/CODEX-PROJECT-HANDBOOK.md`
 3. 本目录全部文件：
    - `README.md`
    - `01-CURRENT-STATE-AUDIT.md`

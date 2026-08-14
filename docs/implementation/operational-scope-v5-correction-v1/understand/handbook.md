@@ -24,8 +24,8 @@
 
 ## Findings
 ## 1. Repo identity and current state
-- Root: `/Users/zhangweiqi/Documents/QY/项目/LLM-Image`; branch `feat/nextgen-training-cycle-v2`; HEAD `8e31708d` (= osv5 T10 governance-closure commit). Started as a shelf-SKU recognition system; now an **Agentic Business OS (ABOS)**: one Foundation + Graph+Loop kernel + pluggable Domain Packs (recognition is the first Domain Pack, not the center).
-- Python: `/Users/zhangweiqi/miniconda3/bin/python` (3.13.2). Apple M3 Max (16 CPU / 40 GPU / 128GB), MPS-verified. Local-first; Docker optional only.
+- Root: `<legacy-workspace>`; branch `feat/nextgen-training-cycle-v2`; HEAD `8e31708d` (= osv5 T10 governance-closure commit). Started as a shelf-SKU recognition system; now an **Agentic Business OS (ABOS)**: one Foundation + Graph+Loop kernel + pluggable Domain Packs (recognition is the first Domain Pack, not the center).
+- Python: `python3` (3.13.2). Apple M3 Max (16 CPU / 40 GPU / 128GB), MPS-verified. Local-first; Docker optional only.
 - **No AGENTS.md exists** anywhere within maxdepth 3 (find returned nothing).
 
 ## 2. Service topology (from `bin/abos` + handbook.md)

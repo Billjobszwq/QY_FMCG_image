@@ -10,7 +10,7 @@
 - 输出为新数据集目录，绝不覆盖源数据集；已存在且非空即拒绝。
 
 用法（AC 电源 + caffeinate）：
-  caffeinate -i /Users/zhangweiqi/miniconda3/bin/python3 \
+  caffeinate -i python3 \
       -m scripts.run_sam_refine --sources .datasets/batch2_v4 \
       --screen .eval/sam_refine/quality_screen_<ts>.json --out .datasets/sam_refined_full_v1
 """

@@ -1228,7 +1228,7 @@ git commit -m "docs: publish Qwen cascade operations runbook"
 你现在是本项目的主实施 Agent。你的任务不是新建第二套识别系统，而是在现有统一 Graph+Loop 智能业务操作系统内，实现 Qwen3-VL 4B + YOLO + ResNet + SAM + OCR/检索 + 人工审核的 FMCG 多模型智能级联。
 
 项目根目录：
-/Users/zhangweiqi/Documents/QY/项目/LLM-Image
+<legacy-workspace>
 
 本地 VLM 逻辑模型固定为：
 qwen3-vl:4b

@@ -463,7 +463,7 @@ Graph Studio 允许基于已注册模块/Capability 组合客户 Graph，定义�
 ~~~text
 你现在负责 LLM-Image 项目的 Stage 0–1 Unified Foundation，只实施这一阶段，不要开始 Stage 2，不要启动任何模型训练。
 
-仓库：/Users/zhangweiqi/Documents/QY/项目/LLM-Image
+仓库：<legacy-workspace>
 
 开工前必须按顺序完整阅读：
 1. docs/superpowers/specs/2026-08-04-fmcg-vision-saas-platform-design.md

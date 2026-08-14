@@ -13,7 +13,7 @@
 执行前备份生产库；证据写 .eval/u5/。
 
 用法：
-  /Users/zhangweiqi/miniconda3/bin/python3 -m scripts.run_u5_real_loop
+  python3 -m scripts.run_u5_real_loop
 """
 from __future__ import annotations
 

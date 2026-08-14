@@ -29,7 +29,7 @@
 
 ```bash
 # 主环境（测试/纯计算，不安装任何大型依赖）
-/Users/zhangweiqi/miniconda3/bin/python3 -m pytest tests -q -p no:cacheprovider
+python3 -m pytest tests -q -p no:cacheprovider
 
 # MLX-VLM 独立环境（本轮未创建；真实执行前需用户授权）
 # python3 -m venv .venv_mlx_vlm && .venv_mlx_vlm/bin/pip install mlx-vlm

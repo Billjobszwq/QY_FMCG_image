@@ -13,14 +13,14 @@
 ### Task 1: 建立完整可追溯的新工作目录
 
 **Files:**
-- Source repository: `/Users/zhangweiqi/Documents/QY/项目/LLM-Image`
-- Create repository: `/Users/zhangweiqi/Documents/QY/TaaS by Agent Operation`
+- Source repository: `<legacy-workspace>`
+- Create repository: `<project-root>`
 
 - [x] **Step 1: 记录源基线和源码清单**
 
 ```bash
-git -C '/Users/zhangweiqi/Documents/QY/项目/LLM-Image' rev-parse HEAD
-git -C '/Users/zhangweiqi/Documents/QY/项目/LLM-Image' ls-files 'src/**' 'web/**' 'tests/**' 'scripts/**' | sort > /tmp/taas-source-files.txt
+git -C '<legacy-workspace>' rev-parse HEAD
+git -C '<legacy-workspace>' ls-files 'src/**' 'web/**' 'tests/**' 'scripts/**' | sort > /tmp/taas-source-files.txt
 ```
 
 Expected: HEAD 包含设计文档提交 `cef2998e`。
@@ -28,9 +28,9 @@ Expected: HEAD 包含设计文档提交 `cef2998e`。
 - [x] **Step 2: 克隆到指定目录并创建分支**
 
 ```bash
-git clone --no-hardlinks '/Users/zhangweiqi/Documents/QY/项目/LLM-Image' '/Users/zhangweiqi/Documents/QY/TaaS by Agent Operation'
-git -C '/Users/zhangweiqi/Documents/QY/TaaS by Agent Operation' remote set-url origin 'https://github.com/Billjobszwq/QY_FMCG_image.git'
-git -C '/Users/zhangweiqi/Documents/QY/TaaS by Agent Operation' switch -c codex/taas-agent-operation-v1
+git clone --no-hardlinks '<legacy-workspace>' '<project-root>'
+git -C '<project-root>' remote set-url origin 'https://github.com/Billjobszwq/QY_FMCG_image.git'
+git -C '<project-root>' switch -c codex/taas-agent-operation-v1
 ```
 
 Expected: 新目录 HEAD 与源目录 HEAD 相同，`origin` 只指向 GitHub。
@@ -440,12 +440,12 @@ Hard gates: 归档分区内部符号链接总数精确为 92,905，其中绝对�
 - Remove: `web/public/img/shelf1.jpg`, `shelf2.jpg`, `shelf3.jpg`
 - Create: `web/public/img/shelf-demo.svg`
 
-- [ ] **Step 1: 从新分支跟踪树移除现场证据**
+- [x] **Step 1: 从新分支跟踪树移除现场证据**
 
 只在新克隆中执行 `git rm`；Task 4 的本地忽略归档保留。架构、设计、决策和实施计划文档继续跟踪。
 同时将本设计和本计划中的旧工作区绝对路径替换为 `<legacy-workspace>`，将新主目录写为相对路径或 `<project-root>`。
 
-- [ ] **Step 2: 在 tracked 旧目录移除后创建并复核兼容链接**
+- [x] **Step 2: 在 tracked 旧目录移除后创建并复核兼容链接**
 
 只有在 `git rm` 已移除 `.datasets_nextgen`、`.micro_gold_v2`、`.data_protocol` 等被跟踪的
 旧实体后，才运行真实 bootstrap：
@@ -469,11 +469,11 @@ test "$pointer_sha_before" = "$(shasum -a 256 recognition-models/registry/bundle
 解析到项目外和解析到 `training-data/**` 外的数量仍必须为 0；bootstrap 新建的 13 条
 顶层兼容链接必须全部为相对链接且解析在新项目内。
 
-- [ ] **Step 3: 用中性 SVG 替换来源不可证明的货架照片**
+- [x] **Step 3: 用中性 SVG 替换来源不可证明的货架照片**
 
 `shelf-demo.svg` 不包含品牌、照片或用户信息。`Overview.tsx` 改用 `/img/shelf-demo.svg`，alt 为“货架识别演示占位图”。
 
-- [ ] **Step 4: 运行契约测试和发布树审计**
+- [x] **Step 4: 运行契约测试和发布树审计**
 
 ```bash
 pytest tests/promotion/test_three_audience_html.py -q
@@ -482,7 +482,7 @@ python scripts/audit_release_tree.py --root . --format json
 
 Expected: 测试 PASS；继续清理直到 finding=0。
 
-- [ ] **Step 5: 提交清理结果**
+- [x] **Step 5: 提交清理结果**
 
 ```bash
 git add -u
@@ -564,7 +564,7 @@ Expected: `comm` 无输出；禁止类型无输出；finding=0；`git diff --che
 - [ ] **Step 4: 扫描凭据、用户运行证据和绝对路径**
 
 ```bash
-rg -n --hidden -g '!**/.git/**' -g '!training-data/**' -g '!recognition-models/**' -g '!runtime/**' -g '!web/node_modules/**' -g '!.venv/**' '(gh[pousr]_[A-Za-z0-9_]{20,}|AKIA[0-9A-Z]{16}|BEGIN (RSA |EC |OPENSSH )?PRIVATE KEY|/Users/zhangweiqi/Documents/QY/项目/LLM-Image|"trace_id"\s*:|"created_by"\s*:|"file_count"\s*:)' .
+rg -n --hidden -g '!**/.git/**' -g '!training-data/**' -g '!recognition-models/**' -g '!runtime/**' -g '!web/node_modules/**' -g '!.venv/**' '(gh[pousr]_[A-Za-z0-9_]{20,}|AKIA[0-9A-Z]{16}|BEGIN (RSA |EC |OPENSSH )?PRIVATE KEY|/Users/[^/]+/Documents/QY/项目/LLM-Image|"trace_id"\s*:|"created_by"\s*:|"file_count"\s*:)' .
 ```
 
 Expected: 没有经确认的真实凭据、用户运行记录或旧工作区绝对路径。

@@ -12,7 +12,7 @@
 
 ## 可直接交给执行 Agent 的提示词
 
-你现在负责 `/Users/zhangweiqi/Documents/QY/项目/LLM-Image` 项目的“坐标点 + SAM 辅助真实框、照片质量过滤增强和 detector 重训”专项。你已获得在该专项范围内修改项目代码、测试、配置和文档，以及在门禁通过后执行小规模训练的授权。
+你现在负责 `<legacy-workspace>` 项目的“坐标点 + SAM 辅助真实框、照片质量过滤增强和 detector 重训”专项。你已获得在该专项范围内修改项目代码、测试、配置和文档，以及在门禁通过后执行小规模训练的授权。
 
 你的职责不是尽快跑出一个新 `best.pt`，而是建立一条可信、可复核、可重复、适合 Apple Silicon 的标注—过滤—数据集—评估—训练闭环。任何人工审核、数据完整性或指标门禁没有通过时，都必须停止在对应 Gate，不得用自动结果冒充人工金标准，不得为了“完成训练”放宽预先约定的门槛。
 
@@ -73,8 +73,8 @@
 git status --short
 git rev-parse HEAD
 git branch -vv
-/Users/zhangweiqi/miniconda3/bin/python3 -m pytest -p no:cacheprovider -q
-/Users/zhangweiqi/miniconda3/bin/python3 -m src.models.bundle verify --bundle-id prod_20260804_v4_r2
+python3 -m pytest -p no:cacheprovider -q
+python3 -m src.models.bundle verify --bundle-id prod_20260804_v4_r2
 ```
 
 预期基线为 74 tests passed、生产 bundle 16 文件校验通过；如果不同，先调查并在 `ISSUES.md` 说明，不得把未知回归带入新实现。保留现有未跟踪的 `.superpowers/`，不得清理。

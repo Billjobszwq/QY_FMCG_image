@@ -51,7 +51,7 @@ class TestProfileCatalog:
     def test_no_arbitrary_weight_path_allowed(self, store):
         reg = ProfileRegistry(store)
         with pytest.raises(ProfileError):
-            reg.resolve("/Users/x/.models/sku_v4/weights/best.pt")
+            reg.resolve("/tmp/external-model/weights/best.pt")
         with pytest.raises(ProfileError):
             reg.resolve("not_a_profile")
 

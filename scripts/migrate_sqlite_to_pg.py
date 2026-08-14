@@ -12,7 +12,7 @@
 
 用法：
     python3 scripts/migrate_sqlite_to_pg.py --sqlite .platform/platform.sqlite \\
-        --pg-url postgresql://user:pass@host:5432/platform [--drop-existing]
+        --pg-url postgresql://<user>:<password>@host:5432/platform [--drop-existing]
 """
 
 from __future__ import annotations
@@ -162,7 +162,11 @@ def migrate(sqlite_path: Path, pg_url: str, *, drop_existing: bool = False) -> d
 def main() -> int:
     ap = argparse.ArgumentParser(description="SQLite→PG 一次性迁移（计数+哈希核对）")
     ap.add_argument("--sqlite", default=str(REPO_ROOT / ".platform" / "platform.sqlite"))
-    ap.add_argument("--pg-url", required=True, help="postgresql://user:pass@host:port/db")
+    ap.add_argument(
+        "--pg-url",
+        required=True,
+        help="postgresql://<user>:<password>@host:port/db",
+    )
     ap.add_argument("--drop-existing", action="store_true", help="先删除同名表（演练库专用）")
     args = ap.parse_args()
 

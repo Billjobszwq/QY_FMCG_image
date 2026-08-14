@@ -1,7 +1,7 @@
 """T0 Apple MPS 预检真实执行脚本（只读照片，不训练、不删除任何制品）。
 
 手册 §T0 口径：
-- /Users/zhangweiqi/miniconda3/bin/python，device=mps；
+- python3，device=mps；
 - 拒绝 PYTORCH_ENABLE_MPS_FALLBACK=1（检测到即终止）；
 - 复用 run_mps_g0 出 G0 证据（arm64/MPS/矩阵/前向/AC/内存/磁盘/swap）；
 - 照片池：照片1106 等间隔采样 160 张（≤200，不移动/覆盖原件）；
@@ -12,7 +12,7 @@
 - 证据写 .eval/t0/t0_preflight_evidence_<ts>.json。
 
 建议用法（caffeinate 由外层负责，脚本只检测并记录）：
-  caffeinate -i /Users/zhangweiqi/miniconda3/bin/python3 -m \
+  caffeinate -i python3 -m \
       scripts.run_t0_mps_preflight
 """
 from __future__ import annotations

@@ -94,14 +94,14 @@
 ## 3. Task 1：冻结可信数据协议
 
 **Files:**
-- Inspect: `/Users/zhangweiqi/Documents/QY/项目/LLM-Image/.data_protocol/gold_holdout.json`
-- Inspect: `/Users/zhangweiqi/Documents/QY/项目/LLM-Image/.batch3_clean/clean_manifest.json`
-- Inspect: `/Users/zhangweiqi/Documents/QY/项目/LLM-Image/data/sku_registry.json`
-- Create later: `/Users/zhangweiqi/Documents/QY/项目/LLM-Image/.data_protocol/legacy_regression_v1.json`
-- Create later: `/Users/zhangweiqi/Documents/QY/项目/LLM-Image/.data_protocol/gold_v2.json`
-- Create later: `/Users/zhangweiqi/Documents/QY/项目/LLM-Image/.data_protocol/calibration_v1.json`
-- Create later: `/Users/zhangweiqi/Documents/QY/项目/LLM-Image/.data_protocol/diagnostic_v1.json`
-- Create later: `/Users/zhangweiqi/Documents/QY/项目/LLM-Image/.data_protocol/dev_v1.json`
+- Inspect: `<legacy-workspace>/.data_protocol/gold_holdout.json`
+- Inspect: `<legacy-workspace>/.batch3_clean/clean_manifest.json`
+- Inspect: `<legacy-workspace>/data/sku_registry.json`
+- Create later: `<legacy-workspace>/.data_protocol/legacy_regression_v1.json`
+- Create later: `<legacy-workspace>/.data_protocol/gold_v2.json`
+- Create later: `<legacy-workspace>/.data_protocol/calibration_v1.json`
+- Create later: `<legacy-workspace>/.data_protocol/diagnostic_v1.json`
+- Create later: `<legacy-workspace>/.data_protocol/dev_v1.json`
 
 - [ ] **Step 1: 保留旧 gold，不删除、不覆盖**
 
@@ -150,13 +150,13 @@
 ## 4. Task 2：修正训练前的协议阻断项
 
 **Files:**
-- Modify later: `/Users/zhangweiqi/Documents/QY/项目/LLM-Image/src/training/build_sku_v6_dataset.py`
-- Modify later: `/Users/zhangweiqi/Documents/QY/项目/LLM-Image/src/training/train_v1.py`
-- Modify later: `/Users/zhangweiqi/Documents/QY/项目/LLM-Image/src/cascade/build_yolo_crop_dataset.py`
-- Modify later: `/Users/zhangweiqi/Documents/QY/项目/LLM-Image/src/cascade/classifier.py`
-- Modify later: `/Users/zhangweiqi/Documents/QY/项目/LLM-Image/src/cascade/finetune.py`
-- Modify later: `/Users/zhangweiqi/Documents/QY/项目/LLM-Image/src/cascade/cascade_inference.py`
-- Test later: `/Users/zhangweiqi/Documents/QY/项目/LLM-Image/tests/`
+- Modify later: `<legacy-workspace>/src/training/build_sku_v6_dataset.py`
+- Modify later: `<legacy-workspace>/src/training/train_v1.py`
+- Modify later: `<legacy-workspace>/src/cascade/build_yolo_crop_dataset.py`
+- Modify later: `<legacy-workspace>/src/cascade/classifier.py`
+- Modify later: `<legacy-workspace>/src/cascade/finetune.py`
+- Modify later: `<legacy-workspace>/src/cascade/cascade_inference.py`
+- Test later: `<legacy-workspace>/tests/`
 
 本任务列出训练前必须完成的后续工程工作，但本次不修改这些文件。
 

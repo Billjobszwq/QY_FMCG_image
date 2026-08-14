@@ -110,8 +110,8 @@
 
 ### 5.1 资产
 
-- 深色背景：`/Users/zhangweiqi/Documents/QY/相关设计文档/logo-deep2.png`
-- 浅色背景：`/Users/zhangweiqi/Documents/QY/相关设计文档/logo-white.png`
+- 深色背景：`<design-assets-root>/logo-deep2.png`
+- 浅色背景：`<design-assets-root>/logo-white.png`
 
 最终 HTML 必须复制并内嵌所需 Logo 数据，保证文件单独发送后仍能离线显示。不得依赖上述绝对路径运行。
 

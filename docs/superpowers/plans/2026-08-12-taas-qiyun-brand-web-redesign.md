@@ -70,7 +70,7 @@ Expected: new TaaS and logo tests fail against the current presentation.
 
 - [x] **Step 1: Encode the approved dark logo**
 
-Read `/Users/zhangweiqi/Documents/QY/相关设计文档/logo-deep2.png`, base64 encode it without line wrapping, and insert it as the `src` of the header `qiyun-logo`. Keep the full original image and aspect ratio; do not crop or recolor it.
+Read `<design-assets-root>/logo-deep2.png`, base64 encode it without line wrapping, and insert it as the `src` of the header `qiyun-logo`. Keep the full original image and aspect ratio; do not crop or recolor it.
 
 - [x] **Step 2: Replace the synthetic brand block**
 

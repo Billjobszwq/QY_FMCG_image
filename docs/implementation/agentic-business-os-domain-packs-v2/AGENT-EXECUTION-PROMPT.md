@@ -1,6 +1,6 @@
 # Agent 执行提示词：连续任务底座、智能工作流与首批 Domain Packs
 
-你要在仓库 `/Users/zhangweiqi/Documents/QY/项目/LLM-Image` 继续实施 Agentic Business OS。本次不是做一批静态页面，而是修复现有任务断链，并建立可以让识别、问卷、BI、外勤、财务真正连续运行的 Graph+Loop 底座。
+你要在仓库 `<legacy-workspace>` 继续实施 Agentic Business OS。本次不是做一批静态页面，而是修复现有任务断链，并建立可以让识别、问卷、BI、外勤、财务真正连续运行的 Graph+Loop 底座。
 
 ## 一、不可违反的定位
 
@@ -14,7 +14,7 @@
 
 必须先逐字阅读：
 
-1. `/Users/zhangweiqi/.local/share/ai-workflow/routing/GLOBAL_AGENT_ROUTING.md`
+1. `<ai-workflow-root>/routing/GLOBAL_AGENT_ROUTING.md`
 2. `docs/CODEX-PROJECT-HANDBOOK.md`
 3. `docs/README.md`
 4. `docs/USER-HANDBOOK.md`

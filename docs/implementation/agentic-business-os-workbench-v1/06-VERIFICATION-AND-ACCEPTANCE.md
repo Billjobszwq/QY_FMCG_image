@@ -6,7 +6,7 @@
 
 ```bash
 PYTHONDONTWRITEBYTECODE=1 XONSH_HISTORY_BACKEND=dummy \
-/Users/zhangweiqi/miniconda3/bin/python -m pytest \
+python3 -m pytest \
 -q -p no:cacheprovider -m "not host_mps"
 ```
 
@@ -14,7 +14,7 @@ Host MPS 单独执行并单独报告，不把 deselected 当 pass：
 
 ```bash
 PYTHONDONTWRITEBYTECODE=1 XONSH_HISTORY_BACKEND=dummy \
-/Users/zhangweiqi/miniconda3/bin/python -m pytest \
+python3 -m pytest \
 -q -p no:cacheprovider -m host_mps
 ```
 

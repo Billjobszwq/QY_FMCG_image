@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  NON-RUNNABLE TEMPLATE: copy this file outside the repository and replace every
+  <PROJECT_ROOT> and <PYTHON_BIN> placeholder before loading it with launchd.
+-->
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.qoder.skurec.monitor</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>&lt;PYTHON_BIN&gt;</string>
+        <string>-m</string>
+        <string>src.training.monitor</string>
+        <string>--port</string>
+        <string>8092</string>
+    </array>
+    <key>WorkingDirectory</key>
+    <string>&lt;PROJECT_ROOT&gt;</string>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+    <key>ThrottleInterval</key>
+    <integer>5</integer>
+    <key>StandardOutPath</key>
+    <string>&lt;PROJECT_ROOT&gt;/.models/monitor_service.log</string>
+    <key>StandardErrorPath</key>
+    <string>&lt;PROJECT_ROOT&gt;/.models/monitor_service.err.log</string>
+</dict>
+</plist>

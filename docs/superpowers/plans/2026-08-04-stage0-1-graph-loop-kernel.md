@@ -200,7 +200,7 @@ Expected: 新 worktree 位于同级目录，原工作区保持不变。若目录
 
 ~~~bash
 cd ../LLM-Image-unified-foundation
-XONSH_HISTORY_BACKEND=dummy PYTHONDONTWRITEBYTECODE=1 /Users/zhangweiqi/miniconda3/bin/python3 -m pytest -p no:cacheprovider -q
+XONSH_HISTORY_BACKEND=dummy PYTHONDONTWRITEBYTECODE=1 python3 -m pytest -p no:cacheprovider -q
 ~~~
 
 Expected: 74 passed。若基线变化，以最新 main 的真实结果记录到计划执行日志；红色基线必须先诊断。
@@ -257,7 +257,7 @@ def test_database_and_bootstrap_token_are_required():
 
 def test_local_settings_accept_explicit_values():
     settings = ControlPlaneSettings(
-        app_database_url="postgresql+psycopg://sku:test@127.0.0.1:55432/sku_graph_test",
+        app_database_url="postgresql+psycopg://<user>:<password>@127.0.0.1:55432/sku_graph_test",
         app_bootstrap_token="x" * 32,
         app_default_tenant_id="tenant_local",
         app_default_project_id="project_local",
@@ -269,7 +269,7 @@ def test_local_settings_accept_explicit_values():
 - [ ] **Step 2: 运行并确认失败**
 
 ~~~bash
-XONSH_HISTORY_BACKEND=dummy PYTHONDONTWRITEBYTECODE=1 /Users/zhangweiqi/miniconda3/bin/python3 -m pytest -p no:cacheprovider tests/unit/platform/api/test_settings.py -q
+XONSH_HISTORY_BACKEND=dummy PYTHONDONTWRITEBYTECODE=1 python3 -m pytest -p no:cacheprovider tests/unit/platform/api/test_settings.py -q
 ~~~
 
 Expected: FAIL，原因是 src.platform.api.settings 尚不存在。
@@ -345,7 +345,7 @@ class ControlPlaneSettings(BaseSettings):
 
 ~~~dotenv
 # ===== Graph+Loop control plane =====
-APP_DATABASE_URL=postgresql+psycopg://sku:replace-with-local-secret@127.0.0.1:5432/sku_kb
+APP_DATABASE_URL=postgresql+psycopg://<user>:<password>@127.0.0.1:5432/sku_kb
 APP_BOOTSTRAP_TOKEN=replace-with-at-least-32-random-characters
 APP_DEFAULT_TENANT_ID=tenant_local
 APP_DEFAULT_CUSTOMER_ID=customer_local
@@ -363,7 +363,7 @@ RECOGNIZE_TIMEOUT_SECONDS=30
 - [ ] **Step 6: 运行测试并提交**
 
 ~~~bash
-XONSH_HISTORY_BACKEND=dummy PYTHONDONTWRITEBYTECODE=1 /Users/zhangweiqi/miniconda3/bin/python3 -m pytest -p no:cacheprovider tests/unit/platform/api/test_settings.py -q
+XONSH_HISTORY_BACKEND=dummy PYTHONDONTWRITEBYTECODE=1 python3 -m pytest -p no:cacheprovider tests/unit/platform/api/test_settings.py -q
 git add pyproject.toml .env.example src/platform/api tests/unit/platform/api/test_settings.py
 git commit -m "feat(kernel): add control plane settings and dependencies"
 ~~~
@@ -447,7 +447,7 @@ def test_condition_has_no_expression_string():
 - [ ] **Step 2: 运行并确认失败**
 
 ~~~bash
-XONSH_HISTORY_BACKEND=dummy PYTHONDONTWRITEBYTECODE=1 /Users/zhangweiqi/miniconda3/bin/python3 -m pytest -p no:cacheprovider tests/unit/platform/kernel/test_contracts.py -q
+XONSH_HISTORY_BACKEND=dummy PYTHONDONTWRITEBYTECODE=1 python3 -m pytest -p no:cacheprovider tests/unit/platform/kernel/test_contracts.py -q
 ~~~
 
 Expected: FAIL，原因是 src.platform.kernel.contracts 尚不存在。
@@ -645,8 +645,8 @@ if __name__ == "__main__":
 - [ ] **Step 5: 生成、验证并提交**
 
 ~~~bash
-/Users/zhangweiqi/miniconda3/bin/python3 scripts/export_contracts.py
-XONSH_HISTORY_BACKEND=dummy PYTHONDONTWRITEBYTECODE=1 /Users/zhangweiqi/miniconda3/bin/python3 -m pytest -p no:cacheprovider tests/unit/platform/kernel/test_contracts.py -q
+python3 scripts/export_contracts.py
+XONSH_HISTORY_BACKEND=dummy PYTHONDONTWRITEBYTECODE=1 python3 -m pytest -p no:cacheprovider tests/unit/platform/kernel/test_contracts.py -q
 git diff --check
 git add src/platform/kernel scripts/export_contracts.py tests/unit/platform/kernel/test_contracts.py contracts/graph
 git commit -m "feat(kernel): freeze graph and capability contracts"
@@ -789,7 +789,7 @@ def test_requires_reachable_end():
 - [ ] **Step 3: 运行并确认失败**
 
 ~~~bash
-XONSH_HISTORY_BACKEND=dummy PYTHONDONTWRITEBYTECODE=1 /Users/zhangweiqi/miniconda3/bin/python3 -m pytest -p no:cacheprovider tests/unit/platform/kernel/test_conditions.py tests/unit/platform/kernel/test_validation.py -q
+XONSH_HISTORY_BACKEND=dummy PYTHONDONTWRITEBYTECODE=1 python3 -m pytest -p no:cacheprovider tests/unit/platform/kernel/test_conditions.py tests/unit/platform/kernel/test_validation.py -q
 ~~~
 
 Expected: FAIL，两个模块尚不存在。
@@ -983,7 +983,7 @@ def validate_graph(graph: GraphDefinition) -> None:
 - [ ] **Step 6: 运行测试并提交**
 
 ~~~bash
-XONSH_HISTORY_BACKEND=dummy PYTHONDONTWRITEBYTECODE=1 /Users/zhangweiqi/miniconda3/bin/python3 -m pytest -p no:cacheprovider tests/unit/platform/kernel/test_conditions.py tests/unit/platform/kernel/test_validation.py -q
+XONSH_HISTORY_BACKEND=dummy PYTHONDONTWRITEBYTECODE=1 python3 -m pytest -p no:cacheprovider tests/unit/platform/kernel/test_conditions.py tests/unit/platform/kernel/test_validation.py -q
 git add src/platform/kernel/conditions.py src/platform/kernel/validation.py tests/unit/platform/kernel
 git commit -m "feat(kernel): validate bounded graph definitions"
 ~~~
@@ -1555,8 +1555,8 @@ def test_graph_schemas_and_append_only_trigger(test_database_url):
 
 ~~~bash
 docker compose --profile test up -d postgres-test
-APP_DATABASE_URL=postgresql+psycopg://sku_test:graph-kernel-test-only@127.0.0.1:55432/sku_graph_test /Users/zhangweiqi/miniconda3/bin/python3 -m alembic upgrade head
-APP_DATABASE_URL=postgresql+psycopg://sku_test:graph-kernel-test-only@127.0.0.1:55432/sku_graph_test XONSH_HISTORY_BACKEND=dummy PYTHONDONTWRITEBYTECODE=1 /Users/zhangweiqi/miniconda3/bin/python3 -m pytest -p no:cacheprovider tests/integration/test_graph_schema.py -q
+APP_DATABASE_URL=postgresql+psycopg://<user>:<password>@127.0.0.1:55432/sku_graph_test python3 -m alembic upgrade head
+APP_DATABASE_URL=postgresql+psycopg://<user>:<password>@127.0.0.1:55432/sku_graph_test XONSH_HISTORY_BACKEND=dummy PYTHONDONTWRITEBYTECODE=1 python3 -m pytest -p no:cacheprovider tests/integration/test_graph_schema.py -q
 ~~~
 
 Expected: 1 passed；alembic current 指向 20260804_0001。测试后保留容器，除非用户明确允许停止；不得删除业务 volume。
@@ -1696,7 +1696,7 @@ def repository(test_database_url):
 - [ ] **Step 3: 运行并确认失败**
 
 ~~~bash
-APP_DATABASE_URL=postgresql+psycopg://sku_test:graph-kernel-test-only@127.0.0.1:55432/sku_graph_test XONSH_HISTORY_BACKEND=dummy PYTHONDONTWRITEBYTECODE=1 /Users/zhangweiqi/miniconda3/bin/python3 -m pytest -p no:cacheprovider tests/integration/test_graph_repository.py -q
+APP_DATABASE_URL=postgresql+psycopg://<user>:<password>@127.0.0.1:55432/sku_graph_test XONSH_HISTORY_BACKEND=dummy PYTHONDONTWRITEBYTECODE=1 python3 -m pytest -p no:cacheprovider tests/integration/test_graph_repository.py -q
 ~~~
 
 Expected: FAIL，persistence/repository 模块尚不存在。
@@ -2071,7 +2071,7 @@ class PostgresGraphRepository:
 - [ ] **Step 7: 运行测试并提交**
 
 ~~~bash
-APP_DATABASE_URL=postgresql+psycopg://sku_test:graph-kernel-test-only@127.0.0.1:55432/sku_graph_test XONSH_HISTORY_BACKEND=dummy PYTHONDONTWRITEBYTECODE=1 /Users/zhangweiqi/miniconda3/bin/python3 -m pytest -p no:cacheprovider tests/integration/test_graph_repository.py -q
+APP_DATABASE_URL=postgresql+psycopg://<user>:<password>@127.0.0.1:55432/sku_graph_test XONSH_HISTORY_BACKEND=dummy PYTHONDONTWRITEBYTECODE=1 python3 -m pytest -p no:cacheprovider tests/integration/test_graph_repository.py -q
 git add src/platform/data src/platform/data/repositories.py tests/integration
 git commit -m "feat(kernel): persist immutable graphs and idempotent runs"
 ~~~
@@ -2161,7 +2161,7 @@ def test_policy_denies_missing_scope_and_budget():
 - [ ] **Step 2: 运行并确认失败**
 
 ~~~bash
-XONSH_HISTORY_BACKEND=dummy PYTHONDONTWRITEBYTECODE=1 /Users/zhangweiqi/miniconda3/bin/python3 -m pytest -p no:cacheprovider tests/unit/platform/modules/test_capability_registry.py tests/unit/platform/kernel/test_policy.py -q
+XONSH_HISTORY_BACKEND=dummy PYTHONDONTWRITEBYTECODE=1 python3 -m pytest -p no:cacheprovider tests/unit/platform/modules/test_capability_registry.py tests/unit/platform/kernel/test_policy.py -q
 ~~~
 
 Expected: FAIL，registry/policy/capabilities 尚不存在。
@@ -2295,7 +2295,7 @@ class PolicyEngine:
 - [ ] **Step 6: 测试并提交**
 
 ~~~bash
-XONSH_HISTORY_BACKEND=dummy PYTHONDONTWRITEBYTECODE=1 /Users/zhangweiqi/miniconda3/bin/python3 -m pytest -p no:cacheprovider tests/unit/platform/modules/test_capability_registry.py tests/unit/platform/kernel/test_policy.py -q
+XONSH_HISTORY_BACKEND=dummy PYTHONDONTWRITEBYTECODE=1 python3 -m pytest -p no:cacheprovider tests/unit/platform/modules/test_capability_registry.py tests/unit/platform/kernel/test_policy.py -q
 git add src/platform/modules/capability.py src/platform/modules/capability_registry.py src/modules/reference_echo/capability.py src/platform/kernel/policy.py tests/unit/platform/kernel tests/unit/platform/modules
 git commit -m "feat(kernel): register allowlisted capabilities and enforce policy"
 ~~~
@@ -2409,7 +2409,7 @@ def test_node_idempotency_is_stable_per_iteration():
 - [ ] **Step 2: 运行并确认失败**
 
 ~~~bash
-XONSH_HISTORY_BACKEND=dummy PYTHONDONTWRITEBYTECODE=1 /Users/zhangweiqi/miniconda3/bin/python3 -m pytest -p no:cacheprovider tests/unit/platform/kernel/test_runtime.py -q
+XONSH_HISTORY_BACKEND=dummy PYTHONDONTWRITEBYTECODE=1 python3 -m pytest -p no:cacheprovider tests/unit/platform/kernel/test_runtime.py -q
 ~~~
 
 Expected: FAIL，runtime 尚不存在。
@@ -2488,7 +2488,7 @@ def next_iteration(state: dict, node: GraphNode) -> tuple[dict, int]:
 - [ ] **Step 4: 测试并提交**
 
 ~~~bash
-XONSH_HISTORY_BACKEND=dummy PYTHONDONTWRITEBYTECODE=1 /Users/zhangweiqi/miniconda3/bin/python3 -m pytest -p no:cacheprovider tests/unit/platform/kernel/test_runtime.py -q
+XONSH_HISTORY_BACKEND=dummy PYTHONDONTWRITEBYTECODE=1 python3 -m pytest -p no:cacheprovider tests/unit/platform/kernel/test_runtime.py -q
 git add src/platform/kernel/runtime.py tests/unit/platform/kernel/test_runtime.py
 git commit -m "feat(kernel): add deterministic graph state transitions"
 ~~~
@@ -2583,7 +2583,7 @@ def test_worker_completes_echo_graph_once(repository):
 - [ ] **Step 2: 运行并确认失败**
 
 ~~~bash
-APP_DATABASE_URL=postgresql+psycopg://sku_test:graph-kernel-test-only@127.0.0.1:55432/sku_graph_test XONSH_HISTORY_BACKEND=dummy PYTHONDONTWRITEBYTECODE=1 /Users/zhangweiqi/miniconda3/bin/python3 -m pytest -p no:cacheprovider tests/integration/test_worker_recovery.py -q
+APP_DATABASE_URL=postgresql+psycopg://<user>:<password>@127.0.0.1:55432/sku_graph_test XONSH_HISTORY_BACKEND=dummy PYTHONDONTWRITEBYTECODE=1 python3 -m pytest -p no:cacheprovider tests/integration/test_worker_recovery.py -q
 ~~~
 
 Expected: FAIL，start_run、claim_next 和 GraphWorker 尚不存在。
@@ -3109,7 +3109,7 @@ Task 9 必须同时落下 Task 10 Step 4 给出的 `record_policy` 精确实现�
 - [ ] **Step 8: 运行恢复测试并提交**
 
 ~~~bash
-APP_DATABASE_URL=postgresql+psycopg://sku_test:graph-kernel-test-only@127.0.0.1:55432/sku_graph_test XONSH_HISTORY_BACKEND=dummy PYTHONDONTWRITEBYTECODE=1 /Users/zhangweiqi/miniconda3/bin/python3 -m pytest -p no:cacheprovider tests/integration/test_worker_recovery.py -q
+APP_DATABASE_URL=postgresql+psycopg://<user>:<password>@127.0.0.1:55432/sku_graph_test XONSH_HISTORY_BACKEND=dummy PYTHONDONTWRITEBYTECODE=1 python3 -m pytest -p no:cacheprovider tests/integration/test_worker_recovery.py -q
 git add src/platform/data/repositories.py src/platform/kernel/worker.py src/platform/data/graph_repository.py tests/integration/test_worker_recovery.py
 git commit -m "feat(kernel): execute durable nodes with lease recovery"
 ~~~
@@ -3587,7 +3587,7 @@ def complete_human_task(
 - [ ] **Step 6: 运行测试并提交**
 
 ~~~bash
-APP_DATABASE_URL=postgresql+psycopg://sku_test:graph-kernel-test-only@127.0.0.1:55432/sku_graph_test XONSH_HISTORY_BACKEND=dummy PYTHONDONTWRITEBYTECODE=1 /Users/zhangweiqi/miniconda3/bin/python3 -m pytest -p no:cacheprovider tests/integration/test_human_task.py tests/integration/test_usage_ledger.py -q
+APP_DATABASE_URL=postgresql+psycopg://<user>:<password>@127.0.0.1:55432/sku_graph_test XONSH_HISTORY_BACKEND=dummy PYTHONDONTWRITEBYTECODE=1 python3 -m pytest -p no:cacheprovider tests/integration/test_human_task.py tests/integration/test_usage_ledger.py -q
 git add src/platform/billing/ledger_repository.py src/platform/data/graph_repository.py src/platform/data/repositories.py tests/integration
 git commit -m "feat(kernel): persist human checkpoints policy and usage"
 ~~~
@@ -3674,7 +3674,7 @@ def test_project_scope_is_not_taken_from_request_body(app, two_project_identitie
 - [ ] **Step 2: 运行并确认失败**
 
 ~~~bash
-APP_DATABASE_URL=postgresql+psycopg://sku_test:graph-kernel-test-only@127.0.0.1:55432/sku_graph_test APP_BOOTSTRAP_TOKEN=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx XONSH_HISTORY_BACKEND=dummy PYTHONDONTWRITEBYTECODE=1 /Users/zhangweiqi/miniconda3/bin/python3 -m pytest -p no:cacheprovider tests/integration/test_control_plane_api.py -q
+APP_DATABASE_URL=postgresql+psycopg://<user>:<password>@127.0.0.1:55432/sku_graph_test APP_BOOTSTRAP_TOKEN=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx XONSH_HISTORY_BACKEND=dummy PYTHONDONTWRITEBYTECODE=1 python3 -m pytest -p no:cacheprovider tests/integration/test_control_plane_api.py -q
 ~~~
 
 Expected: FAIL，control_plane app/routes/auth 尚不存在。
@@ -4235,8 +4235,8 @@ write_json(
 write_json 与 write_schema 相同，使用 sort_keys=True 和结尾换行。
 
 ~~~bash
-APP_DATABASE_URL=postgresql+psycopg://sku_test:graph-kernel-test-only@127.0.0.1:55432/sku_graph_test APP_BOOTSTRAP_TOKEN=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx GRAPH_KERNEL_ENABLED=true /Users/zhangweiqi/miniconda3/bin/python3 scripts/export_contracts.py
-APP_DATABASE_URL=postgresql+psycopg://sku_test:graph-kernel-test-only@127.0.0.1:55432/sku_graph_test APP_BOOTSTRAP_TOKEN=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx GRAPH_KERNEL_ENABLED=true XONSH_HISTORY_BACKEND=dummy PYTHONDONTWRITEBYTECODE=1 /Users/zhangweiqi/miniconda3/bin/python3 -m pytest -p no:cacheprovider tests/integration/test_control_plane_api.py -q
+APP_DATABASE_URL=postgresql+psycopg://<user>:<password>@127.0.0.1:55432/sku_graph_test APP_BOOTSTRAP_TOKEN=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx GRAPH_KERNEL_ENABLED=true python3 scripts/export_contracts.py
+APP_DATABASE_URL=postgresql+psycopg://<user>:<password>@127.0.0.1:55432/sku_graph_test APP_BOOTSTRAP_TOKEN=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx GRAPH_KERNEL_ENABLED=true XONSH_HISTORY_BACKEND=dummy PYTHONDONTWRITEBYTECODE=1 python3 -m pytest -p no:cacheprovider tests/integration/test_control_plane_api.py -q
 git add src/platform/api scripts/export_contracts.py contracts/openapi tests/integration/test_control_plane_api.py
 git commit -m "feat(kernel): expose authenticated graph control plane api"
 ~~~
@@ -4660,8 +4660,8 @@ result.register(CapabilityDefinition(
 - [ ] **Step 7: 测试、校验 Graph 并提交**
 
 ~~~bash
-XONSH_HISTORY_BACKEND=dummy PYTHONDONTWRITEBYTECODE=1 /Users/zhangweiqi/miniconda3/bin/python3 -m pytest -p no:cacheprovider tests/unit/platform/kernel/test_recognition_capability.py tests/unit/test_recognition_request_id.py tests/unit/test_audit_outbox_evidence.py -q
-/Users/zhangweiqi/miniconda3/bin/python3 -c "import json; from src.platform.kernel.contracts import GraphDefinition; from src.platform.kernel.validation import validate_graph; [validate_graph(GraphDefinition.model_validate(json.load(open(p)))) for p in ['src/modules/reference_echo/graphs/echo-v1.json','src/modules/fmcg_vision/graphs/minimal-recognition-v1.json']]"
+XONSH_HISTORY_BACKEND=dummy PYTHONDONTWRITEBYTECODE=1 python3 -m pytest -p no:cacheprovider tests/unit/platform/kernel/test_recognition_capability.py tests/unit/test_recognition_request_id.py tests/unit/test_audit_outbox_evidence.py -q
+python3 -c "import json; from src.platform.kernel.contracts import GraphDefinition; from src.platform.kernel.validation import validate_graph; [validate_graph(GraphDefinition.model_validate(json.load(open(p)))) for p in ['src/modules/reference_echo/graphs/echo-v1.json','src/modules/fmcg_vision/graphs/minimal-recognition-v1.json']]"
 git add src/modules/reference_echo/graphs/echo-v1.json src/modules/fmcg_vision/graphs/minimal-recognition-v1.json src/modules/fmcg_vision/adapters/legacy_recognition.py src/platform/api/dependencies.py src/recognize/service.py src/data/warehouse.py migrations/sqlite/001_schema.sql migrations/postgres/001_schema.sql tests/unit
 git commit -m "feat(kernel): adapt recognition as an idempotent capability"
 ~~~
@@ -5473,7 +5473,7 @@ set -euo pipefail
 
 PROJECT_ROOT_PATH="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$PROJECT_ROOT_PATH"
-PROJECT_PYTHON_PATH="${PROJECT_PYTHON_PATH:-/Users/zhangweiqi/miniconda3/bin/python3}"
+PROJECT_PYTHON_PATH="${PROJECT_PYTHON_PATH:-python3}"
 exec "$PROJECT_PYTHON_PATH" -m uvicorn src.platform.api.main:app --host 127.0.0.1 --port 8400
 ~~~
 
@@ -5485,7 +5485,7 @@ set -euo pipefail
 
 PROJECT_ROOT_PATH="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$PROJECT_ROOT_PATH"
-PROJECT_PYTHON_PATH="${PROJECT_PYTHON_PATH:-/Users/zhangweiqi/miniconda3/bin/python3}"
+PROJECT_PYTHON_PATH="${PROJECT_PYTHON_PATH:-python3}"
 exec "$PROJECT_PYTHON_PATH" -m src.platform.kernel.worker
 ~~~
 
@@ -5541,7 +5541,7 @@ structure.md 增加 kernel、control_plane、persistence、contracts、web 目�
 ~~~bash
 bash -n scripts/run_control_plane.sh
 bash -n scripts/run_graph_worker.sh
-/Users/zhangweiqi/miniconda3/bin/python3 -m json.tool docs/services.json >/dev/null
+python3 -m json.tool docs/services.json >/dev/null
 git add src/platform/api/bootstrap.py src/platform/kernel/worker.py scripts/run_control_plane.sh scripts/run_graph_worker.sh docs/services.json docs/runbook.md docs/structure.md
 git commit -m "chore(kernel): add local bootstrap worker and runbook"
 ~~~
@@ -5766,7 +5766,7 @@ if __name__ == "__main__":
 - [ ] **Step 4: 执行全量测试**
 
 ~~~bash
-XONSH_HISTORY_BACKEND=dummy PYTHONDONTWRITEBYTECODE=1 APP_DATABASE_URL=postgresql+psycopg://sku_test:graph-kernel-test-only@127.0.0.1:55432/sku_graph_test APP_BOOTSTRAP_TOKEN=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx GRAPH_KERNEL_ENABLED=true /Users/zhangweiqi/miniconda3/bin/python3 -m pytest -p no:cacheprovider -q
+XONSH_HISTORY_BACKEND=dummy PYTHONDONTWRITEBYTECODE=1 APP_DATABASE_URL=postgresql+psycopg://<user>:<password>@127.0.0.1:55432/sku_graph_test APP_BOOTSTRAP_TOKEN=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx GRAPH_KERNEL_ENABLED=true python3 -m pytest -p no:cacheprovider -q
 cd web
 npm test
 npm run lint
@@ -5798,7 +5798,7 @@ Expected:
 启动 4 个不同 GRAPH_WORKER_ID 的 Worker，仅压 echo：
 
 ~~~bash
-/Users/zhangweiqi/miniconda3/bin/python3 scripts/benchmark_graph_kernel.py --graph-id core.echo --runs 1000 --concurrency 16
+python3 scripts/benchmark_graph_kernel.py --graph-id core.echo --runs 1000 --concurrency 16
 ~~~
 
 命令从当前环境读取 APP_BOOTSTRAP_TOKEN，并通过受权限控制的 Graph 列表解析最新 published `core.echo` 版本；不得把 token 写进命令历史。记录：
@@ -5887,7 +5887,7 @@ GK1 Graph Kernel checkpoint 必须逐项给 PASS/FAIL 和证据路径：
 - [ ] **Step 3: 最终测试和提交**
 
 ~~~bash
-XONSH_HISTORY_BACKEND=dummy PYTHONDONTWRITEBYTECODE=1 APP_DATABASE_URL=postgresql+psycopg://sku_test:graph-kernel-test-only@127.0.0.1:55432/sku_graph_test APP_BOOTSTRAP_TOKEN=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx GRAPH_KERNEL_ENABLED=true /Users/zhangweiqi/miniconda3/bin/python3 -m pytest -p no:cacheprovider -q
+XONSH_HISTORY_BACKEND=dummy PYTHONDONTWRITEBYTECODE=1 APP_DATABASE_URL=postgresql+psycopg://<user>:<password>@127.0.0.1:55432/sku_graph_test APP_BOOTSTRAP_TOKEN=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx GRAPH_KERNEL_ENABLED=true python3 -m pytest -p no:cacheprovider -q
 cd web
 npm test
 npm run build
@@ -5960,7 +5960,7 @@ def test_manifest_requires_owned_schema_and_foundation_range():
 运行：
 
 ~~~bash
-PYTHONDONTWRITEBYTECODE=1 /Users/zhangweiqi/miniconda3/bin/python3 -m pytest -p no:cacheprovider tests/unit/platform/modules/test_manifest.py -q
+PYTHONDONTWRITEBYTECODE=1 python3 -m pytest -p no:cacheprovider tests/unit/platform/modules/test_manifest.py -q
 ~~~
 
 Expected: FAIL，模块 Manifest 尚不存在。
@@ -6058,7 +6058,7 @@ def build_registry(factories: ModuleFactoryMap) -> ModuleRegistry:
 - [ ] **Step 5: 集成测试启停与失败隔离**
 
 ~~~bash
-PYTHONDONTWRITEBYTECODE=1 APP_DATABASE_URL=postgresql+psycopg://sku_test:graph-kernel-test-only@127.0.0.1:55432/sku_graph_test /Users/zhangweiqi/miniconda3/bin/python3 -m pytest -p no:cacheprovider tests/unit/platform/modules tests/integration/test_module_lifecycle.py -q
+PYTHONDONTWRITEBYTECODE=1 APP_DATABASE_URL=postgresql+psycopg://<user>:<password>@127.0.0.1:55432/sku_graph_test python3 -m pytest -p no:cacheprovider tests/unit/platform/modules tests/integration/test_module_lifecycle.py -q
 ~~~
 
 Expected: 禁用 Reference Echo 后其新 Run 返回 409 `module_disabled`，但历史 Run 可读；故意使 Echo 升级失败时 FMCG Bridge 与控制面仍健康。
@@ -6066,7 +6066,7 @@ Expected: 禁用 Reference Echo 后其新 Run 返回 409 `module_disabled`，但
 - [ ] **Step 6: 导出契约并提交**
 
 ~~~bash
-/Users/zhangweiqi/miniconda3/bin/python3 scripts/export_contracts.py
+python3 scripts/export_contracts.py
 shasum -a 256 contracts/module/v1/module-manifest.schema.json
 git add src/platform/modules contracts/module tests/unit/platform/modules tests/integration/test_module_lifecycle.py scripts/export_contracts.py
 git commit -m "feat(platform): add module sdk and lifecycle"
@@ -6162,8 +6162,8 @@ def test_migration_plan_is_dependency_ordered(orchestrator):
 - [ ] **Step 5: 运行隔离集成测试**
 
 ~~~bash
-APP_DATABASE_URL=postgresql+psycopg://sku_test:graph-kernel-test-only@127.0.0.1:55432/sku_graph_test /Users/zhangweiqi/miniconda3/bin/python3 -m alembic upgrade head
-PYTHONDONTWRITEBYTECODE=1 APP_DATABASE_URL=postgresql+psycopg://sku_test:graph-kernel-test-only@127.0.0.1:55432/sku_graph_test /Users/zhangweiqi/miniconda3/bin/python3 -m pytest -p no:cacheprovider tests/unit/platform/iam tests/integration/test_platform_schema_ownership.py tests/integration/test_control_plane_api.py -q
+APP_DATABASE_URL=postgresql+psycopg://<user>:<password>@127.0.0.1:55432/sku_graph_test python3 -m alembic upgrade head
+PYTHONDONTWRITEBYTECODE=1 APP_DATABASE_URL=postgresql+psycopg://<user>:<password>@127.0.0.1:55432/sku_graph_test python3 -m pytest -p no:cacheprovider tests/unit/platform/iam tests/integration/test_platform_schema_ownership.py tests/integration/test_control_plane_api.py -q
 ~~~
 
 Expected: 全部通过；跨租户查询对调用方返回 404；数据库角色的越界写入失败且产生审计证据。
@@ -6257,7 +6257,7 @@ def _object_path(root: Path, digest: str) -> Path:
 - [ ] **Step 5: 执行测试与故障注入**
 
 ~~~bash
-PYTHONDONTWRITEBYTECODE=1 APP_DATABASE_URL=postgresql+psycopg://sku_test:graph-kernel-test-only@127.0.0.1:55432/sku_graph_test APP_ASSET_ROOT=/tmp/llm-image-cas-test /Users/zhangweiqi/miniconda3/bin/python3 -m pytest -p no:cacheprovider tests/unit/platform/assets tests/integration/test_asset_evidence.py -q
+PYTHONDONTWRITEBYTECODE=1 APP_DATABASE_URL=postgresql+psycopg://<user>:<password>@127.0.0.1:55432/sku_graph_test APP_ASSET_ROOT=/tmp/llm-image-cas-test python3 -m pytest -p no:cacheprovider tests/unit/platform/assets tests/integration/test_asset_evidence.py -q
 ~~~
 
 故障注入必须证明：写一半进程退出不产生有效 Asset；数据库失败不覆盖已有 blob；blob 被人工篡改后 `verify_bundle` 报 `hash_mismatch`；没有任何测试访问业务原图。
@@ -6329,7 +6329,7 @@ claim 使用 `FOR UPDATE SKIP LOCKED`；成功事务同时写 Attempt、Job 状�
 - [ ] **Step 5: 运行并发和恢复测试**
 
 ~~~bash
-PYTHONDONTWRITEBYTECODE=1 APP_DATABASE_URL=postgresql+psycopg://sku_test:graph-kernel-test-only@127.0.0.1:55432/sku_graph_test /Users/zhangweiqi/miniconda3/bin/python3 -m pytest -p no:cacheprovider tests/unit/platform/jobs tests/integration/test_job_worker.py -q
+PYTHONDONTWRITEBYTECODE=1 APP_DATABASE_URL=postgresql+psycopg://<user>:<password>@127.0.0.1:55432/sku_graph_test python3 -m pytest -p no:cacheprovider tests/unit/platform/jobs tests/integration/test_job_worker.py -q
 ~~~
 
 Expected: 4 个 Worker 并发处理 1000 个无副作用测试 Job，成功 1000、重复 handler 0、丢失 0、永久 leased 0；强制中断一个 Worker 后全部恢复；恶意 payload 不能调用 shell、文件路径或未注册 handler。
@@ -6405,9 +6405,9 @@ class DataProduct(BaseModel):
 - [ ] **Step 4: 导出三份契约并验证稳定性**
 
 ~~~bash
-/Users/zhangweiqi/miniconda3/bin/python3 scripts/export_contracts.py
+python3 scripts/export_contracts.py
 shasum -a 256 contracts/data/v1/resource-ref.schema.json contracts/data/v1/data-product.schema.json contracts/data/v1/work-item.schema.json
-/Users/zhangweiqi/miniconda3/bin/python3 scripts/export_contracts.py
+python3 scripts/export_contracts.py
 git diff --exit-code contracts/data
 ~~~
 
@@ -6416,7 +6416,7 @@ Expected: 第二次导出无 diff。
 - [ ] **Step 5: 运行测试并提交**
 
 ~~~bash
-PYTHONDONTWRITEBYTECODE=1 APP_DATABASE_URL=postgresql+psycopg://sku_test:graph-kernel-test-only@127.0.0.1:55432/sku_graph_test /Users/zhangweiqi/miniconda3/bin/python3 -m pytest -p no:cacheprovider tests/unit/platform/data tests/integration/test_work_item_projection.py -q
+PYTHONDONTWRITEBYTECODE=1 APP_DATABASE_URL=postgresql+psycopg://<user>:<password>@127.0.0.1:55432/sku_graph_test python3 -m pytest -p no:cacheprovider tests/unit/platform/data tests/integration/test_work_item_projection.py -q
 git add src/platform/data contracts/data tests/unit/platform/data tests/integration/test_work_item_projection.py scripts/export_contracts.py
 git commit -m "feat(platform): add resource lineage and work projections"
 ~~~
@@ -6484,7 +6484,7 @@ RateCard 版本不可变，含生效区间、客户/套餐、meter、阶梯、�
 - [ ] **Step 5: 运行测试和财务不变量查询**
 
 ~~~bash
-PYTHONDONTWRITEBYTECODE=1 APP_DATABASE_URL=postgresql+psycopg://sku_test:graph-kernel-test-only@127.0.0.1:55432/sku_graph_test /Users/zhangweiqi/miniconda3/bin/python3 -m pytest -p no:cacheprovider tests/unit/platform/billing tests/integration/test_metering.py tests/integration/test_audit_trail.py -q
+PYTHONDONTWRITEBYTECODE=1 APP_DATABASE_URL=postgresql+psycopg://<user>:<password>@127.0.0.1:55432/sku_graph_test python3 -m pytest -p no:cacheprovider tests/unit/platform/billing tests/integration/test_metering.py tests/integration/test_audit_trail.py -q
 ~~~
 
 Expected: 重放 10 次同一事件仍只有 1 个原始用量；所有价格条目可追到 RateCard 版本；账本平衡查询差异为 0；越权导出被拒且有 deny 证据。
@@ -6563,7 +6563,7 @@ npm test
 npm run lint
 npm run build
 cd ..
-PYTHONDONTWRITEBYTECODE=1 APP_DATABASE_URL=postgresql+psycopg://sku_test:graph-kernel-test-only@127.0.0.1:55432/sku_graph_test /Users/zhangweiqi/miniconda3/bin/python3 -m pytest -p no:cacheprovider tests/integration/test_control_plane_api.py -q
+PYTHONDONTWRITEBYTECODE=1 APP_DATABASE_URL=postgresql+psycopg://<user>:<password>@127.0.0.1:55432/sku_graph_test python3 -m pytest -p no:cacheprovider tests/integration/test_control_plane_api.py -q
 ~~~
 
 Expected: 键盘可操作、loading/empty/error/unauthorized/degraded 状态均有测试；禁用一个模块不影响 Shell 和另一模块；生产 build 成功。
@@ -6651,7 +6651,7 @@ Bridge 只贡献 `vision.recognize.legacy`、最小识别 Graph、识别用量 m
 - [ ] **Step 5: 执行模块隔离矩阵**
 
 ~~~bash
-PYTHONDONTWRITEBYTECODE=1 APP_DATABASE_URL=postgresql+psycopg://sku_test:graph-kernel-test-only@127.0.0.1:55432/sku_graph_test /Users/zhangweiqi/miniconda3/bin/python3 -m pytest -p no:cacheprovider tests/architecture/test_module_boundaries.py tests/e2e/test_module_isolation.py -q
+PYTHONDONTWRITEBYTECODE=1 APP_DATABASE_URL=postgresql+psycopg://<user>:<password>@127.0.0.1:55432/sku_graph_test python3 -m pytest -p no:cacheprovider tests/architecture/test_module_boundaries.py tests/e2e/test_module_isolation.py -q
 ~~~
 
 矩阵必须证明：
@@ -6691,9 +6691,9 @@ git commit -m "feat(modules): package foundation verification modules"
 `bootstrap_foundation.py` 只创建测试/本机 tenant、project、bootstrap principal、两模块安装记录和发布 Graph；重复运行不新增重复事实。`verify_foundation.py` 只读检查数据库 revision、对象根目录、模块状态、Graph、Worker 心跳、Outbox backlog、审计追加性和旧服务端口，输出 JSON 并以非零退出码表示失败。
 
 ~~~bash
-APP_ENV=local /Users/zhangweiqi/miniconda3/bin/python3 scripts/bootstrap_foundation.py
-APP_ENV=local /Users/zhangweiqi/miniconda3/bin/python3 scripts/bootstrap_foundation.py
-APP_ENV=local /Users/zhangweiqi/miniconda3/bin/python3 scripts/verify_foundation.py --json
+APP_ENV=local python3 scripts/bootstrap_foundation.py
+APP_ENV=local python3 scripts/bootstrap_foundation.py
+APP_ENV=local python3 scripts/verify_foundation.py --json
 ~~~
 
 Expected: 第二次 bootstrap 为 `changed=false`；verify 为 `status=ready`；不写生产/历史数据库。
@@ -6714,7 +6714,7 @@ Expected: 第二次 bootstrap 为 `changed=false`；verify 为 `status=ready`；
 - Web Shell 首次本机构建产物 gzip 后主壳 JS 目标 ≤500KiB，模块 chunk 独立；超标必须解释或优化。
 
 ~~~bash
-APP_DATABASE_URL=postgresql+psycopg://sku_test:graph-kernel-test-only@127.0.0.1:55432/sku_graph_test APP_ASSET_ROOT=/tmp/llm-image-foundation-bench /Users/zhangweiqi/miniconda3/bin/python3 scripts/benchmark_foundation.py --runs 1000 --jobs 10000 --work-items 10000 --usage-events 10000 --blobs 1000
+APP_DATABASE_URL=postgresql+psycopg://<user>:<password>@127.0.0.1:55432/sku_graph_test APP_ASSET_ROOT=/tmp/llm-image-foundation-bench python3 scripts/benchmark_foundation.py --runs 1000 --jobs 10000 --work-items 10000 --usage-events 10000 --blobs 1000
 ~~~
 
 - [ ] **Step 4: 执行安全和故障矩阵**
@@ -6724,7 +6724,7 @@ APP_DATABASE_URL=postgresql+psycopg://sku_test:graph-kernel-test-only@127.0.0.1:
 - [ ] **Step 5: 跑全量测试并生成 UF0**
 
 ~~~bash
-XONSH_HISTORY_BACKEND=dummy PYTHONDONTWRITEBYTECODE=1 APP_DATABASE_URL=postgresql+psycopg://sku_test:graph-kernel-test-only@127.0.0.1:55432/sku_graph_test APP_BOOTSTRAP_TOKEN=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx APP_ASSET_ROOT=/tmp/llm-image-foundation-test GRAPH_KERNEL_ENABLED=true /Users/zhangweiqi/miniconda3/bin/python3 -m pytest -p no:cacheprovider -q
+XONSH_HISTORY_BACKEND=dummy PYTHONDONTWRITEBYTECODE=1 APP_DATABASE_URL=postgresql+psycopg://<user>:<password>@127.0.0.1:55432/sku_graph_test APP_BOOTSTRAP_TOKEN=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx APP_ASSET_ROOT=/tmp/llm-image-foundation-test GRAPH_KERNEL_ENABLED=true python3 -m pytest -p no:cacheprovider -q
 cd web
 npm test
 npm run lint
@@ -6785,8 +6785,8 @@ Expected: 不出现真实原图、SQLite、模型、训练数据、secret、运�
 - [ ] **Step 3: 运行最终验证**
 
 ~~~bash
-APP_ENV=local /Users/zhangweiqi/miniconda3/bin/python3 scripts/verify_foundation.py --json
-XONSH_HISTORY_BACKEND=dummy PYTHONDONTWRITEBYTECODE=1 APP_DATABASE_URL=postgresql+psycopg://sku_test:graph-kernel-test-only@127.0.0.1:55432/sku_graph_test APP_BOOTSTRAP_TOKEN=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx APP_ASSET_ROOT=/tmp/llm-image-foundation-test GRAPH_KERNEL_ENABLED=true /Users/zhangweiqi/miniconda3/bin/python3 -m pytest -p no:cacheprovider -q
+APP_ENV=local python3 scripts/verify_foundation.py --json
+XONSH_HISTORY_BACKEND=dummy PYTHONDONTWRITEBYTECODE=1 APP_DATABASE_URL=postgresql+psycopg://<user>:<password>@127.0.0.1:55432/sku_graph_test APP_BOOTSTRAP_TOKEN=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx APP_ASSET_ROOT=/tmp/llm-image-foundation-test GRAPH_KERNEL_ENABLED=true python3 -m pytest -p no:cacheprovider -q
 cd web
 npm test
 npm run build

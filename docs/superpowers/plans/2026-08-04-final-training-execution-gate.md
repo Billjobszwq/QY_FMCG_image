@@ -93,7 +93,7 @@
 
 | 检查 | 结果 | 判断 |
 |---|---|---|
-| Python 二进制 | `/Users/zhangweiqi/miniconda3/bin/python` 为 Mach-O arm64 | 原生运行，不是 Rosetta x86_64 |
+| Python 二进制 | `python3` 为 Mach-O arm64 | 原生运行，不是 Rosetta x86_64 |
 | Python / torch | Python 3.13.2，torch 2.13.0 | 当前环境可加载 |
 | torchvision / Ultralytics | torchvision 0.28.0，Ultralytics 8.4.113 | 与现有训练日志一致 |
 | `torch.backends.mps.is_built()` | `True` | PyTorch 包含 MPS 支持 |
@@ -117,9 +117,9 @@ PyTorch 官方推荐用 `torch.backends.mps.is_available()` 检查，并将张�
 以下命令只做只读/计算检查，不开始训练：
 
 ```bash
-file /Users/zhangweiqi/miniconda3/bin/python
+file python3
 
-/Users/zhangweiqi/miniconda3/bin/python -c 'import platform,torch; print("arch",platform.machine()); print("torch",torch.__version__); print("mps_built",torch.backends.mps.is_built()); print("mps_available",torch.backends.mps.is_available()); assert platform.machine()=="arm64"; assert torch.backends.mps.is_available(); x=torch.randn(1024,1024,device="mps"); y=x@x; print("mps_tensor_ok",y.shape,y.device)'
+python3 -c 'import platform,torch; print("arch",platform.machine()); print("torch",torch.__version__); print("mps_built",torch.backends.mps.is_built()); print("mps_available",torch.backends.mps.is_available()); assert platform.machine()=="arm64"; assert torch.backends.mps.is_available(); x=torch.randn(1024,1024,device="mps"); y=x@x; print("mps_tensor_ok",y.shape,y.device)'
 
 pmset -g batt
 pmset -g custom
@@ -305,9 +305,9 @@ pilot 数据固定 2,000 train + 300 val，按门店隔离，并与所有协议�
 在实现 Gate A、G0 和“已有 run 拒绝覆盖”后，目标命令为：
 
 ```bash
-caffeinate -dimsu /Users/zhangweiqi/miniconda3/bin/python -m src.training.train_v1 --data-yaml .datasets/e2_product_pilot_v1/data.yaml --model yolo26m.pt --run-name e2_p0_coco_s42 --epochs 3 --imgsz 960 --batch 4 --device mps --seed 42 --lr0 0.0005 --cls-weight 0.2 --patience 3 --close-mosaic 1 --cos-lr
+caffeinate -dimsu python3 -m src.training.train_v1 --data-yaml .datasets/e2_product_pilot_v1/data.yaml --model yolo26m.pt --run-name e2_p0_coco_s42 --epochs 3 --imgsz 960 --batch 4 --device mps --seed 42 --lr0 0.0005 --cls-weight 0.2 --patience 3 --close-mosaic 1 --cos-lr
 
-caffeinate -dimsu /Users/zhangweiqi/miniconda3/bin/python -m src.training.train_v1 --data-yaml .datasets/e2_product_pilot_v1/data.yaml --model best/sku_v4_best.pt --run-name e2_p1_v4_s42 --epochs 3 --imgsz 960 --batch 4 --device mps --seed 42 --lr0 0.0005 --cls-weight 0.2 --patience 3 --close-mosaic 1 --cos-lr
+caffeinate -dimsu python3 -m src.training.train_v1 --data-yaml .datasets/e2_product_pilot_v1/data.yaml --model best/sku_v4_best.pt --run-name e2_p1_v4_s42 --epochs 3 --imgsz 960 --batch 4 --device mps --seed 42 --lr0 0.0005 --cls-weight 0.2 --patience 3 --close-mosaic 1 --cos-lr
 ```
 
 这些命令**现在不能执行**；它们只在 Gate A/B、G0 和 run 防覆盖修复全部通过后生效。

@@ -48,7 +48,7 @@
 | 训练监控 | 8092 | `python -m src.training.monitor --port 8092` | 统一监控仪表盘；新版进程内存明显改善，仍需 2 小时长稳验证 |
 | 平台编排 API | 8304 | `python -m src.ls_platform.orchestrator --port 8304` | 数据集/任务/识别/下载 |
 
-> python 用 `/Users/zhangweiqi/miniconda3/bin/python`（3.13.2，pip 用 `python -m pip install`）。
+> python 用 `python3`（3.13.2，pip 用 `python -m pip install`）。
 >
 > 2026-08-04 复核时仅 8091、8092 监听；8300、8301、8304 均未运行。因此后面关于这三个服务的内容是设计/代码状态，不代表本次完成在线联调。
 

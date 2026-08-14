@@ -1,6 +1,6 @@
 # 候选模型证据链收口 + demo_micro_gold_v1 启动指令
 
-你现在接手项目：/Users/zhangweiqi/Documents/QY/项目/LLM-Image
+你现在接手项目：<legacy-workspace>
 
 本次不是重新训练任务，而是一次性完成：
 1. 候选模型、评估报告、数据库、API、Web 的状态一致性收口；

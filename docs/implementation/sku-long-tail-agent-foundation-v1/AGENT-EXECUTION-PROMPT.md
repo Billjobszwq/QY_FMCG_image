@@ -40,7 +40,7 @@ FMCG 识别只是第一个 Domain Pack，不得继续把平台内核写成只适
 
 先完整阅读以下文件，不得只读摘要：
 
-1. `/Users/zhangweiqi/.local/share/ai-workflow/routing/GLOBAL_AGENT_ROUTING.md`
+1. `<ai-workflow-root>/routing/GLOBAL_AGENT_ROUTING.md`
 2. `docs/GLOBAL_AGENT_ROUTING.md`（如存在）
 3. `docs/CODEX-PROJECT-HANDBOOK.md`
 4. `docs/README.md`

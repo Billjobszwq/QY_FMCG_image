@@ -94,10 +94,10 @@ chore(deps): regenerate portable lock file
 ## 3. Task 1：建立仓库前只读审计
 
 **Files:**
-- Inspect: `/Users/zhangweiqi/Documents/QY/项目/LLM-Image/.gitignore`
-- Inspect: `/Users/zhangweiqi/Documents/QY/项目/LLM-Image/.env.example`
-- Inspect: `/Users/zhangweiqi/Documents/QY/项目/LLM-Image/requirements-lock.txt`
-- Create later: `/Users/zhangweiqi/Documents/QY/项目/LLM-Image/.gitattributes`
+- Inspect: `<legacy-workspace>/.gitignore`
+- Inspect: `<legacy-workspace>/.env.example`
+- Inspect: `<legacy-workspace>/requirements-lock.txt`
+- Create later: `<legacy-workspace>/.gitattributes`
 
 - [ ] **Step 1: 确认目录尚未被初始化**
 
@@ -137,8 +137,8 @@ Expected: 当前会命中约 36 条本机路径；在首次稳定版本前重新
 ## 4. Task 2：完善忽略规则和文本属性
 
 **Files:**
-- Modify later: `/Users/zhangweiqi/Documents/QY/项目/LLM-Image/.gitignore`
-- Create later: `/Users/zhangweiqi/Documents/QY/项目/LLM-Image/.gitattributes`
+- Modify later: `<legacy-workspace>/.gitignore`
+- Create later: `<legacy-workspace>/.gitattributes`
 
 - [ ] **Step 1: 用以下策略补齐 `.gitignore`**
 

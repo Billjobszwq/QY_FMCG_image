@@ -6,8 +6,8 @@
 ## 命令输出
 
 ```text
-$ file /Users/zhangweiqi/miniconda3/bin/python
-/Users/zhangweiqi/miniconda3/bin/python: Mach-O 64-bit executable arm64
+$ file python3
+python3: Mach-O 64-bit executable arm64
 
 $ python -c '...G0 断言...'
 arch arm64

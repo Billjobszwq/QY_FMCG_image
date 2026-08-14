@@ -84,7 +84,7 @@ The "recorded" side is computed from the SAME current tree/HEAD/migrations as th
 
 ## 7. Exact CLI invocations to regenerate each artifact
 
-All from repo root `/Users/zhangweiqi/Documents/QY/项目/LLM-Image` (stack first via `bin/abos start` / verify `bin/abos status`, `bin/abos doctor`):
+All from repo root `<legacy-workspace>` (stack first via `bin/abos start` / verify `bin/abos status`, `bin/abos doctor`):
 
 | Artifact | Command | Notes |
 |---|---|---|

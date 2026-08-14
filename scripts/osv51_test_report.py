@@ -24,7 +24,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 OUT = ROOT / ".eval" / "scope_v5" / "test_report.json"
-PY = "/Users/zhangweiqi/miniconda3/bin/python"
+PY = "python3"
 
 from src.platform import binding_core as _bc  # noqa: E402
 
