@@ -315,9 +315,18 @@ def test_audit_paths_finds_legacy_absolute_path(tmp_path: Path, content: str) ->
     ]
 
 
-@pytest.mark.parametrize("key", ["trace_id", "created_by", "file_count"])
-def test_audit_paths_finds_runtime_json_keys(tmp_path: Path, key: str) -> None:
-    _write(tmp_path, "docs/config.txt", json.dumps({key: "value"}))
+@pytest.mark.parametrize(
+    ("key", "value"),
+    [
+        ("trace_id", "tr-abc123"),
+        ("created_by", "operator-7"),
+        ("file_count", 3),
+    ],
+)
+def test_audit_paths_finds_concrete_runtime_values(
+    tmp_path: Path, key: str, value: str | int
+) -> None:
+    _write(tmp_path, "docs/config.txt", json.dumps({key: value}))
 
     assert [finding.rule for finding in audit_paths(tmp_path, ["docs/config.txt"])] == [
         "runtime-evidence"
@@ -333,21 +342,40 @@ def test_audit_paths_finds_runtime_json_keys(tmp_path: Path, key: str) -> None:
         "web/src/runtimeSchema.ts",
     ],
 )
-def test_runtime_json_keys_are_allowed_in_program_sources(
+def test_runtime_variable_definitions_are_allowed_in_program_sources(
     tmp_path: Path, path: str
 ) -> None:
-    _write(tmp_path, path, json.dumps({"trace" + "_id": "documented-field"}))
+    _write(
+        tmp_path,
+        path,
+        'record = {"trace' + '_id": result.get("trace_id"), '
+        '"created_by": actor, "file_count": len(files)}\n',
+    )
 
     assert audit_paths(tmp_path, [path]) == []
+
+
+def test_concrete_runtime_record_in_source_file_is_blocked(tmp_path: Path) -> None:
+    path = "scripts/customer_export.py"
+    _write(
+        tmp_path,
+        path,
+        'record = {"trace' + '_id": "tr-source123", '
+        '"created' + '_by": "operator-' + '9", "file' + '_count": 12}\n',
+    )
+
+    assert [finding.rule for finding in audit_paths(tmp_path, [path])] == [
+        "runtime-evidence"
+    ]
 
 
 @pytest.mark.parametrize(
     ("path", "key", "value"),
     [
-        ("src/customer-export.json", "trace_id", "trace-123"),
+        ("src/customer-export.json", "trace_id", "tr-nested123"),
         ("scripts/runtime-capture.txt", "created_by", "operator-7"),
         ("web/customer-export.json", "file_count", 42),
-        ("tests/customer-dump.json", "trace_id", "trace-456"),
+        ("tests/customer-dump.json", "trace_id", "tr-nested456"),
         (
             "docs/implementation/platform-runtime/customer-run.md",
             "created_by",
@@ -390,6 +418,7 @@ def test_blocked_runtime_path_still_wins_for_source_shaped_content(tmp_path: Pat
     _write(tmp_path, path, json.dumps({"file" + "_count": 3}))
 
     assert [finding.rule for finding in audit_paths(tmp_path, [path])] == [
+        "runtime-evidence",
         "runtime-report",
     ]
 
@@ -402,7 +431,7 @@ def test_audit_paths_reports_each_distinct_content_rule_once(tmp_path: Path) -> 
         + "\n"
         + _legacy_path("dev")
         + "\n"
-        + json.dumps({"trace" + "_id": "x"}),
+        + json.dumps({"trace" + "_id": "tr-test123"}),
     )
 
     findings = audit_paths(tmp_path, ["docs/config.txt"])
@@ -414,11 +443,26 @@ def test_audit_paths_reports_each_distinct_content_rule_once(tmp_path: Path) -> 
     ]
 
 
-def test_audit_paths_skips_files_larger_than_two_million_bytes(tmp_path: Path) -> None:
+def test_audit_paths_scans_credentials_larger_than_two_million_bytes(
+    tmp_path: Path,
+) -> None:
     secret = _github_token().encode()
     _write(tmp_path, "docs/large.txt", secret + b" " * (2_000_001 - len(secret)))
 
-    assert audit_paths(tmp_path, ["docs/large.txt"]) == []
+    assert [finding.rule for finding in audit_paths(tmp_path, ["docs/large.txt"])] == [
+        "credential-pattern"
+    ]
+
+
+def test_audit_paths_scans_runtime_evidence_larger_than_two_million_bytes(
+    tmp_path: Path,
+) -> None:
+    evidence = json.dumps({"trace" + "_id": "tr-" + "large123"}).encode()
+    _write(tmp_path, "customer-export.json", evidence + b" " * (2_000_001 - len(evidence)))
+
+    assert [finding.rule for finding in audit_paths(tmp_path, ["customer-export.json"])] == [
+        "runtime-evidence"
+    ]
 
 
 def test_audit_paths_fails_closed_for_nul_delimited_binary_content(tmp_path: Path) -> None:

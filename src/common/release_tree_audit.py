@@ -80,7 +80,6 @@ _BLOCKED_SUFFIXES = {
 }
 
 _RUNTIME_EVIDENCE_NAMES = {"EXECUTION-LOG.md", "FINAL-REPORT.md", "STATUS.md"}
-_MAX_TEXT_BYTES = 2_000_000
 
 _PRIVATE_KEY_WORDS = "PRIVATE" + " KEY"
 _CREDENTIAL_PATTERNS = (
@@ -92,26 +91,10 @@ _CREDENTIAL_PATTERNS = (
 )
 _LEGACY_ABSOLUTE_PATH = re.compile(r"/Users/[^/\r\n]+/Documents/QY/项目/LLM-Image")
 _RUNTIME_JSON_VALUE = re.compile(
-    r'"(?:trace_id|created_by|file_count)"\s*:\s*'
+    r'"(?P<key>trace_id|created_by|file_count)"\s*:\s*'
     r'(?P<value>"(?:\\.|[^"\\])*"|-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?|true|false|null)'
 )
-_RUNTIME_SCHEMA_SOURCE_SUFFIXES = {
-    ".py",
-    ".pyi",
-    ".js",
-    ".jsx",
-    ".ts",
-    ".tsx",
-    ".css",
-    ".scss",
-    ".sh",
-    ".sql",
-    ".toml",
-    ".yaml",
-    ".yml",
-    ".xml",
-    ".plist",
-}
+_REALISTIC_TRACE_ID = re.compile(r"tr-[A-Za-z0-9_-]{6,}")
 _URI_CREDENTIALS = re.compile(
     r"\b[A-Za-z][A-Za-z0-9+.-]*:" + r"//" + r"([^\s/:@]+):([^\s/@]+)@"
 )
@@ -204,16 +187,24 @@ def _has_uri_credentials(content: str) -> bool:
     )
 
 
-def _allows_runtime_schema_definition(relative_path: str) -> bool:
-    return PurePosixPath(relative_path).suffix.lower() in _RUNTIME_SCHEMA_SOURCE_SUFFIXES
-
-
 def _has_runtime_evidence(content: str) -> bool:
     for match in _RUNTIME_JSON_VALUE.finditer(content):
+        key = match.group("key")
         raw_value = match.group("value")
+        if key == "file_count":
+            if not raw_value.startswith('"'):
+                return True
+            continue
         if not raw_value.startswith('"'):
-            return True
-        value = json.loads(raw_value)
+            continue
+        try:
+            value = json.loads(raw_value)
+        except json.JSONDecodeError:
+            continue
+        if key == "trace_id":
+            if _REALISTIC_TRACE_ID.fullmatch(value):
+                return True
+            continue
         if value not in {"", "..."} and not _is_placeholder(value):
             return True
     return False
@@ -235,9 +226,7 @@ def _text_findings(relative_path: str, content: str) -> list[Finding]:
                 "text contains an absolute path to the legacy repository",
             )
         )
-    if _has_runtime_evidence(content) and not _allows_runtime_schema_definition(
-        relative_path
-    ):
+    if _has_runtime_evidence(content):
         findings.append(
             Finding(relative_path, "runtime-evidence", "text contains a runtime evidence JSON key")
         )
@@ -261,9 +250,7 @@ def _blob_findings(relative_path: str, raw_content: bytes) -> list[Finding]:
         invalid_utf8 = True
         content = raw_content.decode("utf-8", errors="ignore")
 
-    findings: list[Finding] = []
-    if len(raw_content) <= _MAX_TEXT_BYTES:
-        findings.extend(_text_findings(relative_path, content))
+    findings = _text_findings(relative_path, content)
     if invalid_utf8:
         findings.append(
             Finding(
@@ -284,8 +271,6 @@ def _worktree_content_findings(root: Path, relative_path: str) -> list[Finding]:
             return [
                 Finding(relative_path, "audit-read-error", "worktree path is not a regular file")
             ]
-        if file_stat.st_size > _MAX_TEXT_BYTES:
-            return []
         raw_content = local_path.read_bytes()
     except OSError as exc:
         return [
