@@ -170,6 +170,7 @@ def test_audit_paths_finds_github_credentials(tmp_path: Path, prefix: str) -> No
         "-----BEGIN RSA PRIVATE KEY-----",
         "-----BEGIN EC PRIVATE KEY-----",
         "-----BEGIN OPENSSH PRIVATE KEY-----",
+        "BEGIN PRIVATE KEY",
         "BEGIN RSA PRIVATE KEY",
         "BEGIN EC PRIVATE KEY",
         "BEGIN OPENSSH PRIVATE KEY",

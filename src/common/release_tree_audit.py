@@ -59,7 +59,7 @@ _CREDENTIAL_PATTERNS = (
     re.compile(r"gh[pousr]_[A-Za-z0-9_]{20,}"),
     re.compile(r"AKIA[A-Z0-9]{16}"),
     re.compile(
-        rf"(?:BEGIN (?:RSA|EC|OPENSSH) {_PRIVATE_KEY_WORDS}|-----BEGIN {_PRIVATE_KEY_WORDS}-----)"
+        rf"BEGIN (?:(?:RSA|EC|OPENSSH) )?{_PRIVATE_KEY_WORDS}"
     ),
 )
 _LEGACY_ABSOLUTE_PATH = re.compile(r"/Users/[^/\r\n]+/Documents/QY/项目/LLM-Image")
