@@ -387,15 +387,18 @@ best/                -> recognition-models/candidates/legacy-best/
 
 不复制 `.env`、`.venv*`、`node_modules`、`__pycache__`、`.pytest_cache`、`.DS_Store`、`.claude`、`.gstack` 和异常 `~/`。
 
-- [ ] **Step 4: 创建兼容链接并校验**
+- [ ] **Step 4: 校验归档并只读预演兼容链接**
 
 ```bash
-python scripts/bootstrap_local_assets.py
 python -m src.models.bundle verify --bundle-id prod_20260805_v5_r1
+python scripts/bootstrap_local_assets.py --dry-run
 git status --short --ignored
 ```
 
-Expected: 生产 bundle 验证通过；资产实体和链接全部被 Git 忽略。
+Task 4 只归档和校验资产，不创建 live 兼容链接。`bootstrap --dry-run` 预期返回
+`dry_run: true` 且退出码为 1，因为此时仍有被 Git 跟踪的
+`.datasets_nextgen`、`.micro_gold_v2`、`.data_protocol` 真实目录；三者必须明确报告为
+`conflict`。Expected: 生产 bundle 验证通过；资产实体全部被 Git 忽略；工作树不新增任何兼容链接。
 
 ### Task 5: 清理新 Git 文件树中的用户数据和运行证据
 
@@ -414,11 +417,27 @@ Expected: 生产 bundle 验证通过；资产实体和链接全部被 Git 忽略
 只在新克隆中执行 `git rm`；Task 4 的本地忽略归档保留。架构、设计、决策和实施计划文档继续跟踪。
 同时将本设计和本计划中的旧工作区绝对路径替换为 `<legacy-workspace>`，将新主目录写为相对路径或 `<project-root>`。
 
-- [ ] **Step 2: 用中性 SVG 替换来源不可证明的货架照片**
+- [ ] **Step 2: 在 tracked 旧目录移除后创建并复核兼容链接**
+
+只有在 `git rm` 已移除 `.datasets_nextgen`、`.micro_gold_v2`、`.data_protocol` 等被跟踪的
+旧实体后，才运行真实 bootstrap：
+
+```bash
+python scripts/bootstrap_local_assets.py
+python scripts/bootstrap_local_assets.py --dry-run
+python scripts/bootstrap_local_assets.py
+python -m src.models.bundle verify --bundle-id prod_20260805_v5_r1
+```
+
+首次真实运行必须退出 0，全部 13 项只能是 `created` 或 `unchanged`，且不得有
+`conflict`。随后 dry-run 和再次真实运行都必须退出 0、全部 13 项为 `unchanged`。
+只有 bootstrap 成功后才执行生产 bundle 校验。
+
+- [ ] **Step 3: 用中性 SVG 替换来源不可证明的货架照片**
 
 `shelf-demo.svg` 不包含品牌、照片或用户信息。`Overview.tsx` 改用 `/img/shelf-demo.svg`，alt 为“货架识别演示占位图”。
 
-- [ ] **Step 3: 运行契约测试和发布树审计**
+- [ ] **Step 4: 运行契约测试和发布树审计**
 
 ```bash
 pytest tests/promotion/test_three_audience_html.py -q
@@ -427,7 +446,7 @@ python scripts/audit_release_tree.py --root . --format json
 
 Expected: 测试 PASS；继续清理直到 finding=0。
 
-- [ ] **Step 4: 提交清理结果**
+- [ ] **Step 5: 提交清理结果**
 
 ```bash
 git add -u

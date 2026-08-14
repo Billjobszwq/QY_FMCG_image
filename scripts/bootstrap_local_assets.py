@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import stat
 import sys
 from pathlib import Path
 from typing import Any
@@ -26,23 +27,47 @@ LEGACY_LINKS = {
 }
 
 
+class InvalidProjectRootError(RuntimeError):
+    """Raised when --root is not recognizably this project's repository root."""
+
+
 def _resolved_root(root: Path | str | None) -> Path:
     candidate = Path(__file__).resolve().parents[1] if root is None else Path(root)
     return candidate.expanduser().resolve()
 
 
-def _ensure_real_directory(root: Path, relative_path: str, *, dry_run: bool) -> None:
-    current = root
-    for component in Path(relative_path).parts:
-        current = current / component
-        if current.is_symlink():
-            raise OSError(f"target path must not contain a symlink: {relative_path}")
-        if current.exists():
-            if not current.is_dir():
-                raise OSError(f"target path is not a directory: {relative_path}")
-            continue
-        if not dry_run:
-            current.mkdir()
+def _path_kind(path: Path) -> str:
+    try:
+        mode = path.lstat().st_mode
+    except FileNotFoundError:
+        return "missing"
+    if stat.S_ISLNK(mode):
+        return "symlink"
+    if stat.S_ISDIR(mode):
+        return "directory"
+    if stat.S_ISREG(mode):
+        return "file"
+    return "filesystem entity"
+
+
+def _validate_project_root(root: Path) -> None:
+    if _path_kind(root) != "directory":
+        raise InvalidProjectRootError(f"project root is not a directory: {root}")
+
+    sentinel_kinds = {
+        ".git": {"directory", "file"},
+        "pyproject.toml": {"file"},
+        "src": {"directory"},
+        "scripts": {"directory"},
+    }
+    invalid = [
+        sentinel
+        for sentinel, allowed_kinds in sentinel_kinds.items()
+        if _path_kind(root / sentinel) not in allowed_kinds
+    ]
+    if invalid:
+        names = ", ".join(invalid)
+        raise InvalidProjectRootError(f"project root is missing safe repository sentinels: {names}")
 
 
 def _is_expected_relative_link(link_value: str, expected: str) -> bool:
@@ -62,102 +87,263 @@ def _result(
     }
 
 
-def bootstrap_local_assets(
-    root: Path | str | None = None, *, dry_run: bool = False
+def _error(exc: BaseException) -> dict[str, str]:
+    return {"type": type(exc).__name__, "message": str(exc)}
+
+
+def _payload(
+    root: Path | str,
+    *,
+    dry_run: bool,
+    results: list[dict[str, str]],
+    error: dict[str, str] | None = None,
 ) -> dict[str, Any]:
-    project_root = _resolved_root(root)
-    if not project_root.is_dir():
-        raise OSError(f"project root is not a directory: {project_root}")
-
-    target_was_missing = {
-        target_path: not (project_root / target_path).exists()
-        for target_path in LEGACY_LINKS.values()
+    return {
+        "ok": error is None
+        and all(result["status"] not in {"conflict", "error"} for result in results),
+        "root": str(root),
+        "dry_run": dry_run,
+        "results": results,
+        "error": error,
     }
-    for target_path in LEGACY_LINKS.values():
-        _ensure_real_directory(project_root, target_path, dry_run=dry_run)
 
+
+def _target_conflict(root: Path, target_path: str) -> str | None:
+    current = root
+    for component in Path(target_path).parts:
+        current = current / component
+        kind = _path_kind(current)
+        if kind == "missing":
+            return None
+        if kind != "directory":
+            relative = current.relative_to(root).as_posix()
+            return f"target component {relative} is an existing {kind}"
+    return None
+
+
+def _inspect_legacy(
+    root: Path, legacy_path: str, target_path: str, target_conflict: str | None
+) -> dict[str, str]:
+    if target_conflict is not None:
+        return _result(legacy_path, target_path, "conflict", target_conflict)
+
+    legacy = root / legacy_path
+    target = root / target_path
+    kind = _path_kind(legacy)
+    if kind == "missing":
+        return _result(
+            legacy_path,
+            target_path,
+            "would_create",
+            "target directory and relative symlink would be created",
+        )
+    if kind == "symlink":
+        link_value = os.readlink(legacy)
+        relative_target = os.path.relpath(target, start=legacy.parent)
+        if not _is_expected_relative_link(link_value, relative_target):
+            return _result(
+                legacy_path,
+                target_path,
+                "conflict",
+                "legacy path is a symlink with a different target",
+            )
+        if _path_kind(target) != "directory":
+            return _result(
+                legacy_path,
+                target_path,
+                "conflict",
+                "legacy path is a broken symlink",
+            )
+        return _result(
+            legacy_path,
+            target_path,
+            "unchanged",
+            "relative symlink already points to target",
+        )
+    return _result(
+        legacy_path,
+        target_path,
+        "conflict",
+        f"legacy path is an existing {kind}",
+    )
+
+
+def _preflight(root: Path) -> list[dict[str, str]]:
     results: list[dict[str, str]] = []
     for legacy_path, target_path in LEGACY_LINKS.items():
-        legacy = project_root / legacy_path
-        target = project_root / target_path
-        relative_target = os.path.relpath(target, start=legacy.parent)
+        target_conflict = _target_conflict(root, target_path)
+        results.append(_inspect_legacy(root, legacy_path, target_path, target_conflict))
+    return results
 
-        if legacy.is_symlink():
-            link_value = os.readlink(legacy)
-            if _is_expected_relative_link(link_value, relative_target):
-                results.append(
-                    _result(
-                        legacy_path,
-                        target_path,
-                        "unchanged",
-                        "relative symlink already points to target",
-                    )
-                )
-            else:
-                results.append(
-                    _result(
-                        legacy_path,
-                        target_path,
-                        "conflict",
-                        "legacy path is a symlink with a different target",
-                    )
-                )
+
+def _ensure_target_directory(root: Path, target_path: str) -> tuple[str, str] | None:
+    current = root
+    for component in Path(target_path).parts:
+        current = current / component
+        kind = _path_kind(current)
+        if kind == "directory":
             continue
+        if kind != "missing":
+            relative = current.relative_to(root).as_posix()
+            return "conflict", f"target component {relative} appeared as an existing {kind}"
 
-        if legacy.exists():
-            entity = "directory" if legacy.is_dir() else "file" if legacy.is_file() else "entity"
-            results.append(
-                _result(
-                    legacy_path,
-                    target_path,
-                    "conflict",
-                    f"legacy path is an existing {entity}",
-                )
-            )
+        # Recheck immediately before mkdir to narrow the race window.
+        kind = _path_kind(current)
+        if kind == "directory":
             continue
+        if kind != "missing":
+            relative = current.relative_to(root).as_posix()
+            return "conflict", f"target component {relative} appeared as an existing {kind}"
+        try:
+            current.mkdir()
+        except FileExistsError:
+            kind = _path_kind(current)
+            if kind == "directory":
+                continue
+            relative = current.relative_to(root).as_posix()
+            return "conflict", f"target component {relative} appeared as an existing {kind}"
 
-        if dry_run:
-            detail = (
-                "would create target directory and relative symlink"
-                if target_was_missing[target_path]
-                else "would create relative symlink"
-            )
-            results.append(
-                _result(
-                    legacy_path,
-                    target_path,
-                    "created",
-                    detail,
-                )
-            )
+        kind = _path_kind(current)
+        if kind != "directory":
+            relative = current.relative_to(root).as_posix()
+            return "conflict", f"target component {relative} is no longer a directory"
+    return None
+
+
+def _operation_error_result(
+    legacy_path: str, target_path: str, exc: BaseException
+) -> dict[str, str]:
+    return _result(
+        legacy_path,
+        target_path,
+        "error",
+        f"operation failed with {type(exc).__name__}",
+    )
+
+
+def _mutate(root: Path, plan: list[dict[str, str]], *, dry_run: bool) -> dict[str, Any]:
+    if dry_run:
+        return _payload(root, dry_run=True, results=plan)
+
+    journal: list[dict[str, str]] = []
+    for planned in plan:
+        legacy_path = planned["legacy_path"]
+        target_path = planned["target_path"]
+        if planned["status"] == "unchanged":
+            journal.append(planned)
             continue
 
         try:
+            target_conflict = _ensure_target_directory(root, target_path)
+        except (OSError, RuntimeError) as exc:
+            journal.append(_operation_error_result(legacy_path, target_path, exc))
+            return _payload(
+                root,
+                dry_run=False,
+                results=journal,
+                error=_error(exc),
+            )
+        if target_conflict is not None:
+            _, detail = target_conflict
+            journal.append(_result(legacy_path, target_path, "conflict", detail))
+            return _payload(root, dry_run=False, results=journal)
+
+        try:
+            # Recheck both sides immediately before creating the compatibility
+            # link. A concurrent writer may have replaced the target after mkdir.
+            target_conflict = _target_conflict(root, target_path)
+            current = _inspect_legacy(
+                root, legacy_path, target_path, target_conflict
+            )
+        except (OSError, RuntimeError) as exc:
+            journal.append(_operation_error_result(legacy_path, target_path, exc))
+            return _payload(
+                root,
+                dry_run=False,
+                results=journal,
+                error=_error(exc),
+            )
+        if current["status"] == "unchanged":
+            journal.append(current)
+            continue
+        if current["status"] == "conflict":
+            journal.append(current)
+            return _payload(root, dry_run=False, results=journal)
+
+        legacy = root / legacy_path
+        target = root / target_path
+        relative_target = os.path.relpath(target, start=legacy.parent)
+        try:
+            # _inspect_legacy is the immediate pre-symlink recheck. FileExistsError
+            # is re-inspected because another process may win after that check.
             legacy.symlink_to(relative_target, target_is_directory=True)
         except FileExistsError:
-            results.append(
-                _result(
-                    legacy_path,
-                    target_path,
-                    "conflict",
-                    "legacy path appeared before the symlink could be created",
+            try:
+                raced_target_conflict = _target_conflict(root, target_path)
+                raced = _inspect_legacy(
+                    root, legacy_path, target_path, raced_target_conflict
                 )
+            except (OSError, RuntimeError) as exc:
+                journal.append(_operation_error_result(legacy_path, target_path, exc))
+                return _payload(
+                    root,
+                    dry_run=False,
+                    results=journal,
+                    error=_error(exc),
+                )
+            journal.append(raced)
+            if raced["status"] == "unchanged":
+                continue
+            return _payload(root, dry_run=False, results=journal)
+        except (OSError, RuntimeError) as exc:
+            journal.append(_operation_error_result(legacy_path, target_path, exc))
+            return _payload(
+                root,
+                dry_run=False,
+                results=journal,
+                error=_error(exc),
             )
         else:
-            results.append(
+            journal.append(
                 _result(
                     legacy_path,
                     target_path,
                     "created",
-                    "created relative symlink",
+                    "created target directory and relative symlink",
                 )
             )
 
-    return {
-        "ok": all(result["status"] != "conflict" for result in results),
-        "root": str(project_root),
-        "results": results,
-    }
+    return _payload(root, dry_run=False, results=journal)
+
+
+def bootstrap_local_assets(
+    root: Path | str | None = None, *, dry_run: bool = False
+) -> dict[str, Any]:
+    try:
+        project_root = _resolved_root(root)
+    except (OSError, RuntimeError) as exc:
+        root_text = str(root) if root is not None else str(Path(__file__).resolve().parents[1])
+        return _payload(
+            root_text,
+            dry_run=dry_run,
+            results=[],
+            error=_error(exc),
+        )
+
+    try:
+        _validate_project_root(project_root)
+        plan = _preflight(project_root)
+    except (OSError, RuntimeError) as exc:
+        return _payload(
+            project_root,
+            dry_run=dry_run,
+            results=[],
+            error=_error(exc),
+        )
+
+    if any(result["status"] == "conflict" for result in plan):
+        return _payload(project_root, dry_run=dry_run, results=plan)
+    return _mutate(project_root, plan, dry_run=dry_run)
 
 
 def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -184,19 +370,15 @@ def _print_json(payload: dict[str, Any]) -> None:
 
 def main(argv: list[str] | None = None) -> int:
     args = _parse_args(argv)
-    try:
-        root = _resolved_root(args.root)
-        payload = bootstrap_local_assets(root, dry_run=args.dry_run)
-    except (OSError, RuntimeError) as exc:
-        try:
-            root_text = str(_resolved_root(args.root))
-        except (OSError, RuntimeError):
-            root_text = str(args.root) if args.root is not None else str(Path(__file__).parent)
-        _print_json({"ok": False, "root": root_text, "results": []})
-        print(f"local asset bootstrap failed: {exc}", file=sys.stderr)
-        return 2
-
+    payload = bootstrap_local_assets(args.root, dry_run=args.dry_run)
     _print_json(payload)
+    if payload["error"] is not None:
+        error = payload["error"]
+        print(
+            f"local asset bootstrap failed: {error['type']}: {error['message']}",
+            file=sys.stderr,
+        )
+        return 2
     return 0 if payload["ok"] else 1
 
 
