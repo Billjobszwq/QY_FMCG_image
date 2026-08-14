@@ -353,6 +353,11 @@ git commit -m "chore: separate local data model and runtime assets"
 - Local only: `recognition-models/**`
 - Local only: `runtime/**`
 
+Task 4 只归档 38 个静态资产映射（原 43 个映射中排除 5 个正在变化的运行时/用户状态目录）。
+`.platform/`、`.label-studio/`、`.warehouse/`、`.field/` 和 `reports/` 是可重建或持续变化的
+运行时/用户状态，仅保留在旧工作区，不复制到新工作区。执行归档时不停止任何服务。
+新工作区的 `runtime/` 分区仍保留，仅用于未来在新工作区中清洁生成的运行时状态以及下述静态旧项目资产。
+
 - [ ] **Step 1: 用 macOS APFS `cp -cR` 归档训练数据**
 
 ```text
@@ -364,7 +369,6 @@ git commit -m "chore: separate local data model and runtime assets"
 crop_dataset*/cropped_images/batch3_gray/    -> training-data/processed/
 .kb/.labels/.quality/.review_queue/          -> training-data/processed/
 .micro_gold*/.data_protocol/.eval/.sam_runs/ -> training-data/evaluation/
-reports/                                     -> runtime/legacy-reports/
 ```
 
 - [ ] **Step 2: 归档识别模型**
@@ -376,16 +380,17 @@ reports/                                     -> runtime/legacy-reports/
 best/                -> recognition-models/candidates/legacy-best/
 ```
 
-- [ ] **Step 3: 归档运行时状态**
+- [ ] **Step 3: 仅归档静态旧项目资产**
 
 ```text
-.platform/       -> runtime/platform/
-.label-studio/   -> runtime/label-studio/
-.warehouse/      -> runtime/warehouse/
-.field/          -> runtime/field/
+UI风格设计-1/          -> runtime/legacy-project-assets/ui-design/
+adapter_config.json      -> runtime/local-config/adapter_config.json
+requirements-lock.txt   -> runtime/legacy-project-assets/requirements-lock.txt
 ```
 
-不复制 `.env`、`.venv*`、`node_modules`、`__pycache__`、`.pytest_cache`、`.DS_Store`、`.claude`、`.gstack` 和异常 `~/`。
+明确不复制 `.platform`、`.label-studio`、`.warehouse`、`.field`、`reports`、`.env`、任何嵌套
+`.env`/`.env.*`、`.venv*`、`node_modules`、`__pycache__`、`.pytest_cache`、`.DS_Store`、`.claude`、`.gstack`
+和异常 `~/`。这些排除项不会先复制后删除，而是在复制边界直接过滤。
 
 - [ ] **Step 4: 校验归档并只读预演兼容链接**
 
