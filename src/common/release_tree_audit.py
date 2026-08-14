@@ -16,6 +16,14 @@ class Finding:
     detail: str
 
 
+@dataclass(frozen=True)
+class _IndexEntry:
+    mode: str
+    object_id: str
+    stage: int
+    path: str
+
+
 _ALLOWED_LOCAL_DOCS = {
     PurePosixPath("training-data/README.md"),
     PurePosixPath("recognition-models/README.md"),
@@ -48,10 +56,30 @@ _BLOCKED_SUFFIXES = {
     ".jpg",
     ".jpeg",
     ".png",
+    ".mp4",
+    ".mov",
+    ".avi",
+    ".mkv",
+    ".wav",
+    ".mp3",
+    ".m4a",
+    ".webp",
+    ".gif",
+    ".zip",
+    ".tar",
+    ".gz",
+    ".bz2",
+    ".7z",
+    ".rar",
+    ".ckpt",
+    ".bin",
+    ".engine",
+    ".npy",
+    ".npz",
+    ".parquet",
 }
 
 _RUNTIME_EVIDENCE_NAMES = {"EXECUTION-LOG.md", "FINAL-REPORT.md", "STATUS.md"}
-_CONTENT_SCAN_EXEMPTIONS = {"tests/unit/test_release_tree_audit.py"}
 _MAX_TEXT_BYTES = 2_000_000
 
 _PRIVATE_KEY_WORDS = "PRIVATE" + " KEY"
@@ -64,10 +92,45 @@ _CREDENTIAL_PATTERNS = (
 )
 _LEGACY_ABSOLUTE_PATH = re.compile(r"/Users/[^/\r\n]+/Documents/QY/项目/LLM-Image")
 _RUNTIME_JSON_KEY = re.compile(r'"(?:trace_id|created_by|file_count)"\s*:')
+_URI_CREDENTIALS = re.compile(
+    r"\b[A-Za-z][A-Za-z0-9+.-]*:" + r"//" + r"([^\s/:@]+):([^\s/@]+)@"
+)
+_PLACEHOLDER_VALUES = {
+    "user",
+    "username",
+    "password",
+    "passwd",
+    "changeme",
+    "change-me",
+    "example",
+    "example-user",
+    "example-password",
+    "your-user",
+    "your-password",
+    "replace-me",
+    "replace_me",
+    "xxx",
+    "***",
+}
+
+
+def _is_credential_file(path: PurePosixPath) -> bool:
+    name = path.name
+    lower_name = name.lower()
+    if name == ".env.example":
+        return False
+    if lower_name == ".env" or lower_name.startswith(".env."):
+        return True
+    if path.suffix.lower() in {".pem", ".key"}:
+        return True
+    return bool(re.fullmatch(r"(?:credentials|cookies).*\.json", lower_name))
 
 
 def blocked_path_rule(path: PurePosixPath) -> str | None:
     parts = path.parts
+    if _is_credential_file(path):
+        return "credential-file"
+
     if (
         (
             len(parts) >= 3
@@ -100,27 +163,32 @@ def _path_detail(path: PurePosixPath, rule: str) -> str:
         return f"path is under blocked root '{path.parts[0]}'"
     if rule == "forbidden-binary-or-business-data":
         return f"blocked file suffix '{path.suffix.lower()}'"
+    if rule == "credential-file":
+        return "path is a credential or cookie file"
     return "path contains runtime execution evidence"
 
 
-def _content_findings(root: Path, relative_path: str) -> list[Finding]:
-    if relative_path in _CONTENT_SCAN_EXEMPTIONS:
-        return []
+def _is_placeholder(value: str) -> bool:
+    normalized = value.strip().lower()
+    return (
+        normalized in _PLACEHOLDER_VALUES
+        or normalized.startswith(("${", "{{", "<"))
+        or "placeholder" in normalized
+    )
 
-    local_path = root / relative_path
-    try:
-        file_stat = local_path.lstat()
-        if not stat.S_ISREG(file_stat.st_mode) or file_stat.st_size > _MAX_TEXT_BYTES:
-            return []
-        raw_content = local_path.read_bytes()
-        if b"\x00" in raw_content:
-            return []
-        content = raw_content.decode("utf-8", errors="ignore")
-    except OSError:
-        return []
 
+def _has_uri_credentials(content: str) -> bool:
+    return any(
+        not _is_placeholder(match.group(1)) and not _is_placeholder(match.group(2))
+        for match in _URI_CREDENTIALS.finditer(content)
+    )
+
+
+def _text_findings(relative_path: str, content: str) -> list[Finding]:
     findings: list[Finding] = []
-    if any(pattern.search(content) for pattern in _CREDENTIAL_PATTERNS):
+    if any(pattern.search(content) for pattern in _CREDENTIAL_PATTERNS) or _has_uri_credentials(
+        content
+    ):
         findings.append(
             Finding(relative_path, "credential-pattern", "text contains a credential pattern")
         )
@@ -139,6 +207,56 @@ def _content_findings(root: Path, relative_path: str) -> list[Finding]:
     return findings
 
 
+def _blob_findings(relative_path: str, raw_content: bytes) -> list[Finding]:
+    if b"\x00" in raw_content:
+        return [
+            Finding(
+                relative_path,
+                "unclassified-binary",
+                "tracked blob contains NUL bytes",
+            )
+        ]
+
+    invalid_utf8 = False
+    try:
+        content = raw_content.decode("utf-8")
+    except UnicodeDecodeError:
+        invalid_utf8 = True
+        content = raw_content.decode("utf-8", errors="ignore")
+
+    findings: list[Finding] = []
+    if len(raw_content) <= _MAX_TEXT_BYTES:
+        findings.extend(_text_findings(relative_path, content))
+    if invalid_utf8:
+        findings.append(
+            Finding(
+                relative_path,
+                "unclassified-binary",
+                "tracked blob is not valid UTF-8 text",
+            )
+        )
+    return findings
+
+
+def _worktree_content_findings(root: Path, relative_path: str) -> list[Finding]:
+
+    local_path = root / relative_path
+    try:
+        file_stat = local_path.lstat()
+        if not stat.S_ISREG(file_stat.st_mode):
+            return [
+                Finding(relative_path, "audit-read-error", "worktree path is not a regular file")
+            ]
+        if file_stat.st_size > _MAX_TEXT_BYTES:
+            return []
+        raw_content = local_path.read_bytes()
+    except OSError as exc:
+        return [
+            Finding(relative_path, "audit-read-error", f"cannot read worktree file: {exc}")
+        ]
+    return _blob_findings(relative_path, raw_content)
+
+
 def audit_paths(root: Path, tracked_paths: Iterable[str]) -> list[Finding]:
     findings: list[Finding] = []
     for relative_path in sorted(set(tracked_paths)):
@@ -146,14 +264,108 @@ def audit_paths(root: Path, tracked_paths: Iterable[str]) -> list[Finding]:
         path_rule = blocked_path_rule(posix_path)
         if path_rule is not None:
             findings.append(Finding(relative_path, path_rule, _path_detail(posix_path, path_rule)))
-        findings.extend(_content_findings(root, relative_path))
+        findings.extend(_worktree_content_findings(root, relative_path))
 
     return sorted(findings, key=lambda finding: (finding.path, finding.rule, finding.detail))
 
 
+def _parse_index_entries(output: bytes) -> list[_IndexEntry]:
+    entries: list[_IndexEntry] = []
+    for record in output.split(b"\0"):
+        if not record:
+            continue
+        try:
+            metadata, encoded_path = record.split(b"\t", 1)
+            mode_bytes, object_id_bytes, stage_bytes = metadata.split(b" ")
+            mode = mode_bytes.decode("ascii")
+            object_id = object_id_bytes.decode("ascii")
+            stage = int(stage_bytes.decode("ascii"))
+            path = encoded_path.decode("utf-8")
+        except (UnicodeDecodeError, ValueError) as exc:
+            raise RuntimeError("git ls-files --stage returned an invalid index entry") from exc
+        if (
+            not re.fullmatch(r"[0-7]{6}", mode)
+            or not re.fullmatch(r"[0-9a-fA-F]{40,64}", object_id)
+            or stage not in {0, 1, 2, 3}
+        ):
+            raise RuntimeError("git ls-files --stage returned an invalid index entry")
+        entries.append(_IndexEntry(mode, object_id, stage, path))
+    return entries
+
+
+def _read_index_blob(root: Path, object_id: str) -> tuple[bytes | None, str | None]:
+    try:
+        result = subprocess.run(
+            ["git", "-C", str(root), "cat-file", "blob", object_id],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            check=False,
+        )
+    except OSError as exc:
+        return None, str(exc)
+    if result.returncode != 0:
+        error = result.stderr.decode("utf-8", errors="replace").strip()
+        return None, error or "git cat-file failed"
+    return result.stdout, None
+
+
+def _audit_index_entries(root: Path, entries: Sequence[_IndexEntry]) -> list[Finding]:
+    findings: list[Finding] = []
+    blob_cache: dict[str, tuple[bytes | None, str | None]] = {}
+    for entry in sorted(
+        entries, key=lambda item: (item.path, item.stage, item.mode, item.object_id)
+    ):
+        path = PurePosixPath(entry.path)
+        path_rule = blocked_path_rule(path)
+        if path_rule is not None:
+            findings.append(Finding(entry.path, path_rule, _path_detail(path, path_rule)))
+
+        if entry.stage != 0:
+            findings.append(
+                Finding(
+                    entry.path,
+                    "unmerged-index-entry",
+                    "tracked path has a nonzero Git index stage",
+                )
+            )
+
+        if entry.mode == "160000":
+            findings.append(
+                Finding(entry.path, "gitlink", "tracked path is a Git submodule link")
+            )
+            continue
+
+        if entry.mode != "120000" and not entry.mode.startswith("100"):
+            findings.append(
+                Finding(entry.path, "audit-read-error", f"unsupported Git mode {entry.mode}")
+            )
+            continue
+
+        if entry.object_id not in blob_cache:
+            blob_cache[entry.object_id] = _read_index_blob(root, entry.object_id)
+        raw_content, read_error = blob_cache[entry.object_id]
+        if raw_content is None:
+            findings.append(
+                Finding(
+                    entry.path,
+                    "audit-read-error",
+                    f"cannot read index blob {entry.object_id}: {read_error}",
+                )
+            )
+        else:
+            findings.extend(_blob_findings(entry.path, raw_content))
+
+        if entry.mode == "120000":
+            findings.append(
+                Finding(entry.path, "tracked-symlink", "tracked path is a symbolic link")
+            )
+
+    return sorted(set(findings), key=lambda finding: (finding.path, finding.rule, finding.detail))
+
+
 def audit_git_tree(root: Path) -> list[Finding]:
     result = subprocess.run(
-        ["git", "-C", str(root), "ls-files", "-z", "--"],
+        ["git", "-C", str(root), "ls-files", "--stage", "-z", "--"],
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         check=False,
@@ -162,14 +374,7 @@ def audit_git_tree(root: Path) -> list[Finding]:
         error = result.stderr.decode("utf-8", errors="replace").strip()
         raise RuntimeError(f"git ls-files failed for {root}: {error or 'unknown git error'}")
 
-    try:
-        tracked_paths = [
-            encoded_path.decode("utf-8") for encoded_path in result.stdout.split(b"\0") if encoded_path
-        ]
-    except UnicodeDecodeError as exc:
-        raise RuntimeError(f"git ls-files returned a non-UTF-8 path for {root}") from exc
-
-    return audit_paths(root, tracked_paths)
+    return _audit_index_entries(root, _parse_index_entries(result.stdout))
 
 
 def findings_as_json(findings: Sequence[Finding]) -> str:

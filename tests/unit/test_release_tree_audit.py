@@ -8,6 +8,7 @@ from pathlib import Path, PurePosixPath
 
 import pytest
 
+import src.common.release_tree_audit as release_audit
 from src.common.release_tree_audit import (
     Finding,
     audit_git_tree,
@@ -19,6 +20,33 @@ from src.common.release_tree_audit import (
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 CLI = REPO_ROOT / "scripts" / "audit_release_tree.py"
+
+
+def _github_token(prefix: str = "ghp_") -> str:
+    return prefix + "a_" + "b" * 18
+
+
+def _aws_key() -> str:
+    return "AK" + "IA" + "1234567890ABCDEF"
+
+
+def _private_key_marker(algorithm: str | None = None, *, framed: bool = False) -> str:
+    words = ["BEGIN"]
+    if algorithm is not None:
+        words.append(algorithm)
+    words.extend(["PRIVATE", "KEY"])
+    marker = " ".join(words)
+    return "-----" + marker + "-----" if framed else marker
+
+
+def _legacy_path(user: str = "alice") -> str:
+    return "/" + "/".join(["Users", user, "Documents", "QY", "项目", "LLM-Image"])
+
+
+def _credential_uri(
+    scheme: str = "postgresql", user: str = "alice", password: str = "real-password"
+) -> str:
+    return scheme + ":" + "//" + user + ":" + password + "@host/db"
 
 
 def _write(root: Path, relative_path: str, content: str | bytes = "safe\n") -> None:
@@ -108,6 +136,27 @@ def test_allowed_local_documentation(path: str) -> None:
         ".jpg",
         ".jpeg",
         ".png",
+        ".mp4",
+        ".mov",
+        ".avi",
+        ".mkv",
+        ".wav",
+        ".mp3",
+        ".m4a",
+        ".webp",
+        ".gif",
+        ".zip",
+        ".tar",
+        ".gz",
+        ".bz2",
+        ".7z",
+        ".rar",
+        ".ckpt",
+        ".bin",
+        ".engine",
+        ".npy",
+        ".npz",
+        ".parquet",
     ],
 )
 @pytest.mark.parametrize("uppercase", [False, True], ids=["lowercase", "uppercase"])
@@ -153,9 +202,31 @@ def test_runtime_evidence_rule_takes_precedence_over_runtime_root() -> None:
     assert blocked_path_rule(path) == "runtime-evidence"
 
 
+@pytest.mark.parametrize(
+    "path",
+    [
+        ".env",
+        ".env.local",
+        "config/.env.production",
+        "secrets/server.pem",
+        "secrets/server.KEY",
+        "config/credentials.json",
+        "config/credentials-prod.JSON",
+        "exports/cookies.json",
+        "exports/cookies-browser.json",
+    ],
+)
+def test_credential_file_paths_are_blocked(path: str) -> None:
+    assert blocked_path_rule(PurePosixPath(path)) == "credential-file"
+
+
+def test_env_example_path_is_allowed() -> None:
+    assert blocked_path_rule(PurePosixPath("config/.env.example")) is None
+
+
 @pytest.mark.parametrize("prefix", ["ghp_", "gho_", "ghu_", "ghs_", "ghr_"])
 def test_audit_paths_finds_github_credentials(tmp_path: Path, prefix: str) -> None:
-    _write(tmp_path, "docs/config.txt", prefix + "a_" + "b" * 18)
+    _write(tmp_path, "docs/config.txt", _github_token(prefix))
 
     assert [finding.rule for finding in audit_paths(tmp_path, ["docs/config.txt"])] == [
         "credential-pattern"
@@ -165,15 +236,15 @@ def test_audit_paths_finds_github_credentials(tmp_path: Path, prefix: str) -> No
 @pytest.mark.parametrize(
     "secret",
     [
-        "AKIA1234567890ABCDEF",
-        "-----BEGIN PRIVATE KEY-----",
-        "-----BEGIN RSA PRIVATE KEY-----",
-        "-----BEGIN EC PRIVATE KEY-----",
-        "-----BEGIN OPENSSH PRIVATE KEY-----",
-        "BEGIN PRIVATE KEY",
-        "BEGIN RSA PRIVATE KEY",
-        "BEGIN EC PRIVATE KEY",
-        "BEGIN OPENSSH PRIVATE KEY",
+        _aws_key(),
+        _private_key_marker(framed=True),
+        _private_key_marker("RSA", framed=True),
+        _private_key_marker("EC", framed=True),
+        _private_key_marker("OPENSSH", framed=True),
+        _private_key_marker(),
+        _private_key_marker("RSA"),
+        _private_key_marker("EC"),
+        _private_key_marker("OPENSSH"),
     ],
 )
 def test_audit_paths_finds_other_credentials(tmp_path: Path, secret: str) -> None:
@@ -184,13 +255,39 @@ def test_audit_paths_finds_other_credentials(tmp_path: Path, secret: str) -> Non
     ]
 
 
+@pytest.mark.parametrize("scheme", ["postgresql", "https", "custom+tls"])
+def test_audit_paths_finds_embedded_uri_credentials(tmp_path: Path, scheme: str) -> None:
+    _write(tmp_path, "docs/config.txt", _credential_uri(scheme=scheme))
+
+    assert [finding.rule for finding in audit_paths(tmp_path, ["docs/config.txt"])] == [
+        "credential-pattern"
+    ]
+
+
+@pytest.mark.parametrize(
+    ("user", "password"),
+    [
+        ("user", "password"),
+        ("username", "changeme"),
+        ("example-user", "example-password"),
+    ],
+)
+def test_env_example_placeholders_are_safe(
+    tmp_path: Path, user: str, password: str
+) -> None:
+    path = "config/.env.example"
+    _write(tmp_path, path, "DATABASE_URL=" + _credential_uri(user=user, password=password))
+
+    assert audit_paths(tmp_path, [path]) == []
+
+
 @pytest.mark.parametrize(
     "content",
     [
-        "/Users/alice/Documents/QY/项目/LLM-Image/output",
-        "/Users/Alice Smith/Documents/QY/项目/LLM-Image",
-        'legacy="/Users/alice/Documents/QY/项目/LLM-Image";',
-        "legacy path: /Users/alice/Documents/QY/项目/LLM-Image),",
+        _legacy_path() + "/output",
+        _legacy_path("Alice Smith"),
+        'legacy="' + _legacy_path() + '";',
+        "legacy path: " + _legacy_path() + "),",
     ],
 )
 def test_audit_paths_finds_legacy_absolute_path(tmp_path: Path, content: str) -> None:
@@ -214,7 +311,11 @@ def test_audit_paths_reports_each_distinct_content_rule_once(tmp_path: Path) -> 
     _write(
         tmp_path,
         "docs/config.txt",
-        "ghp_" + "a" * 20 + '\n/Users/dev/Documents/QY/项目/LLM-Image\n{"trace_id": "x"}',
+        _github_token()
+        + "\n"
+        + _legacy_path("dev")
+        + "\n"
+        + json.dumps({"trace" + "_id": "x"}),
     )
 
     findings = audit_paths(tmp_path, ["docs/config.txt"])
@@ -227,37 +328,44 @@ def test_audit_paths_reports_each_distinct_content_rule_once(tmp_path: Path) -> 
 
 
 def test_audit_paths_skips_files_larger_than_two_million_bytes(tmp_path: Path) -> None:
-    secret = b"ghp_" + b"a" * 20
+    secret = _github_token().encode()
     _write(tmp_path, "docs/large.txt", secret + b" " * (2_000_001 - len(secret)))
 
     assert audit_paths(tmp_path, ["docs/large.txt"]) == []
 
 
-def test_audit_paths_skips_nul_delimited_binary_content(tmp_path: Path) -> None:
-    _write(tmp_path, "docs/binary.txt", b"\x00\xff\xfeghp_" + b"a" * 20)
+def test_audit_paths_fails_closed_for_nul_delimited_binary_content(tmp_path: Path) -> None:
+    _write(tmp_path, "docs/binary.txt", b"\x00\xff\xfe" + _github_token().encode())
 
-    assert audit_paths(tmp_path, ["docs/binary.txt"]) == []
+    assert [finding.rule for finding in audit_paths(tmp_path, ["docs/binary.txt"])] == [
+        "unclassified-binary"
+    ]
 
 
 def test_audit_paths_scans_decodable_content_around_invalid_utf8(tmp_path: Path) -> None:
-    _write(tmp_path, "docs/invalid-utf8.txt", b"\xffAKIA1234567890ABCDEF\xfe")
+    _write(tmp_path, "docs/invalid-utf8.txt", b"\xff" + _aws_key().encode() + b"\xfe")
 
     assert [
         finding.rule for finding in audit_paths(tmp_path, ["docs/invalid-utf8.txt"])
-    ] == ["credential-pattern"]
+    ] == ["credential-pattern", "unclassified-binary"]
 
 
-def test_negative_pattern_fixture_is_exempt_from_content_scanning(tmp_path: Path) -> None:
+def test_test_file_path_has_no_content_exemption(tmp_path: Path) -> None:
     fixture_path = "tests/unit/test_release_tree_audit.py"
-    _write(tmp_path, fixture_path, "ghp_" + "a" * 20)
+    _write(tmp_path, fixture_path, _github_token())
 
-    assert audit_paths(tmp_path, [fixture_path]) == []
+    assert [finding.rule for finding in audit_paths(tmp_path, [fixture_path])] == [
+        "credential-pattern"
+    ]
 
 
-def test_auditor_source_does_not_trigger_its_own_content_rules() -> None:
-    source_path = "src/common/release_tree_audit.py"
+def test_auditor_source_and_tests_do_not_trigger_content_rules() -> None:
+    source_paths = [
+        "src/common/release_tree_audit.py",
+        "tests/unit/test_release_tree_audit.py",
+    ]
 
-    assert audit_paths(REPO_ROOT, [source_path]) == []
+    assert audit_paths(REPO_ROOT, source_paths) == []
 
 
 def test_negative_pattern_fixture_still_obeys_path_rules(tmp_path: Path) -> None:
@@ -323,6 +431,85 @@ def test_audit_git_tree_scans_only_tracked_files_and_handles_utf8_paths(tmp_path
 
     assert findings == [
         Finding("reports/结果.txt", "runtime-report", "path is under blocked root 'reports'")
+    ]
+
+
+def test_audit_git_tree_scans_staged_blob_instead_of_safe_worktree(tmp_path: Path) -> None:
+    path = "docs/config.txt"
+    _init_git_repo(tmp_path, {path: "safe\n"})
+    _write(tmp_path, path, _github_token())
+    _git(tmp_path, "add", "--", path)
+    _write(tmp_path, path, "safe worktree\n")
+
+    assert [finding.rule for finding in audit_git_tree(tmp_path)] == [
+        "credential-pattern"
+    ]
+
+
+def test_audit_git_tree_scans_index_blob_when_worktree_file_is_deleted(tmp_path: Path) -> None:
+    path = "docs/config.txt"
+    _init_git_repo(tmp_path, {path: _github_token()})
+    (tmp_path / path).unlink()
+
+    assert [finding.rule for finding in audit_git_tree(tmp_path)] == [
+        "credential-pattern"
+    ]
+
+
+def test_audit_git_tree_fails_closed_for_invalid_utf8_index_blob(tmp_path: Path) -> None:
+    _init_git_repo(tmp_path, {"docs/blob.dat": b"\xff\xfe"})
+
+    assert [finding.rule for finding in audit_git_tree(tmp_path)] == [
+        "unclassified-binary"
+    ]
+
+
+def test_audit_git_tree_rejects_symlink_after_scanning_link_blob(tmp_path: Path) -> None:
+    _git(tmp_path, "init", "-q")
+    link_path = tmp_path / "credential-link"
+    link_path.symlink_to(_github_token())
+    _git(tmp_path, "add", "--", link_path.name)
+
+    assert [finding.rule for finding in audit_git_tree(tmp_path)] == [
+        "credential-pattern",
+        "tracked-symlink",
+    ]
+
+
+def test_parse_and_audit_synthetic_gitlink_entry(tmp_path: Path) -> None:
+    raw = b"160000 " + b"a" * 40 + b" 0\tvendor/submodule\0"
+
+    entries = release_audit._parse_index_entries(raw)
+    findings = release_audit._audit_index_entries(tmp_path, entries)
+
+    assert entries[0].mode == "160000"
+    assert [finding.rule for finding in findings] == ["gitlink"]
+
+
+def test_parse_and_audit_nonzero_stage_entry(tmp_path: Path) -> None:
+    raw = b"160000 " + b"b" * 40 + b" 2\tvendor/conflicted\0"
+
+    entries = release_audit._parse_index_entries(raw)
+    findings = release_audit._audit_index_entries(tmp_path, entries)
+
+    assert entries[0].stage == 2
+    assert [finding.rule for finding in findings] == ["gitlink", "unmerged-index-entry"]
+
+
+def test_cat_file_failure_becomes_audit_read_error(tmp_path: Path) -> None:
+    _git(tmp_path, "init", "-q")
+    raw = b"100644 " + b"0" * 40 + b" 0\tdocs/missing.txt\0"
+
+    findings = release_audit._audit_index_entries(
+        tmp_path, release_audit._parse_index_entries(raw)
+    )
+
+    assert [finding.rule for finding in findings] == ["audit-read-error"]
+
+
+def test_missing_worktree_file_becomes_audit_read_error(tmp_path: Path) -> None:
+    assert [finding.rule for finding in audit_paths(tmp_path, ["docs/missing.txt"])] == [
+        "audit-read-error"
     ]
 
 
