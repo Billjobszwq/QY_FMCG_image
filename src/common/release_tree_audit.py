@@ -91,16 +91,27 @@ _CREDENTIAL_PATTERNS = (
     ),
 )
 _LEGACY_ABSOLUTE_PATH = re.compile(r"/Users/[^/\r\n]+/Documents/QY/项目/LLM-Image")
-_RUNTIME_JSON_KEY = re.compile(r'"(?:trace_id|created_by|file_count)"\s*:')
-_RUNTIME_SCHEMA_SOURCE_ROOTS = {"src", "tests", "scripts", "web"}
-_ARCHITECTURE_DOC_PREFIXES = (
-    ("docs", "architecture"),
-    ("docs", "decisions"),
-    ("docs", "design"),
-    ("docs", "implementation"),
-    ("docs", "superpowers", "plans"),
-    ("docs", "superpowers", "specs"),
+_RUNTIME_JSON_VALUE = re.compile(
+    r'"(?:trace_id|created_by|file_count)"\s*:\s*'
+    r'(?P<value>"(?:\\.|[^"\\])*"|-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?|true|false|null)'
 )
+_RUNTIME_SCHEMA_SOURCE_SUFFIXES = {
+    ".py",
+    ".pyi",
+    ".js",
+    ".jsx",
+    ".ts",
+    ".tsx",
+    ".css",
+    ".scss",
+    ".sh",
+    ".sql",
+    ".toml",
+    ".yaml",
+    ".yml",
+    ".xml",
+    ".plist",
+}
 _URI_CREDENTIALS = re.compile(
     r"\b[A-Za-z][A-Za-z0-9+.-]*:" + r"//" + r"([^\s/:@]+):([^\s/@]+)@"
 )
@@ -194,12 +205,18 @@ def _has_uri_credentials(content: str) -> bool:
 
 
 def _allows_runtime_schema_definition(relative_path: str) -> bool:
-    path = PurePosixPath(relative_path)
-    if path.parts and path.parts[0] in _RUNTIME_SCHEMA_SOURCE_ROOTS:
-        return True
-    return path.suffix.lower() == ".md" and any(
-        path.parts[: len(prefix)] == prefix for prefix in _ARCHITECTURE_DOC_PREFIXES
-    )
+    return PurePosixPath(relative_path).suffix.lower() in _RUNTIME_SCHEMA_SOURCE_SUFFIXES
+
+
+def _has_runtime_evidence(content: str) -> bool:
+    for match in _RUNTIME_JSON_VALUE.finditer(content):
+        raw_value = match.group("value")
+        if not raw_value.startswith('"'):
+            return True
+        value = json.loads(raw_value)
+        if value not in {"", "..."} and not _is_placeholder(value):
+            return True
+    return False
 
 
 def _text_findings(relative_path: str, content: str) -> list[Finding]:
@@ -218,7 +235,7 @@ def _text_findings(relative_path: str, content: str) -> list[Finding]:
                 "text contains an absolute path to the legacy repository",
             )
         )
-    if _RUNTIME_JSON_KEY.search(content) and not _allows_runtime_schema_definition(
+    if _has_runtime_evidence(content) and not _allows_runtime_schema_definition(
         relative_path
     ):
         findings.append(

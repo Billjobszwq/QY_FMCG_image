@@ -331,13 +331,45 @@ def test_audit_paths_finds_runtime_json_keys(tmp_path: Path, key: str) -> None:
         "tests/platform/test_runtime_schema.py",
         "scripts/export_runtime_schema.py",
         "web/src/runtimeSchema.ts",
-        "docs/implementation/platform-runtime/04-API-CONTRACTS.md",
     ],
 )
-def test_runtime_json_keys_are_allowed_in_program_and_architecture_sources(
+def test_runtime_json_keys_are_allowed_in_program_sources(
     tmp_path: Path, path: str
 ) -> None:
     _write(tmp_path, path, json.dumps({"trace" + "_id": "documented-field"}))
+
+    assert audit_paths(tmp_path, [path]) == []
+
+
+@pytest.mark.parametrize(
+    ("path", "key", "value"),
+    [
+        ("src/customer-export.json", "trace_id", "trace-123"),
+        ("scripts/runtime-capture.txt", "created_by", "operator-7"),
+        ("web/customer-export.json", "file_count", 42),
+        ("tests/customer-dump.json", "trace_id", "trace-456"),
+        (
+            "docs/implementation/platform-runtime/customer-run.md",
+            "created_by",
+            "operator-8",
+        ),
+    ],
+)
+def test_runtime_values_in_nested_data_like_files_are_blocked(
+    tmp_path: Path, path: str, key: str, value: str | int
+) -> None:
+    _write(tmp_path, path, json.dumps({key: value}))
+
+    assert [finding.rule for finding in audit_paths(tmp_path, [path])] == [
+        "runtime-evidence"
+    ]
+
+
+def test_runtime_placeholder_in_architecture_document_is_not_evidence(
+    tmp_path: Path,
+) -> None:
+    path = "docs/implementation/platform-runtime/04-API-CONTRACTS.md"
+    _write(tmp_path, path, json.dumps({"trace" + "_id": "..."}))
 
     assert audit_paths(tmp_path, [path]) == []
 
@@ -358,7 +390,6 @@ def test_blocked_runtime_path_still_wins_for_source_shaped_content(tmp_path: Pat
     _write(tmp_path, path, json.dumps({"file" + "_count": 3}))
 
     assert [finding.rule for finding in audit_paths(tmp_path, [path])] == [
-        "runtime-evidence",
         "runtime-report",
     ]
 
