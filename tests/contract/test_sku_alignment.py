@@ -11,7 +11,7 @@ from src.catalog.alias_registry import build_registry
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 INV = pathlib.Path("/tmp/sku_recon/inventory.json")
-XLSX = ROOT / "实景照片.xlsx"
+XLSX = ROOT / "training-data" / "raw" / "source-spreadsheets" / "实景照片.xlsx"
 ALIAS = ROOT / "data" / "sku_aliases.json"
 
 
@@ -28,7 +28,8 @@ def _field_names():
 def _kb_names():
     if INV.exists():
         return sorted(json.loads(INV.read_text(encoding="utf-8"))["skus"].keys())
-    d = ROOT / "搭建初期P1"
+    # SKU 文件夹是本地原始资产；源码树不再携带旧顶层业务目录。
+    d = ROOT / "training-data" / "raw" / "initial-p1"
     return sorted(p.name for p in d.iterdir() if p.is_dir())
 
 

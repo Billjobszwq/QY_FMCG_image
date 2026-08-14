@@ -88,7 +88,8 @@ class TestRealReconciliation:
         assert sum(report["other_points"].values()) == 40586
         assert report["missing_photo_points_in_other"] == 10
 
-    def test_discrepancy_ledger_exists(self):
+    def test_discrepancy_ledger_exists(self, report):
+        # 与同组真实对账断言共享本地资产门禁；干净源码树不携带运行报告。
         p = ROOT / "reports/nextgen_v2/coordinate_discrepancy_ledger.json"
         assert p.exists()
         d = json.loads(p.read_text(encoding="utf-8"))
