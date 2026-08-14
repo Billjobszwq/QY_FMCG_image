@@ -126,13 +126,25 @@ def test_blocked_suffixes_are_case_insensitive(suffix: str, uppercase: bool) -> 
         "work/execution/evidence/result.txt",
         "work/before-snapshots/result.txt",
         "work/after-snapshots/result.txt",
-        "implementation/EXECUTION-LOG.md",
-        "implementation/FINAL-REPORT.md",
-        "implementation/STATUS.md",
+        "docs/implementation/EXECUTION-LOG.md",
+        "docs/implementation/milestone/FINAL-REPORT.md",
+        "docs/implementation/STATUS.md",
     ],
 )
 def test_runtime_evidence_paths(path: str) -> None:
     assert blocked_path_rule(PurePosixPath(path)) == "runtime-evidence"
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        "STATUS.md",
+        "implementation/FINAL-REPORT.md",
+        "docs/reference/EXECUTION-LOG.md",
+    ],
+)
+def test_operational_doc_names_are_allowed_outside_docs_implementation(path: str) -> None:
+    assert blocked_path_rule(PurePosixPath(path)) is None
 
 
 def test_runtime_evidence_rule_takes_precedence_over_runtime_root() -> None:
@@ -143,7 +155,7 @@ def test_runtime_evidence_rule_takes_precedence_over_runtime_root() -> None:
 
 @pytest.mark.parametrize("prefix", ["ghp_", "gho_", "ghu_", "ghs_", "ghr_"])
 def test_audit_paths_finds_github_credentials(tmp_path: Path, prefix: str) -> None:
-    _write(tmp_path, "docs/config.txt", prefix + "a" * 20)
+    _write(tmp_path, "docs/config.txt", prefix + "a_" + "b" * 18)
 
     assert [finding.rule for finding in audit_paths(tmp_path, ["docs/config.txt"])] == [
         "credential-pattern"
@@ -156,7 +168,11 @@ def test_audit_paths_finds_github_credentials(tmp_path: Path, prefix: str) -> No
         "AKIA1234567890ABCDEF",
         "-----BEGIN PRIVATE KEY-----",
         "-----BEGIN RSA PRIVATE KEY-----",
+        "-----BEGIN EC PRIVATE KEY-----",
         "-----BEGIN OPENSSH PRIVATE KEY-----",
+        "BEGIN RSA PRIVATE KEY",
+        "BEGIN EC PRIVATE KEY",
+        "BEGIN OPENSSH PRIVATE KEY",
     ],
 )
 def test_audit_paths_finds_other_credentials(tmp_path: Path, secret: str) -> None:
@@ -167,8 +183,17 @@ def test_audit_paths_finds_other_credentials(tmp_path: Path, secret: str) -> Non
     ]
 
 
-def test_audit_paths_finds_legacy_absolute_path(tmp_path: Path) -> None:
-    _write(tmp_path, "docs/config.txt", "/Users/alice/Documents/QY/项目/LLM-Image/output")
+@pytest.mark.parametrize(
+    "content",
+    [
+        "/Users/alice/Documents/QY/项目/LLM-Image/output",
+        "/Users/Alice Smith/Documents/QY/项目/LLM-Image",
+        'legacy="/Users/alice/Documents/QY/项目/LLM-Image";',
+        "legacy path: /Users/alice/Documents/QY/项目/LLM-Image),",
+    ],
+)
+def test_audit_paths_finds_legacy_absolute_path(tmp_path: Path, content: str) -> None:
+    _write(tmp_path, "docs/config.txt", content)
 
     assert [finding.rule for finding in audit_paths(tmp_path, ["docs/config.txt"])] == [
         "legacy-absolute-path"
@@ -207,10 +232,18 @@ def test_audit_paths_skips_files_larger_than_two_million_bytes(tmp_path: Path) -
     assert audit_paths(tmp_path, ["docs/large.txt"]) == []
 
 
-def test_audit_paths_tolerates_binary_and_invalid_utf8(tmp_path: Path) -> None:
+def test_audit_paths_skips_nul_delimited_binary_content(tmp_path: Path) -> None:
     _write(tmp_path, "docs/binary.txt", b"\x00\xff\xfeghp_" + b"a" * 20)
 
     assert audit_paths(tmp_path, ["docs/binary.txt"]) == []
+
+
+def test_audit_paths_scans_decodable_content_around_invalid_utf8(tmp_path: Path) -> None:
+    _write(tmp_path, "docs/invalid-utf8.txt", b"\xffAKIA1234567890ABCDEF\xfe")
+
+    assert [
+        finding.rule for finding in audit_paths(tmp_path, ["docs/invalid-utf8.txt"])
+    ] == ["credential-pattern"]
 
 
 def test_negative_pattern_fixture_is_exempt_from_content_scanning(tmp_path: Path) -> None:
@@ -218,6 +251,12 @@ def test_negative_pattern_fixture_is_exempt_from_content_scanning(tmp_path: Path
     _write(tmp_path, fixture_path, "ghp_" + "a" * 20)
 
     assert audit_paths(tmp_path, [fixture_path]) == []
+
+
+def test_auditor_source_does_not_trigger_its_own_content_rules() -> None:
+    source_path = "src/common/release_tree_audit.py"
+
+    assert audit_paths(REPO_ROOT, [source_path]) == []
 
 
 def test_negative_pattern_fixture_still_obeys_path_rules(tmp_path: Path) -> None:

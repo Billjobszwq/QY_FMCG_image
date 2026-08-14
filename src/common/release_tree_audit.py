@@ -54,21 +54,26 @@ _RUNTIME_EVIDENCE_NAMES = {"EXECUTION-LOG.md", "FINAL-REPORT.md", "STATUS.md"}
 _CONTENT_SCAN_EXEMPTIONS = {"tests/unit/test_release_tree_audit.py"}
 _MAX_TEXT_BYTES = 2_000_000
 
+_PRIVATE_KEY_WORDS = "PRIVATE" + " KEY"
 _CREDENTIAL_PATTERNS = (
-    re.compile(r"gh[pousr]_[A-Za-z0-9]{20,}"),
+    re.compile(r"gh[pousr]_[A-Za-z0-9_]{20,}"),
     re.compile(r"AKIA[A-Z0-9]{16}"),
-    re.compile(r"-----BEGIN (?:[A-Z0-9]+ )*PRIVATE KEY-----"),
+    re.compile(
+        rf"(?:BEGIN (?:RSA|EC|OPENSSH) {_PRIVATE_KEY_WORDS}|-----BEGIN {_PRIVATE_KEY_WORDS}-----)"
+    ),
 )
-_LEGACY_ABSOLUTE_PATH = re.compile(
-    r"/Users/[^/\s]+/Documents/QY/项目/LLM-Image(?:[/\s]|$)"
-)
+_LEGACY_ABSOLUTE_PATH = re.compile(r"/Users/[^/\r\n]+/Documents/QY/项目/LLM-Image")
 _RUNTIME_JSON_KEY = re.compile(r'"(?:trace_id|created_by|file_count)"\s*:')
 
 
 def blocked_path_rule(path: PurePosixPath) -> str | None:
     parts = path.parts
     if (
-        path.name in _RUNTIME_EVIDENCE_NAMES
+        (
+            len(parts) >= 3
+            and parts[:2] == ("docs", "implementation")
+            and path.name in _RUNTIME_EVIDENCE_NAMES
+        )
         or "before-snapshots" in parts
         or "after-snapshots" in parts
         or any(
@@ -110,8 +115,8 @@ def _content_findings(root: Path, relative_path: str) -> list[Finding]:
         raw_content = local_path.read_bytes()
         if b"\x00" in raw_content:
             return []
-        content = raw_content.decode("utf-8")
-    except (OSError, UnicodeDecodeError):
+        content = raw_content.decode("utf-8", errors="ignore")
+    except OSError:
         return []
 
     findings: list[Finding] = []
