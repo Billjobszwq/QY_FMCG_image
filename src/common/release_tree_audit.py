@@ -93,8 +93,8 @@ _LEGACY_ABSOLUTE_PATH = re.compile(r"/Users/[^/\r\n]+/Documents/QY/项目/LLM-Im
 _RUNTIME_JSON_VALUE = re.compile(
     r'"(?P<key>trace_id|created_by|file_count)"\s*:\s*'
     r'(?P<value>"(?:\\.|[^"\\])*"|-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?|true|false|null)'
+    r'(?!\s*\+)'
 )
-_REALISTIC_TRACE_ID = re.compile(r"tr-[A-Za-z0-9_-]{6,}")
 _URI_CREDENTIALS = re.compile(
     r"\b[A-Za-z][A-Za-z0-9+.-]*:" + r"//" + r"([^\s/:@]+):([^\s/@]+)@"
 )
@@ -180,6 +180,11 @@ def _is_placeholder(value: str) -> bool:
     )
 
 
+def _is_runtime_placeholder(value: str) -> bool:
+    normalized = value.strip().lower()
+    return normalized in {"", "..."} or "template" in normalized or _is_placeholder(value)
+
+
 def _has_uri_credentials(content: str) -> bool:
     return any(
         not _is_placeholder(match.group(1)) or not _is_placeholder(match.group(2))
@@ -195,6 +200,10 @@ def _has_runtime_evidence(content: str) -> bool:
             if not raw_value.startswith('"'):
                 return True
             continue
+        if key == "trace_id" and not raw_value.startswith('"'):
+            if raw_value not in {"true", "false", "null"}:
+                return True
+            continue
         if not raw_value.startswith('"'):
             continue
         try:
@@ -202,7 +211,7 @@ def _has_runtime_evidence(content: str) -> bool:
         except json.JSONDecodeError:
             continue
         if key == "trace_id":
-            if _REALISTIC_TRACE_ID.fullmatch(value):
+            if not _is_runtime_placeholder(value):
                 return True
             continue
         if value not in {"", "..."} and not _is_placeholder(value):

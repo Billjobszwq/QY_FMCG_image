@@ -355,6 +355,19 @@ def test_runtime_variable_definitions_are_allowed_in_program_sources(
     assert audit_paths(tmp_path, [path]) == []
 
 
+def test_generated_trace_id_expression_is_allowed_in_program_source(
+    tmp_path: Path,
+) -> None:
+    path = "src/platform/agents/runtime.py"
+    _write(
+        tmp_path,
+        path,
+        'record = {"trace' + '_id": "tr-" + uuid.uuid4().hex[:12]}\n',
+    )
+
+    assert audit_paths(tmp_path, [path]) == []
+
+
 def test_concrete_runtime_record_in_source_file_is_blocked(tmp_path: Path) -> None:
     path = "scripts/customer_export.py"
     _write(
@@ -363,6 +376,25 @@ def test_concrete_runtime_record_in_source_file_is_blocked(tmp_path: Path) -> No
         'record = {"trace' + '_id": "tr-source123", '
         '"created' + '_by": "operator-' + '9", "file' + '_count": 12}\n',
     )
+
+    assert [finding.rule for finding in audit_paths(tmp_path, [path])] == [
+        "runtime-evidence"
+    ]
+
+
+@pytest.mark.parametrize(
+    "trace_id",
+    [
+        "customer-" + "run-123",
+        "550e8400-" + "e29b-41d4-a716-446655440000",
+        734219,
+    ],
+)
+def test_source_file_blocks_any_concrete_trace_id(
+    tmp_path: Path, trace_id: str | int
+) -> None:
+    path = "scripts/customer_export.py"
+    _write(tmp_path, path, "record = " + json.dumps({"trace" + "_id": trace_id}))
 
     assert [finding.rule for finding in audit_paths(tmp_path, [path])] == [
         "runtime-evidence"
@@ -393,11 +425,15 @@ def test_runtime_values_in_nested_data_like_files_are_blocked(
     ]
 
 
+@pytest.mark.parametrize(
+    "trace_id",
+    ["...", "<trace-id>", "${TRACE_ID}", "example", "trace-id-template"],
+)
 def test_runtime_placeholder_in_architecture_document_is_not_evidence(
-    tmp_path: Path,
+    tmp_path: Path, trace_id: str
 ) -> None:
     path = "docs/implementation/platform-runtime/04-API-CONTRACTS.md"
-    _write(tmp_path, path, json.dumps({"trace" + "_id": "..."}))
+    _write(tmp_path, path, json.dumps({"trace" + "_id": trace_id}))
 
     assert audit_paths(tmp_path, [path]) == []
 
