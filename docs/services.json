@@ -51,7 +51,7 @@
     {
       "name": "frontend",
       "port": 4173,
-      "command": "npm --prefix frontend run preview -- --port 4173 --strictPort（首次先 npm --prefix frontend install && npm --prefix frontend run build）",
+      "command": "npm --prefix frontend run preview -- --port 4173 --strictPort --host 127.0.0.1（首次先 npm --prefix frontend install && npm --prefix frontend run build）",
       "health": "http://127.0.0.1:4173/",
       "role": "新版产品前端（PostHog 风格桌面式 UI，静态 dist 服务；与 web/ 工作台并存）",
       "writable": false,

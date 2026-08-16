@@ -69,7 +69,7 @@ python3 scripts/audit_release_tree.py --root . --format json
 ```bash
 npm --prefix frontend install
 npm --prefix frontend run build
-npm --prefix frontend run preview -- --port 4173 --strictPort
+npm --prefix frontend run preview -- --port 4173 --strictPort --host 127.0.0.1
 ```
 
 ## 敏感数据规则

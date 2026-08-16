@@ -89,7 +89,7 @@ npm --prefix frontend install
 npm --prefix frontend run build
 
 # 启动（正式端口 4173，与 docs/services.json 的 frontend 条目一致）
-nohup npm --prefix frontend run preview -- --port 4173 --strictPort >.models/frontend_preview.log 2>&1 & disown
+nohup npm --prefix frontend run preview -- --port 4173 --strictPort --host 127.0.0.1 >.models/frontend_preview.log 2>&1 & disown
 
 # 探活
 curl -sf http://127.0.0.1:4173/ >/dev/null && echo frontend_ok
