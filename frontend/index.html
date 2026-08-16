@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="TaaS — 货架陈列 SKU 识别平台（PostHog 风格桌面式前端）"
+    />
+    <!-- 锁定浅色原生控件渲染（滚动条/表单） -->
+    <meta name="theme-color" content="#fdfdf8" />
+    <meta name="color-scheme" content="light" />
+    <!-- 分享卡片（OG / Twitter） -->
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="TaaS · SKU Recognition Platform" />
+    <meta
+      property="og:description"
+      content="TaaS — 货架陈列 SKU 识别平台（PostHog 风格桌面式前端）"
+    />
+    <meta property="og:image" content="/icon-512.png" />
+    <meta name="twitter:card" content="summary" />
+    <title>TaaS · SKU Recognition Platform</title>
+    <!-- 字体经 @fontsource 自托管打包（无 CDN 依赖），见 src/main.tsx：
+         - IBM Plex Sans：标题/正文展示字体（静态字重 400/700）
+         - Caveat：手写趣味字体（可变字重 400–700），仅用于吉祥物台词牌等点缀 -->
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

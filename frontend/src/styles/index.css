@@ -1,0 +1,183 @@
+@import "tailwindcss";
+
+/* ============================================================================
+   设计令牌（Design Tokens）
+   —— Tailwind CSS v4 的 @theme 即“Tailwind 配置”。
+   —— 所有变量同时以 CSS 自定义属性形式输出到 :root，供任意 CSS/组件引用。
+   —— 颜色、字体、间距一律使用令牌，禁止硬编码。
+   —— 原则：无渐变背景；橙色（accent）仅出现在 hover / focus / 选中态。
+   ========================================================================== */
+@theme {
+  /* ---- 色彩 ---- */
+  --color-background: #fdfdf8; /* 鼠尾草奶油白，主背景 */
+  --color-surface: #f8f8f0; /* 略深一级的面板背景 */
+  --color-text-primary: #4d4f46; /* 橄榄墨色，正文 */
+  --color-text-secondary: #6b6e63; /* 次级文本 */
+  --color-accent: #f54e00; /* 品牌橙：仅悬停/聚焦/选中 */
+  --color-border: #e2e4da; /* 边框色，柔和 */
+  --color-border-strong: #cfd2c2; /* 聚焦窗口的边框（比 border 深一级） */
+  --color-button-bg: #1e1f23; /* 近黑色按钮背景 */
+  --color-button-text: #ffffff;
+
+  /* ---- 图表：类目序列色（顺序固定：蓝→黄→紫，已验证；不得循环复用） ---- */
+  --color-series-1: #1d4aff; /* 类目 1：蓝 */
+  --color-series-2: #dc9300; /* 类目 2：黄 */
+  --color-series-3: #8a4fd8; /* 类目 3：紫 */
+
+  /* ---- 图表：sequential 蓝（单色相 5 阶，浅→深，仅表达数值大小） ---- */
+  --color-ramp-1: #d6defe; /* 最浅 */
+  --color-ramp-2: #aebffc;
+  --color-ramp-3: #7f96fa;
+  --color-ramp-4: #4f6cf3;
+  --color-ramp-5: #1d4aff; /* 最深（与 series-1 同源） */
+
+  /* ---- 状态保留色（仅 StatusBadge 使用：图标+文字；禁止挪作系列色/静态装饰） ---- */
+  --color-success: #3e6b21; /* good：正常 / 达标 */
+  --color-warning: #9a6a00; /* warn：需关注 */
+  --color-serious: #a3341f; /* serious：严重 / 拦截 */
+
+  /* ---- 字体 ---- */
+  /* 正文：系统字体栈 */
+  --font-sans:
+    -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue",
+    Arial, "Noto Sans", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei",
+    sans-serif, "Apple Color Emoji", "Segoe UI Emoji";
+  /* 标题：IBM Plex Sans（weight 700–800） */
+  --font-display:
+    "IBM Plex Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+    "Helvetica Neue", Arial, "PingFang SC", "Microsoft YaHei", sans-serif;
+  /* 手写趣味字体（吉祥物台词牌/空态标语/Badge 彩蛋专用，非核心内容；
+     中文一律回退 sans）。首位为 Caveat：Google Fonts 可变手写字体
+     （wght 400–700，700 用于台词牌，400–500 用于次级标注）。
+     如后续自托管，将 woff2 放入 public/fonts 并 @font-face 注册即可。 */
+  --font-squeak:
+    "Caveat", "Squeak", "Chalkboard SE", "Comic Sans MS", "Segoe Print",
+    "Bradley Hand", cursive;
+
+  /* ---- 尺寸（基础单位 4px；常用 8/12/16/20/24/32/48/64） ---- */
+  --titlebar-height: 40px; /* 窗口标题栏高度 */
+  --taskbar-height: 48px; /* 底部任务栏高度 */
+  --window-radius: 8px; /* 窗口圆角 */
+
+  /* ---- 阴影（克制、无毛玻璃） ---- */
+  --shadow-window:
+    0 1px 2px rgb(30 31 35 / 0.05), 0 6px 20px rgb(30 31 35 / 0.07);
+  --shadow-window-active:
+    0 1px 3px rgb(30 31 35 / 0.08), 0 12px 32px rgb(30 31 35 / 0.13);
+  --shadow-taskbar: 0 -1px 0 rgb(30 31 35 / 0.05);
+}
+
+/* ============================================================================
+   基础样式
+   ========================================================================== */
+@layer base {
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+
+  body {
+    margin: 0;
+    overflow: hidden; /* 页面滚动限定在窗口内部 */
+    @apply bg-background font-sans text-text-primary antialiased;
+  }
+
+  ::selection {
+    background: color-mix(in srgb, var(--color-accent) 18%, transparent);
+  }
+
+  /* 细滚动条：信息密度优先，装饰克制 */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--color-border-strong) transparent;
+  }
+  *::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  *::-webkit-scrollbar-thumb {
+    background: var(--color-border-strong);
+    border-radius: 4px;
+  }
+  *::-webkit-scrollbar-track {
+    background: transparent;
+  }
+}
+
+/* ============================================================================
+   组件层：共享微交互规范
+   —— 悬停橙色反馈：默认无橙色，:hover / :focus-visible 切换，0.2s 缓动
+   ========================================================================== */
+@layer components {
+  .accent-interactive {
+    @apply transition-colors duration-200 ease-out outline-none;
+  }
+  .accent-interactive:hover,
+  .accent-interactive:focus-visible {
+    color: var(--color-accent);
+  }
+
+  /* 桌面的极淡点阵纹理（手工感；这是纹理而非渐变背景） */
+  .desktop-dots {
+    background-image: radial-gradient(
+      color-mix(in srgb, var(--color-border) 62%, transparent) 1px,
+      transparent 1px
+    );
+    background-size: 24px 24px;
+  }
+}
+
+/* ============================================================================
+   动画：加载状态（刺猬 / 脉冲点）—— 拒绝通用旋转圈
+   ========================================================================== */
+@keyframes hedgehog-bob {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-2px);
+  }
+}
+
+@keyframes hedgehog-sniff {
+  0%,
+  100% {
+    transform: rotate(0deg);
+  }
+  50% {
+    transform: rotate(-3deg);
+  }
+}
+
+@keyframes pulse-dot {
+  0%,
+  80%,
+  100% {
+    opacity: 0.25;
+    transform: scale(0.85);
+  }
+  40% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* ============================================================================
+   无障碍：尊重系统"减弱动态效果"偏好
+   —— 加载动画通过内联 style 应用，故需 !important 覆盖；
+      用 [style*="..."] 精确命中使用对应 keyframes 的元素，不影响其他样式。
+   ========================================================================== */
+@media (prefers-reduced-motion: reduce) {
+  [style*="hedgehog-bob"],
+  [style*="hedgehog-sniff"],
+  [style*="pulse-dot"] {
+    animation: none !important;
+  }
+
+  /* 按压 scale 属 transform 动效，一并停用（颜色过渡保留） */
+  [class*="active:scale-"]:active {
+    transform: none !important;
+  }
+}

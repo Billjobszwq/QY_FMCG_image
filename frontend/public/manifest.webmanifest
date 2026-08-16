@@ -1,0 +1,27 @@
+{
+  "name": "TaaS · SKU Recognition Platform",
+  "short_name": "TaaS",
+  "description": "货架陈列 SKU 识别平台（PostHog 风格桌面式前端）",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#fdfdf8",
+  "theme_color": "#fdfdf8",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}
