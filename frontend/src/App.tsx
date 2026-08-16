@@ -3,7 +3,7 @@ import { MotionConfig } from "framer-motion";
 import DemoDesktop from "@/pages/DemoDesktop";
 
 /**
- * 路由壳：单页产品桌面（DemoDesktop = Sidebar + 桌面窗口层 + Taskbar）。
+ * 路由壳：单页产品桌面（v4 范式 = 顶部菜单栏 + 桌面图标双击开窗 + 窗口层 + Taskbar）。
  * 模块页面不挂路由，由窗口管理器按 modules/registry 的路由键懒加载进窗口。
  *
  * <MotionConfig reducedMotion="user">：尊重系统"减弱动态效果"偏好，

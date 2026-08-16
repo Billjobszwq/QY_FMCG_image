@@ -27,7 +27,7 @@ interface AuthState {
 
 export const useAuth = create<AuthState>()((set) => ({
   me: null,
-  checking: false,
+  checking: true,
 
   login: async (username, password) => {
     const me = await fetchAuthLogin(username, password);

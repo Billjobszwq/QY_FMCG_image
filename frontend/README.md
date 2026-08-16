@@ -23,15 +23,17 @@ npm run icons:derive  # 由 favicon.svg 派生 apple-touch-icon / manifest PNG
 `server/serve.mjs` 可用 `--port <n>` 覆盖端口（缺省 4173，登记于
 `docs/services.json` 的 `frontend` 条目）；健康探活 `GET /` 或 `/health`。
 
-## 产品桌面壳（v3 集成）
+## 产品桌面壳（v4 交互范式）
 
-布局 = Sidebar(左) + 桌面区(右，窗口层) + Taskbar(底)：
+PostHog 式桌面交互：顶部菜单栏 + 桌面图标双击开窗 + 窗口层 + Taskbar(底)：
 
-- 启动时 `auth.refresh()` 恢复本机登录会话；`me` 为 null → 桌面只渲染登录窗口
-  （`id="login"`、`closable=false`）；登录成功关闭登录窗，默认打开 `/home` 与
-  `/status` 两个模块窗口；
-- Sidebar 点击模块 → `openWindow({ id: 路由键, title: 模块 label, 960×640,
-  层叠偏移 })`；已打开则 `bringToFront`（最小化则还原）；
+- 登录闸门「无壳」：`me` 为 null 时仅点阵桌面 + 居中登录窗（`id="login"`、
+  `closable=false`），无菜单栏/图标/任务栏；登录成功进入完整桌面并默认打开
+  `/home` 与 `/status`；
+- 顶部菜单栏：左=品牌刺猬+平台名+版本；十组模块下拉菜单（已打开条目带选中圆点，
+  Esc/外部点击收起）；右=服务健康点（点击开 /status）+用户名+退出；
+- 桌面图标：模块按组分区平铺为桌面图标；**单击选中、双击开窗**（Enter/Space 同双击），
+  双击桌面空白清除选中；已打开模块图标带选中圆点；
 - 路由键唯一事实源：`src/modules/registry.tsx`（十组导航，与 web 端
   `MODULE_ROUTES` 对齐）；页面一律 `React.lazy` 进窗口，Suspense 兜底刺猬加载；
 - 401 → 页面以 `NeedLoginState`（serious/warn 徽章 + “打开登录窗口”按钮）呈现；
@@ -68,13 +70,13 @@ frontend
     ├── hooks/                # useDesktopSize / useKeyboardShortcuts
     ├── components/
     │   ├── window/           # AppWindow / TitleBar / ResizeHandle（指针 + 键盘）
-    │   ├── desktop/          # Desktop / Taskbar / Sidebar / DesktopIcon
+    │   ├── desktop/          # Desktop / Taskbar / TopMenuBar / DesktopIcon
     │   ├── ui/               # button / badge / kbd / input / select / loader（刺猬动画）/ mascot / LoginWindow
     │   ├── data/             # 数据原语：ApiTable / KV / PageHeader / StatusBadge / ErrorState / NeedLoginState
     │   ├── charts/primitives.tsx # 图表原语（ChartCard / StatTile / VBars / StackedBars / HBars）
     │   └── icons/index.tsx   # 手工几何 SVG 图标库（统一 16 网格 / currentColor）
     └── pages/
-        ├── DemoDesktop.tsx   # 产品桌面壳：Sidebar + 桌面窗口层 + Taskbar（登录会话闸门）
+        ├── DemoDesktop.tsx   # 产品桌面壳：顶部菜单栏 + 桌面图标双击开窗 + Taskbar（登录会话闸门）
         ├── core/             # Home / SystemStatus / Help
         ├── vision/           # Recognize / Tasks / Annotation / Datasets / Models / Evidence
         ├── data/             # Import / Assets / Quality
@@ -113,8 +115,8 @@ frontend
 
 ## 添加一个新窗口
 
-模块窗口由 Sidebar 依据 `modules/registry.tsx` 打开（路由键即窗口 id）；
-其他场景可在任意组件中调用 `openWindow`（幂等：同 id 重复调用仅置前）：
+模块窗口由顶部菜单栏下拉与桌面图标（双击）依据 `modules/registry.tsx` 打开
+（路由键即窗口 id）；其他场景可在任意组件中调用 `openWindow`（幂等：同 id 重复调用仅置前）：
 
 ```tsx
 import { useWindowManager } from "@/store/windowStore";

@@ -1,21 +1,23 @@
-import { Suspense, useCallback, useEffect, useMemo, useRef } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Desktop } from "@/components/desktop/Desktop";
-import { Sidebar } from "@/components/desktop/Sidebar";
+import { DesktopIcon } from "@/components/desktop/DesktopIcon";
+import { TopMenuBar } from "@/components/desktop/TopMenuBar";
 import { LoginWindow } from "@/components/ui/LoginWindow";
 import { HedgehogLoader } from "@/components/ui/loader";
-import { MODULE_BY_ROUTE } from "@/modules/registry";
+import { MODULE_BY_ROUTE, MODULE_GROUPS } from "@/modules/registry";
 import { useAuth } from "@/store/auth";
 import { useWindowManager } from "@/store/windowStore";
 
 /* ============================================================================
-   产品桌面壳（v3 集成）：Sidebar(左) + 桌面区(右，窗口层) + Taskbar(底)
+   产品桌面壳（v4 交互范式）：TopMenuBar(顶) + 桌面区(图标层+窗口层) + Taskbar(底)
 
    —— 启动时 auth.refresh() 恢复本机登录会话；
-   —— 未登录（me 为 null）：桌面只保留登录窗口（closable=false，不可关闭）；
-   —— 登录成功：关闭登录窗，默认打开 /home 与 /status 两个模块窗口；
-   —— Sidebar 点击模块：openWindow({ id: 路由键, title: 模块 label,
-      960×640, 层叠偏移 })；已打开则 bringToFront（最小化则还原）；
-   —— openRoutes 由 store 的打开顺序（order）计算，供 Sidebar 选中态使用。
+   —— 登录闸门（checking / 未登录）必须「无壳」：无菜单栏、无图标、无任务栏，
+      仅居中登录窗（checking 期间为居中刺猬加载）；
+   —— 登录成功：关闭登录窗，默认打开 /home 与 /status（保留现状）；
+   —— 模块 = 桌面图标：单击仅选中，双击 / Enter / Space 开窗；
+      顶部菜单栏分组下拉亦可开窗；已打开窗口在图标与菜单条目上各显一枚 accent 圆点；
+   —— openRoutes 由 store 的打开顺序（order）计算，图标与菜单共用。
 
    数据红线：一切业务数据走同源 /api/v1/*（src/lib/api.ts），
    本壳层不含任何样本 / 假数据。
@@ -30,8 +32,8 @@ const CASCADE_BASE = { x: 32, y: 20 };
 const CASCADE_STEP = 28;
 /** 登录窗口 id（页面内 NeedLoginState 打开登录窗时共用同一 id）。 */
 const LOGIN_WINDOW_ID = "login";
-/** Sidebar 固定宽度（与 Sidebar 组件 w-[220px] 一致），登录窗居中用。 */
-const SIDEBAR_WIDTH = 220;
+/** 登录窗口尺寸（不可调、不可关）。 */
+const LOGIN_WINDOW_SIZE = { width: 360, height: 460 };
 
 /** 模块窗口内容：路由级懒加载页面 + 刺猬加载兜底（拒绝通用旋转圈）。 */
 function ModuleContent({ route }: { route: string }) {
@@ -56,6 +58,8 @@ export default function DemoDesktop() {
   const checking = useAuth((s) => s.checking);
   const refresh = useAuth((s) => s.refresh);
   const order = useWindowManager((s) => s.order);
+  /** 桌面图标选中态（单击选中，背景双击清除）。 */
+  const [selectedRoute, setSelectedRoute] = useState<string | null>(null);
 
   /** 层叠序号：每新开一个窗口递增（取模防止无限漂移出屏）。 */
   const cascadeRef = useRef(0);
@@ -94,7 +98,7 @@ export default function DemoDesktop() {
     [nextCascade],
   );
 
-  /** 打开登录窗口（未登录时桌面唯一窗口；closable=false 隐藏关闭钮）。 */
+  /** 打开登录窗口（未登录时桌面唯一窗口；closable=false 隐藏关闭钮，居中）。 */
   const openLoginWindow = useCallback(() => {
     const wm = useWindowManager.getState();
     if (wm.windows[LOGIN_WINDOW_ID]) {
@@ -120,11 +124,14 @@ export default function DemoDesktop() {
       defaultPosition: {
         x: Math.max(
           16,
-          Math.round((window.innerWidth - SIDEBAR_WIDTH - 360) / 2),
+          Math.round((window.innerWidth - LOGIN_WINDOW_SIZE.width) / 2),
         ),
-        y: 96,
+        y: Math.max(
+          16,
+          Math.round((window.innerHeight - LOGIN_WINDOW_SIZE.height) / 2),
+        ),
       },
-      defaultSize: { width: 360, height: 460 },
+      defaultSize: LOGIN_WINDOW_SIZE,
       resizable: false,
       closable: false,
     });
@@ -134,7 +141,7 @@ export default function DemoDesktop() {
 
   /* 会话切换 → 窗口集合：
      登录后关闭登录窗、默认打开 /home 与 /status；
-     退出后关闭全部业务窗口（登录窗由下方守护效果保证在场）。 */
+     退出后关闭全部业务窗口并清除选中（登录窗由下方守护效果保证在场）。 */
   useEffect(() => {
     if (checking) return; // 会话恢复中：等结果出来再统一处理，避免闪烁
     const wm = useWindowManager.getState();
@@ -146,6 +153,7 @@ export default function DemoDesktop() {
       for (const id of wm.order) {
         if (id !== LOGIN_WINDOW_ID) wm.closeWindow(id);
       }
+      setSelectedRoute(null);
       openLoginWindow();
     }
   }, [checking, loggedIn, openLoginWindow, openModuleWindow]);
@@ -159,7 +167,7 @@ export default function DemoDesktop() {
     if (!checking && !loggedIn && !loginOpen) openLoginWindow();
   }, [checking, loggedIn, loginOpen, openLoginWindow]);
 
-  /** Sidebar 点击：未登录 → 打开登录窗；已打开 → 置前/还原；否则新开。 */
+  /** 打开模块：未登录 → 打开登录窗；已打开 → 置前/还原；否则新开。 */
   const handleOpenRoute = useCallback(
     (route: string) => {
       if (!useAuth.getState().me) {
@@ -178,26 +186,55 @@ export default function DemoDesktop() {
     [openLoginWindow, openModuleWindow],
   );
 
-  /* 已打开窗口对应的路由集合（Sidebar 选中态；openRoutes 按 store order 计算） */
+  /* 已打开窗口对应的路由集合（图标 isOpen 与菜单条目圆点共用；按 store order） */
   const openRoutes = useMemo(
     () => new Set(order.filter((id) => id.startsWith("/"))),
     [order],
   );
 
-  return (
-    <div className="flex h-full w-full overflow-hidden bg-background">
-      {/* 左侧导航：分组模块清单 + 底部登录身份区 */}
-      <Sidebar openRoutes={openRoutes} onOpen={handleOpenRoute} />
+  /* —— 登录闸门：会话恢复中 → 无壳桌面 + 居中刺猬加载 —— */
+  if (checking && !me) {
+    return (
+      <div className="desktop-dots relative flex h-full w-full items-center justify-center overflow-hidden bg-background">
+        <HedgehogLoader />
+      </div>
+    );
+  }
 
-      {/* 桌面区：窗口层 + 底部任务栏（Taskbar 由 Desktop 内嵌渲染） */}
-      <main className="relative min-w-0 flex-1">
-        <Desktop>
-          {/* 会话恢复中：桌面中央刺猬加载（拒绝通用旋转圈） */}
-          {checking && !me && (
-            <div className="flex h-full w-full items-center justify-center">
-              <HedgehogLoader />
-            </div>
-          )}
+  /* —— 登录闸门：未登录 → 无壳桌面 + 居中登录窗（保留 ⌘W 旁路守护） —— */
+  if (!loggedIn) {
+    return <Desktop showTaskbar={false} />;
+  }
+
+  /* —— 登录后：TopMenuBar(顶) + 桌面区(图标层+窗口层) + Taskbar(底) —— */
+  return (
+    <div className="flex h-full w-full flex-col overflow-hidden bg-background">
+      <TopMenuBar openRoutes={openRoutes} onOpen={handleOpenRoute} />
+      <main className="relative min-h-0 flex-1">
+        <Desktop onBackgroundDoubleClick={() => setSelectedRoute(null)}>
+          {/* 桌面图标层：按 MODULE_GROUPS 分区，单击选中 / 双击开窗 */}
+          <div className="flex flex-col pb-2">
+            {MODULE_GROUPS.map((group) => (
+              <section key={group.group}>
+                <div className="px-3 pt-3 text-xs text-text-secondary">
+                  {group.label}
+                </div>
+                <div className="flex flex-wrap gap-1 p-2">
+                  {group.items.map((item) => (
+                    <DesktopIcon
+                      key={item.route}
+                      icon={item.icon}
+                      label={item.label}
+                      selected={selectedRoute === item.route}
+                      isOpen={openRoutes.has(item.route)}
+                      onSelect={() => setSelectedRoute(item.route)}
+                      onOpen={() => handleOpenRoute(item.route)}
+                    />
+                  ))}
+                </div>
+              </section>
+            ))}
+          </div>
         </Desktop>
       </main>
     </div>

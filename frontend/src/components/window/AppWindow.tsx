@@ -96,7 +96,11 @@ export function AppWindow({ win }: { win: WindowState }) {
       /* 语义：每个窗口即一个对话框，无障碍名取窗口标题 */
       role="dialog"
       aria-label={win.title}
-      className="absolute top-0 left-0"
+      className={cn(
+        "pointer-events-auto absolute top-0 left-0",
+        /* 最小化后外壳不再隐形遮挡桌面（命中交还图标层） */
+        win.isMinimized && "pointer-events-none",
+      )}
       style={{ x, y, width, height, zIndex: win.zIndex }}
       drag={!win.isMaximized}
       dragControls={dragControls}

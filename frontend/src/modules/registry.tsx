@@ -8,7 +8,7 @@
  *    本文件不校验文件存在性）；
  * —— 图标优先复用 components/icons 现有 glyphs，缺失的在本文件内以
  *    16 网格 currentColor 内联 SVG 补齐（stroke 随父级文字色，
- *    状态色由 Sidebar 的 hover/选中态控制，图标自身不硬编码颜色）。
+ *    状态色由顶部菜单栏/桌面图标的 hover/选中态控制，图标自身不硬编码颜色）。
  */
 import { lazy } from "react";
 import type { ComponentType, LazyExoticComponent, ReactNode } from "react";
@@ -282,7 +282,7 @@ const Geo = lazy(() => import("@/pages/biz/Geo"));
 const Finance = lazy(() => import("@/pages/biz/Finance"));
 
 /* ============================================================================
-   MODULE_GROUPS：十组导航（顺序即侧栏顺序）
+   MODULE_GROUPS：十组导航（顺序即顶部菜单栏顺序）
    ========================================================================== */
 
 export const MODULE_GROUPS: ModuleGroup[] = [
