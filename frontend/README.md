@@ -1,7 +1,8 @@
 # TaaS Frontend
 
-PostHog 设计语言风格的前端框架：桌面式窗口系统 + 设计系统（Design System）。
-当前阶段提供可复用的设计令牌、核心交互组件与示例窗口；具体页面内容后续替换。
+v3 产品前端：桌面式窗口系统 + 设计系统（Design System）+ 30 个真实数据模块页面。
+一切业务数据走同源 `/api/v1/*`（`src/lib/api.ts`），无样本 / 假数据；
+与既有业务接通的工作台 `web/` 并存（见仓库根 README）。
 
 > 设计价值观：品味 > 抛光 · 手工感与反主流 · 实用主义（信息密度 / 键盘优先）· 克制的拟物趣味。
 
@@ -10,14 +11,31 @@ PostHog 设计语言风格的前端框架：桌面式窗口系统 + 设计系统
 ```bash
 cd frontend
 npm install
-npm run dev           # 开发：http://localhost:5173
-npm run build         # 类型检查 + 生产构建
+npm run dev           # 开发：http://localhost:5173（Vite 同源代理 /api → :8400）
+npm run build         # 类型检查 + 生产构建（输出 dist/）
+node server/serve.mjs # 生产：http://127.0.0.1:4173（零依赖静态服务 + /api 反代 :8400）
 npm run lint          # ESLint（扁平配置，Vite 模板同款规则集）
 npm test              # Vitest（windowStore / utils 单测）
 npm run icons:derive  # 由 favicon.svg 派生 apple-touch-icon / manifest PNG
 ```
 
 要求 Node ≥ 20（`package.json` engines 与 `.nvmrc` 已约束）。
+`server/serve.mjs` 可用 `--port <n>` 覆盖端口（缺省 4173，登记于
+`docs/services.json` 的 `frontend` 条目）；健康探活 `GET /` 或 `/health`。
+
+## 产品桌面壳（v3 集成）
+
+布局 = Sidebar(左) + 桌面区(右，窗口层) + Taskbar(底)：
+
+- 启动时 `auth.refresh()` 恢复本机登录会话；`me` 为 null → 桌面只渲染登录窗口
+  （`id="login"`、`closable=false`）；登录成功关闭登录窗，默认打开 `/home` 与
+  `/status` 两个模块窗口；
+- Sidebar 点击模块 → `openWindow({ id: 路由键, title: 模块 label, 960×640,
+  层叠偏移 })`；已打开则 `bringToFront`（最小化则还原）；
+- 路由键唯一事实源：`src/modules/registry.tsx`（十组导航，与 web 端
+  `MODULE_ROUTES` 对齐）；页面一律 `React.lazy` 进窗口，Suspense 兜底刺猬加载；
+- 401 → 页面以 `NeedLoginState`（serious/warn 徽章 + “打开登录窗口”按钮）呈现；
+  网络错误 → `ErrorState` + 重试。
 
 ## 技术栈
 
@@ -31,6 +49,7 @@ Vitest + jsdom · @fontsource 字体自托管 · sharp（图标派生脚本）�
 ```
 frontend
 ├── index.html                # meta（theme-color / color-scheme / OG / manifest）；字体自托管无 CDN
+├── server/serve.mjs          # 生产静态服务器（零依赖 node）：dist + /api→:8400 反代，:4173
 ├── public/
 │   ├── favicon.svg           # 近黑圆角方 + 奶油刺猬剪影（与 HedgehogMark 同源 path）
 │   ├── manifest.webmanifest  # PWA manifest（SVG + 派生 PNG 图标）
@@ -41,19 +60,28 @@ frontend
     ├── main.tsx              # 入口；@fontsource 字体导入
     ├── App.tsx               # 路由壳 + <MotionConfig reducedMotion="user">
     ├── styles/index.css      # 设计令牌（@theme → :root）+ 基础/组件层 + reduced-motion
+    ├── lib/api.ts            # 同源 typed client（fetchXxx，/api/v1/*；mutation 带 CSRF）
     ├── lib/utils.ts          # cn / clamp（含单测）
+    ├── store/auth.ts         # 登录会话 store（useAuth：me / login / logout / refresh）
     ├── store/windowStore.ts  # 全局窗口管理器（Zustand，含单测）
-    ├── data/sample.ts        # v2 样本数据（基线指标 / 每日序列 / SKU / 标注 / 漏斗）
+    ├── modules/registry.tsx  # 模块注册表：十组导航路由 → 懒加载页面（唯一事实源）
     ├── hooks/                # useDesktopSize / useKeyboardShortcuts
     ├── components/
     │   ├── window/           # AppWindow / TitleBar / ResizeHandle（指针 + 键盘）
-    │   ├── desktop/          # Desktop / Taskbar / DesktopIcon
-    │   ├── ui/               # button / badge / kbd / input / select / loader（刺猬动画）/ mascot（静态吉祥物）
-    │   ├── charts/primitives.tsx # 图表原语（ChartCard / StatTile / VBars / StackedBars / HBars / StatusBadge）
+    │   ├── desktop/          # Desktop / Taskbar / Sidebar / DesktopIcon
+    │   ├── ui/               # button / badge / kbd / input / select / loader（刺猬动画）/ mascot / LoginWindow
+    │   ├── data/             # 数据原语：ApiTable / KV / PageHeader / StatusBadge / ErrorState / NeedLoginState
+    │   ├── charts/primitives.tsx # 图表原语（ChartCard / StatTile / VBars / StackedBars / HBars）
     │   └── icons/index.tsx   # 手工几何 SVG 图标库（统一 16 网格 / currentColor）
     └── pages/
-        ├── DemoDesktop.tsx   # 产品桌面接线：五个产品窗口（见「添加一个新窗口」）
-        └── dashboard / catalog / review / console / experiments  # 五个窗口内容页（v2 样本）
+        ├── DemoDesktop.tsx   # 产品桌面壳：Sidebar + 桌面窗口层 + Taskbar（登录会话闸门）
+        ├── core/             # Home / SystemStatus / Help
+        ├── vision/           # Recognize / Tasks / Annotation / Datasets / Models / Evidence
+        ├── data/             # Import / Assets / Quality
+        ├── workflow/         # Runs / Templates / Agents / Approvals / Connectors
+        ├── master/           # Accounts / Audit / Customers / Projects / Skus
+        ├── analytics/        # Reports / Anomalies / Semantics
+        └── biz/              # Survey / Geo / Finance（页内页签分组）
 ```
 
 ## 设计令牌
@@ -85,7 +113,8 @@ frontend
 
 ## 添加一个新窗口
 
-在任意组件中调用 `openWindow`（幂等：同 id 重复调用仅置前）：
+模块窗口由 Sidebar 依据 `modules/registry.tsx` 打开（路由键即窗口 id）；
+其他场景可在任意组件中调用 `openWindow`（幂等：同 id 重复调用仅置前）：
 
 ```tsx
 import { useWindowManager } from "@/store/windowStore";
@@ -97,19 +126,19 @@ function Launcher() {
     <button
       onClick={() =>
         openWindow({
-          id: "dashboard",                 // 唯一 id
-          title: "产品仪表盘",
-          content: <DashboardPage />,      // 后续替换为真实页面组件
+          id: "/home",                   // 唯一 id（模块窗口用注册表路由键）
+          title: "首页",
+          content: <HomePage />,         // 页面组件（懒加载需自包 Suspense）
           defaultPosition: { x: 120, y: 96 },
-          defaultSize: { width: 640, height: 420 },
-          minWidth: 420,                   // 可选，默认 320
-          minHeight: 280,                  // 可选，默认 200
-          resizable: true,                 // 可选，默认 true；false = 固定大小
-          closable: true,                  // 可选，默认 true
+          defaultSize: { width: 960, height: 640 },
+          minWidth: 560,                 // 可选，默认 320
+          minHeight: 420,                // 可选，默认 200
+          resizable: true,               // 可选，默认 true；false = 固定大小
+          closable: true,                // 可选，默认 true
         })
       }
     >
-      打开仪表盘
+      打开首页
     </button>
   );
 }
@@ -165,10 +194,12 @@ resizable / closable`），另含运行时状态 `position / size / isMinimized 
 
 - [ ] 正式图标库到位后替换 `components/icons/index.tsx`（保持导出名即可无缝切换）
 - [ ] 打开 / 置前窗口时的焦点管理（focus 移入窗口 + aria-live 播报激活变化）
-- [ ] `HelpGlyph` 预留的快捷键帮助窗口（承接任务栏之外的完整说明）
 - [ ] CI 加入 `npm ci && npm run lint && npm test && npm run build` 防回归
-- [x] v2 样本页面已接入（仪表盘 / 目录 / 控制台 / 审核 / 实验），
-  待用户提供正式内容替换 `src/pages/*` 与 `src/data/sample.ts`
+- [x] v3 集成完成：30 个模块页面全部接入真实数据（同源 `/api/v1/*`），
+  样机页面（dashboard / catalog / console / review / experiments）与
+  `src/data/sample.ts` 已删除
+- [x] 生产静态服务器 `server/serve.mjs`（零依赖：dist 服务 + `/api` 同源反代
+  `:8400`，正式端口 :4173，登记于 `docs/services.json`）
 
 ## 浏览器支持
 

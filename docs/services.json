@@ -1,6 +1,6 @@
 {
   "_comment": "ISSUE-018：唯一受支持服务清单（机器可读）。README/runbook/handbook 的端口与启动命令必须与本文件一致。",
-  "generated_at": "2026-08-01",
+  "generated_at": "2026-08-17",
   "architecture": "cascade（sku_v4 YOLO 画框 + ResNet18 分类器精识别，失败关闭，禁 COCO 回退）",
   "services": [
     {
@@ -51,9 +51,9 @@
     {
       "name": "frontend",
       "port": 4173,
-      "command": "npm --prefix frontend run preview -- --port 4173 --strictPort --host 127.0.0.1（首次先 npm --prefix frontend install && npm --prefix frontend run build）",
+      "command": "node frontend/server/serve.mjs --port 4173（首次先 npm --prefix frontend install && npm --prefix frontend run build）",
       "health": "http://127.0.0.1:4173/",
-      "role": "新版产品前端（PostHog 风格桌面式 UI，静态 dist 服务；与 web/ 工作台并存）",
+      "role": "新版产品前端（PostHog 风格桌面式 UI，v3 真实数据；静态 dist 服务 + /api/* 同源反代平台 :8400；与 web/ 工作台并存）",
       "writable": false,
       "status": "supported"
     },

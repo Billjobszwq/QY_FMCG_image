@@ -11,6 +11,12 @@ export default defineConfig({
       "@": path.resolve(import.meta.dirname, "./src"),
     },
   },
+  server: {
+    // dev 同源代理：一切业务数据走 /api/v1/*（后端默认 8400 端口）
+    proxy: {
+      "/api": "http://127.0.0.1:8400",
+    },
+  },
   test: {
     environment: "jsdom",
     include: ["src/**/*.test.{ts,tsx}"],

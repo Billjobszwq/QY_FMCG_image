@@ -3,9 +3,8 @@ import { MotionConfig } from "framer-motion";
 import DemoDesktop from "@/pages/DemoDesktop";
 
 /**
- * 路由壳：当前阶段仅一个演示页面。
- * 后续页面（仪表盘 / 文档 / 博客…）在 Routes 中追加即可，
- * 或按需在窗口内直接渲染页面组件。
+ * 路由壳：单页产品桌面（DemoDesktop = Sidebar + 桌面窗口层 + Taskbar）。
+ * 模块页面不挂路由，由窗口管理器按 modules/registry 的路由键懒加载进窗口。
  *
  * <MotionConfig reducedMotion="user">：尊重系统"减弱动态效果"偏好，
  * Framer Motion 在用户开启 prefers-reduced-motion 时自动停用 transform /

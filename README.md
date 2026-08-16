@@ -59,17 +59,19 @@ python3 scripts/audit_release_tree.py --root . --format json
 
 默认 Python 测试分为 `unit`、`contract`、`platform`、`promotion` 四类。发布树审计必须返回零 finding，Web build 必须成功后才能形成版本基线。
 
-## 新版 UI 设计框架（frontend/）
+## 新版产品前端（frontend/）
 
-`frontend/` 为新版桌面式前端框架（PostHog 设计语言：窗口系统 + 设计令牌 + v2 样本页面，
-见 [`frontend/README.md`](frontend/README.md)），与既有业务接通的工作台 `web/` 并存，
-不改变后端架构；后续页面内容按该设计语言逐步迁入。正式端口 4173，
-登记于 `docs/services.json` 的 `frontend` 条目。
+`frontend/` 为新版桌面式产品前端（PostHog 设计语言：窗口系统 + 设计令牌；
+v3 集成已完成，30 个模块页面业务数据全部走同源 `/api/v1/*`，
+见 [`frontend/README.md`](frontend/README.md)），与既有业务接通的工作台 `web/`
+并存，不改变后端架构。正式端口 4173，登记于 `docs/services.json` 的 `frontend`
+条目；静态服务与 `/api` 反向代理（平台 :8400，保留 cookie）由零依赖的
+`frontend/server/serve.mjs` 承担。
 
 ```bash
 npm --prefix frontend install
 npm --prefix frontend run build
-npm --prefix frontend run preview -- --port 4173 --strictPort --host 127.0.0.1
+node frontend/server/serve.mjs --port 4173   # 服务 dist/ + /api/* 反代 :8400；探活 GET /
 ```
 
 ## 敏感数据规则
