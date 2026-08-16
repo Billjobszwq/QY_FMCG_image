@@ -79,6 +79,24 @@ tail .models/monitor_watchdog.log
 
 > 背景：监控进程直接 nohup 起会被会话回收反复挂；launchd 因项目在 `~/Documents`（macOS TCC 隐私保护）无权限不可用。看门狗跑在有权限的用户态，可靠守护。监控实时数据来自 `/api/live`（动态检测当前活跃训练：YOLO 训练解析日志、分类器读 live_progress）。
 
+## 新版前端（:4173）— 静态 dist 服务
+
+新版产品前端（PostHog 风格桌面式 UI，见 `frontend/README.md`）以 `vite preview` 服务构建产物，无守护需求（静态服务，挂了重起即可）：
+
+```bash
+# 首次：安装依赖并构建
+npm --prefix frontend install
+npm --prefix frontend run build
+
+# 启动（正式端口 4173，与 docs/services.json 的 frontend 条目一致）
+nohup npm --prefix frontend run preview -- --port 4173 --strictPort >.models/frontend_preview.log 2>&1 & disown
+
+# 探活
+curl -sf http://127.0.0.1:4173/ >/dev/null && echo frontend_ok
+```
+
+> 开发模式用 `npm --prefix frontend run dev`（:5173，仅调试，不登记服务清单）。既有业务工作台 `web/` 不受影响。
+
 ## 测试
 
 ```bash
