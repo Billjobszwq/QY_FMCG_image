@@ -59,6 +59,19 @@ python3 scripts/audit_release_tree.py --root . --format json
 
 默认 Python 测试分为 `unit`、`contract`、`platform`、`promotion` 四类。发布树审计必须返回零 finding，Web build 必须成功后才能形成版本基线。
 
+## 新版 UI 设计框架（frontend/）
+
+`frontend/` 为新版桌面式前端框架（PostHog 设计语言：窗口系统 + 设计令牌 + v2 样本页面，
+见 [`frontend/README.md`](frontend/README.md)），与既有业务接通的工作台 `web/` 并存，
+不改变后端架构；后续页面内容按该设计语言逐步迁入。正式端口 4173，
+登记于 `docs/services.json` 的 `frontend` 条目。
+
+```bash
+npm --prefix frontend install
+npm --prefix frontend run build
+npm --prefix frontend run preview -- --port 4173 --strictPort
+```
+
 ## 敏感数据规则
 
 - 不提交用户/客户照片、标注、表格、导入文件、审核记录、日志或数据库。
