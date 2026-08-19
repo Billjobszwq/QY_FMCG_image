@@ -51,7 +51,7 @@ Vitest + jsdom · @fontsource 字体自托管 · sharp（图标派生脚本）�
 ```
 frontend
 ├── index.html                # meta（theme-color / color-scheme / OG / manifest）；字体自托管无 CDN
-├── server/serve.mjs          # 生产静态服务器（零依赖 node）：dist + /api→:8400 反代，:4173
+├── server/serve.mjs          # 生产静态服务器（零依赖 node）：dist + /api→:8400、/orchestrator→:8304 反代，:4173
 ├── public/
 │   ├── favicon.svg           # 近黑圆角方 + 奶油刺猬剪影（与 HedgehogMark 同源 path）
 │   ├── manifest.webmanifest  # PWA manifest（SVG + 派生 PNG 图标）

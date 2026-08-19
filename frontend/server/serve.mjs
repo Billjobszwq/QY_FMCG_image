@@ -22,6 +22,8 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DIST_DIR = path.resolve(__dirname, "..", "dist");
 /** 平台后端（/api/v1/* 同源代理目标）。 */
 const BACKEND_HOST = "127.0.0.1";
+/** orchestrator 端口（照片库/直连识别；其 GET 不带 CORS 头，须同源代理）。 */
+const ORCH_PORT = 8304;
 const BACKEND_PORT = 8400;
 
 /** 解析 --port 参数；缺省 4173。 */
@@ -89,6 +91,37 @@ function proxyToBackend(req, res) {
       JSON.stringify({
         error: "bad_gateway",
         detail: `平台后端（${BACKEND_HOST}:${BACKEND_PORT}）不可达：${err.message}`,
+      }),
+    );
+  });
+  req.pipe(upstream);
+}
+
+/** /orchestrator/* → orchestrator :8304：剥前缀后透传（其 GET 无 CORS 头，须同源代理）。 */
+function proxyToOrchestrator(req, res, pathname, search) {
+  const stripped = pathname.replace(/^\/orchestrator/, "") || "/";
+  const headers = { ...req.headers, host: `${BACKEND_HOST}:${ORCH_PORT}` };
+  const upstream = upstreamRequest(
+    {
+      host: BACKEND_HOST,
+      port: ORCH_PORT,
+      method: req.method,
+      path: stripped + search,
+      headers,
+    },
+    (upstreamRes) => {
+      res.writeHead(upstreamRes.statusCode ?? 502, upstreamRes.headers);
+      upstreamRes.pipe(res);
+    },
+  );
+  upstream.on("error", (err) => {
+    if (!res.headersSent) {
+      res.writeHead(502, { "Content-Type": "application/json; charset=utf-8" });
+    }
+    res.end(
+      JSON.stringify({
+        error: "bad_gateway",
+        detail: `orchestrator（${BACKEND_HOST}:${ORCH_PORT}）不可达：${err.message}`,
       }),
     );
   });
@@ -169,6 +202,17 @@ const server = createServer((req, res) => {
   // /api/*（含 /api/v1/*）→ 平台后端；保留 cookie / 头部
   if (pathname === "/api" || pathname.startsWith("/api/")) {
     proxyToBackend(req, res);
+    return;
+  }
+
+  // /orchestrator/* → orchestrator :8304（剥前缀；CORS 同源代理）
+  if (pathname === "/orchestrator" || pathname.startsWith("/orchestrator/")) {
+    proxyToOrchestrator(
+      req,
+      res,
+      pathname,
+      new URL(req.url ?? "/", "http://localhost").search,
+    );
     return;
   }
 

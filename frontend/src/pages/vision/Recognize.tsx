@@ -2,10 +2,11 @@
  * 识别工作台（/vision/recognize，v3 瘦版）。
  *
  * 数据源（真实接口，无样本数据）：
- * —— 照片库：直连本机 orchestrator :8304（CORS 已开）
- *      GET  http://127.0.0.1:8304/recognize/photos       照片清单 {id, sname, typename}
- *      GET  http://127.0.0.1:8304/recognize/photo/{id}   照片字节（缩略/预览）
- *      POST http://127.0.0.1:8304/recognize/run          {asset_id, conf} → {products, count, elapsed_ms}
+ * —— 照片库：经同源代理 /orchestrator/* → 本机 orchestrator :8304
+ *    （orchestrator 的 GET 不带 CORS 头，浏览器直连必被拦，故走 serve.mjs / vite 代理）
+ *      GET  /orchestrator/recognize/photos       照片清单 {id, sname, typename}
+ *      GET  /orchestrator/recognize/photo/{id}   照片字节（缩略/预览）
+ *      POST /orchestrator/recognize/run          {asset_id, conf} → {products, count, elapsed_ms}
  *      （写入口鉴权：未设 ORCHESTRATOR_ADMIN_TOKEN 时仅本机回环可用）
  * —— 同源识别服务（src/lib/api.ts）：
  *      fetchRecognitionProfiles  /api/v1/recognition/profiles（Profile 冻结契约）
@@ -43,7 +44,7 @@ import { useWindowManager } from "@/store/windowStore";
    ========================================================================== */
 
 /** 本机 orchestrator 基址（CORS 白名单已开，直连）。 */
-const ORCH_BASE = "http://127.0.0.1:8304";
+const ORCH_BASE = "/orchestrator";
 
 /** /recognize/photos 清单条目（_list_photos：manifest-only，不入训练）。 */
 interface OrchPhoto {
@@ -240,7 +241,7 @@ export default function Recognize() {
     } catch (e) {
       setPhotosErr(
         new Error(
-          `${errorMessageOf(e)}（orchestrator ${ORCH_BASE} 未启动或 CORS 被拦截）`,
+          `${errorMessageOf(e)}（orchestrator :8304 未启动或同源代理 /orchestrator 不可达）`,
         ),
       );
     }
@@ -356,10 +357,10 @@ export default function Recognize() {
     <div className="p-5 space-y-4">
       <PageHeader
         title="识别工作台"
-        desc="本机照片库选图直连识别（orchestrator :8304），或经 URL 提交进统一任务表；结果框 SVG 叠加渲染"
+        desc="本机照片库选图经同源代理识别（/orchestrator → :8304），或经 URL 提交进统一任务表；结果框 SVG 叠加渲染"
       />
 
-      {/* ① 照片库（orchestrator 直连 :8304/recognize/photos） */}
+      {/* ① 照片库（同源代理 /orchestrator/recognize/photos → :8304） */}
       <section className="rounded-md border border-border bg-surface p-3">
         <header className="mb-2 flex items-center justify-between gap-2">
           <h2 className="text-sm font-medium text-text-primary">

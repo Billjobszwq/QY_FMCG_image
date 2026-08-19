@@ -15,6 +15,11 @@ export default defineConfig({
     // dev 同源代理：一切业务数据走 /api/v1/*（后端默认 8400 端口）
     proxy: {
       "/api": "http://127.0.0.1:8400",
+      // orchestrator 的 GET 不带 CORS 头，dev 同源代理剥前缀后转 :8304
+      "/orchestrator": {
+        target: "http://127.0.0.1:8304",
+        rewrite: (p) => p.replace(/^\/orchestrator/, ""),
+      },
     },
   },
   test: {
