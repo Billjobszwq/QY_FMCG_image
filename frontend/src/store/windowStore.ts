@@ -8,6 +8,8 @@ import { clamp } from "@/lib/utils";
    —— 维护所有窗口的 id / position / size / isMinimized / isMaximized / zIndex
    —— 提供 openWindow / closeWindow / minimizeWindow / maximizeWindow(toggle)
       / bringToFront 等方法
+   —— v5：整桌排列操作 cascadeWindows / tileWindows / minimizeAll /
+      closeAllWindows（菜单栏「窗口」菜单消费）
    ========================================================================== */
 
 /** 底部任务栏高度（与 --taskbar-height 令牌保持一致）。 */
@@ -15,8 +17,15 @@ export const TASKBAR_HEIGHT = 48;
 /** 窗口标题栏高度（与 --titlebar-height 令牌保持一致）。 */
 export const TITLEBAR_HEIGHT = 40;
 
+/** 登录窗口 id（桌面壳与 closeAllWindows 共用：关全部时保留）。 */
+export const LOGIN_WINDOW_ID = "login";
+
 const DEFAULT_MIN_WIDTH = 320;
 const DEFAULT_MIN_HEIGHT = 200;
+
+/** 层叠重排：起点与步长（每个窗口向右下各错一格）。 */
+const CASCADE_ORIGIN = { x: 40, y: 40 };
+const CASCADE_STEP = 28;
 
 export interface Point {
   x: number;
@@ -74,7 +83,7 @@ interface WindowManagerState {
   zTop: number;
 
   openWindow: (descriptor: WindowDescriptor) => void;
-  closeWindow: (id: string) => void;
+  closeWindow: (id: string, force?: boolean) => void;
   minimizeWindow: (id: string) => void;
   /** 从最小化恢复并聚焦。 */
   restoreWindow: (id: string) => void;
@@ -88,6 +97,14 @@ interface WindowManagerState {
   commitSize: (id: string, size: Size) => void;
   /** 视口变化时让最大化窗口跟随新尺寸。 */
   syncMaximizedSizes: () => void;
+  /** v5：打开的窗口按 28px 层叠重排，从 (40,40) 起；最大化还原、最小化带回。 */
+  cascadeWindows: () => void;
+  /** v5：网格平铺（视口宽 × 视口高-任务栏），1 窗独占、≥2 窗两列自适应。 */
+  tileWindows: () => void;
+  /** v5：最小化全部窗口并清除聚焦。 */
+  minimizeAll: () => void;
+  /** v5：关闭全部窗口（登录窗除外）。 */
+  closeAllWindows: () => void;
 }
 
 function resolveDescriptor(d: WindowDescriptor) {
@@ -150,9 +167,12 @@ export const useWindowManager = create<WindowManagerState>()((set) => ({
       };
     }),
 
-  closeWindow: (id) =>
+  closeWindow: (id, force = false) =>
     set((s) => {
       if (!s.windows[id]) return {};
+      /* closable=false 的窗口（登录窗）拒绝用户/快捷键关闭；
+         壳层程序性关闭（登录成功/登出）显式传 force */
+      if (!force && s.windows[id].closable === false) return {};
       const windows = { ...s.windows };
       delete windows[id];
       return {
@@ -268,6 +288,89 @@ export const useWindowManager = create<WindowManagerState>()((set) => ({
         }
       }
       return changed ? { windows } : {};
+    }),
+
+  cascadeWindows: () =>
+    set((s) => {
+      const ids = s.order.filter((id) => s.windows[id]);
+      if (ids.length === 0) return {};
+      const windows = { ...s.windows };
+      ids.forEach((id, i) => {
+        const w = windows[id];
+        // 最大化窗口先还原到记忆尺寸再参与层叠（restoreRect 缺失时保留现尺寸）。
+        const size =
+          w.isMaximized && w.restoreRect
+            ? { width: w.restoreRect.width, height: w.restoreRect.height }
+            : w.size;
+        windows[id] = {
+          ...w,
+          isMinimized: false,
+          isMaximized: false,
+          restoreRect: null,
+          size,
+          position: {
+            x: CASCADE_ORIGIN.x + i * CASCADE_STEP,
+            y: CASCADE_ORIGIN.y + i * CASCADE_STEP,
+          },
+        };
+      });
+      return { windows };
+    }),
+
+  tileWindows: () =>
+    set((s) => {
+      const ids = s.order.filter((id) => s.windows[id]);
+      const n = ids.length;
+      if (n === 0) return {};
+      // 平铺可用区 = 视口宽 × (视口高 - 任务栏)，与最大化口径一致。
+      const availW = window.innerWidth;
+      const availH = window.innerHeight - TASKBAR_HEIGHT;
+      const cols = n === 1 ? 1 : 2;
+      const rows = Math.ceil(n / cols);
+      const cellW = Math.floor(availW / cols);
+      const cellH = Math.floor(availH / rows);
+      const windows = { ...s.windows };
+      ids.forEach((id, i) => {
+        const w = windows[id];
+        windows[id] = {
+          ...w,
+          isMinimized: false,
+          isMaximized: false,
+          restoreRect: null,
+          position: {
+            x: (i % cols) * cellW,
+            y: Math.floor(i / cols) * cellH,
+          },
+          size: { width: cellW, height: cellH },
+        };
+      });
+      return { windows };
+    }),
+
+  minimizeAll: () =>
+    set((s) => {
+      if (s.order.length === 0) return {};
+      const windows = { ...s.windows };
+      for (const id of s.order) {
+        const w = windows[id];
+        if (w && !w.isMinimized) windows[id] = { ...w, isMinimized: true };
+      }
+      return { windows, activeId: null };
+    }),
+
+  closeAllWindows: () =>
+    set((s) => {
+      const closable = s.order.filter(
+        (id) => id !== LOGIN_WINDOW_ID && s.windows[id],
+      );
+      if (closable.length === 0) return {};
+      const windows = { ...s.windows };
+      for (const id of closable) delete windows[id];
+      return {
+        windows,
+        order: s.order.filter((id) => windows[id]),
+        activeId: s.activeId && windows[s.activeId] ? s.activeId : null,
+      };
     }),
 }));
 

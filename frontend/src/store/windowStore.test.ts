@@ -108,3 +108,76 @@ describe("bringToFront / z 序", () => {
     expect(s().activeId).toBe("w1");
   });
 });
+
+describe("cascadeWindows", () => {
+  it("打开的窗口按 28px 层叠重排，从 (40,40) 起", () => {
+    const s = () => useWindowManager.getState();
+    s().openWindow(descriptor({ id: "a", title: "甲", defaultPosition: { x: 5, y: 5 } }));
+    s().openWindow(descriptor({ id: "b", title: "乙", defaultPosition: { x: 300, y: 88 } }));
+    s().openWindow(descriptor({ id: "c", title: "丙", defaultPosition: { x: 120, y: 240 } }));
+    s().minimizeWindow("c");
+    s().cascadeWindows();
+    expect(s().windows.a.position).toEqual({ x: 40, y: 40 });
+    expect(s().windows.b.position).toEqual({ x: 68, y: 68 });
+    expect(s().windows.c.position).toEqual({ x: 96, y: 96 });
+    // 最小化的窗口被带回桌面，尺寸保持默认
+    expect(s().windows.c.isMinimized).toBe(false);
+    expect(s().windows.c.size).toEqual({ width: 400, height: 300 });
+  });
+});
+
+describe("tileWindows", () => {
+  it("≥2 窗按两列网格平铺，单元格 = (视口宽 × 视口高-任务栏) 均分", () => {
+    const s = () => useWindowManager.getState();
+    s().openWindow(descriptor({ id: "a", title: "甲" }));
+    s().openWindow(descriptor({ id: "b", title: "乙" }));
+    s().openWindow(descriptor({ id: "c", title: "丙" }));
+    s().tileWindows();
+    const cellW = Math.floor(window.innerWidth / 2);
+    const cellH = Math.floor((window.innerHeight - TASKBAR_HEIGHT) / 2);
+    expect(s().windows.a.position).toEqual({ x: 0, y: 0 });
+    expect(s().windows.a.size).toEqual({ width: cellW, height: cellH });
+    expect(s().windows.b.position).toEqual({ x: cellW, y: 0 });
+    expect(s().windows.c.position).toEqual({ x: 0, y: cellH });
+    expect(s().windows.c.size).toEqual({ width: cellW, height: cellH });
+  });
+
+  it("单窗平铺为整面（一列）", () => {
+    const s = () => useWindowManager.getState();
+    s().openWindow(descriptor());
+    s().tileWindows();
+    expect(s().windows.w1.position).toEqual({ x: 0, y: 0 });
+    expect(s().windows.w1.size).toEqual({
+      width: window.innerWidth,
+      height: window.innerHeight - TASKBAR_HEIGHT,
+    });
+  });
+});
+
+describe("minimizeAll", () => {
+  it("最小化全部窗口并清除聚焦", () => {
+    const s = () => useWindowManager.getState();
+    s().openWindow(descriptor());
+    s().openWindow(descriptor({ id: "w2", title: "窗口二" }));
+    expect(s().activeId).toBe("w2");
+    s().minimizeAll();
+    expect(s().windows.w1.isMinimized).toBe(true);
+    expect(s().windows.w2.isMinimized).toBe(true);
+    expect(s().activeId).toBeNull();
+    // 窗口仍在册（任务栏可还原）
+    expect(s().order).toEqual(["w1", "w2"]);
+  });
+});
+
+describe("closeAllWindows", () => {
+  it("关闭全部窗口，仅保留登录窗", () => {
+    const s = () => useWindowManager.getState();
+    s().openWindow(descriptor({ id: "login", title: "平台登录" }));
+    s().openWindow(descriptor({ id: "mod:core", title: "首页/系统" }));
+    s().openWindow(descriptor({ id: "mod:agent", title: "主管 Agent" }));
+    s().closeAllWindows();
+    expect(Object.keys(s().windows)).toEqual(["login"]);
+    expect(s().order).toEqual(["login"]);
+    expect(s().activeId).toBeNull();
+  });
+});

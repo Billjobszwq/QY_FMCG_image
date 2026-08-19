@@ -240,6 +240,31 @@ const CoinIcon = glyph(
   </>,
 );
 
+/** 主管 Agent · 对话：气泡 + 两行文本线 */
+const ChatIcon = glyph(
+  <>
+    <path d="M2.6 4.4 Q2.6 3 4 3 H12 Q13.4 3 13.4 4.4 V9.4 Q13.4 10.8 12 10.8 H7.3 L4.7 13.1 V10.8 H4 Q2.6 10.8 2.6 9.4 Z" />
+    <path d="M5.3 5.9 H10.7 M5.3 8.1 H8.9" />
+  </>,
+);
+
+/** 主管 Agent · 目标拆解：靶心 + 四向刻线 */
+const TargetIcon = glyph(
+  <>
+    <circle cx="8" cy="8" r="4.9" />
+    <circle cx="8" cy="8" r="1.9" />
+    <path d="M8 1.6 V3.3 M8 12.7 V14.4 M1.6 8 H3.3 M12.7 8 H14.4" />
+  </>,
+);
+
+/** 主管 Agent 专用 glyph：四角星（监督者 / 一等公民入口） */
+const SparkIcon = glyph(
+  <path d="M8 2.1 L9.4 6.6 L13.9 8 L9.4 9.4 L8 13.9 L6.6 9.4 L2.1 8 L6.6 6.6 Z" />,
+);
+
+/** 主管 Agent 组在菜单栏 / 桌面图标处的专用 glyph（四角星）。 */
+export const SUPERVISOR_GLYPH = SparkIcon;
+
 /* ============================================================================
    页面组件（React.lazy；文件由集成同事创建，此处不验证存在性）
    ========================================================================== */
@@ -264,8 +289,12 @@ const Quality = lazy(() => import("@/pages/data/Quality"));
 const Runs = lazy(() => import("@/pages/workflow/Runs"));
 const Templates = lazy(() => import("@/pages/workflow/Templates"));
 const Agents = lazy(() => import("@/pages/workflow/Agents"));
-const Approvals = lazy(() => import("@/pages/workflow/Approvals"));
 const Connectors = lazy(() => import("@/pages/workflow/Connectors"));
+const Approvals = lazy(() => import("@/pages/workflow/Approvals"));
+// P5.5 主管 Agent（v5 一等公民：对话 / 目标拆解 / 命令审批；矩阵复用 workflow/Agents）
+const AgentChat = lazy(() => import("@/pages/agent/Chat"));
+const AgentGoals = lazy(() => import("@/pages/agent/Goals"));
+const AgentCommands = lazy(() => import("@/pages/agent/Commands"));
 // P6 账号与主数据
 const Accounts = lazy(() => import("@/pages/master/Accounts"));
 const Audit = lazy(() => import("@/pages/master/Audit"));
@@ -282,7 +311,18 @@ const Geo = lazy(() => import("@/pages/biz/Geo"));
 const Finance = lazy(() => import("@/pages/biz/Finance"));
 
 /* ============================================================================
-   MODULE_GROUPS：十组导航（顺序即顶部菜单栏顺序）
+   常用分组键常量（桌面壳 / 菜单栏跨窗口跳转共用，避免魔法字符串）
+   ========================================================================== */
+
+/** 首页/系统组（健康点 → /status 标签；品牌刺猬 → /home 标签）。 */
+export const CORE_GROUP = "core";
+/** 主管 Agent 组（一等公民：菜单栏快捷入口 / 独立桌面图标）。 */
+export const AGENT_GROUP = "agent";
+/** 帮助组（菜单栏「帮助」→ /help 标签）。 */
+export const HELP_GROUP = "help";
+
+/* ============================================================================
+   MODULE_GROUPS：模块导航分组（v5：顺序即桌面图标顺序）
    ========================================================================== */
 
 export const MODULE_GROUPS: ModuleGroup[] = [
@@ -292,6 +332,16 @@ export const MODULE_GROUPS: ModuleGroup[] = [
     items: [
       { route: "/home", label: "首页", icon: HomeIcon, Page: Home },
       { route: "/status", label: "系统状态", icon: PulseIcon, Page: SystemStatus },
+    ],
+  },
+  {
+    group: "agent",
+    label: "主管 Agent",
+    items: [
+      { route: "/agent/chat", label: "对话", icon: ChatIcon, Page: AgentChat },
+      { route: "/agent/goals", label: "目标拆解", icon: TargetIcon, Page: AgentGoals },
+      { route: "/agent/commands", label: "命令审批", icon: CheckBadgeIcon, Page: AgentCommands },
+      { route: "/agent/matrix", label: "Agent 矩阵", icon: <TerminalGlyph />, Page: Agents },
     ],
   },
   {
@@ -321,9 +371,8 @@ export const MODULE_GROUPS: ModuleGroup[] = [
     items: [
       { route: "/workflow/runs", label: "运行中心", icon: PlayIcon, Page: Runs },
       { route: "/workflow/templates", label: "工作流模板", icon: <DocGlyph />, Page: Templates },
-      { route: "/workflow/agents", label: "Agent 矩阵", icon: <TerminalGlyph />, Page: Agents },
-      { route: "/workflow/approvals", label: "审批队列", icon: CheckBadgeIcon, Page: Approvals },
       { route: "/workflow/connectors", label: "连接器", icon: PlugIcon, Page: Connectors },
+      { route: "/workflow/approvals", label: "审批队列", icon: CheckBadgeIcon, Page: Approvals },
     ],
   },
   {
