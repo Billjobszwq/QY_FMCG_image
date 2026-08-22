@@ -17,6 +17,11 @@
 
 完整的源码和页面清单见 [`docs/PROJECT-STRUCTURE.md`](docs/PROJECT-STRUCTURE.md)，本地数据和模型布局见 [`docs/LOCAL-ASSETS.md`](docs/LOCAL-ASSETS.md)。
 
+Agent 编排、三层记忆和 Research RAG 的当前收口入口见
+[`Round 2 Hardening`](docs/implementation/taas-research-rag-agent-memory-v1/round-2-hardening/README.md)，
+可直接交给下一轮开发 Agent 的任务书见
+[`Round 2 完整执行提示词`](docs/implementation/taas-research-rag-agent-memory-v1/round-2-hardening/AGENT-EXECUTION-PROMPT.md)。
+
 ## 安装
 
 要求 Python 3.11–3.13 和当前 Node.js LTS。Python 开发环境：

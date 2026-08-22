@@ -1,0 +1,1 @@
+{"methodology_id_hint": "m-label-qa", "statement": "标注批次错误率升高时，先抽样复核标注一致性，再定位歧义类别并修订标注规范", "trigger_conditions": ["标注错误率升高", "标注一致性下降"], "scope": {"domain": "recognition"}, "confidence": 0.7}

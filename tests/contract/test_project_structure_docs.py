@@ -17,7 +17,8 @@ REQUIRED_DOMAINS = {
     "web-workbench",
 }
 REQUIRED_LOCAL_ZONES = {"training-data", "recognition-models", "runtime"}
-REQUIRED_TEST_SUITES = {"contract", "platform", "promotion", "unit"}
+REQUIRED_TEST_SUITES = {"contract", "platform", "promotion", "unit",
+                        "cognition", "governance", "research", "models"}
 REQUIRED_COMPATIBILITY_LINKS = {
     ".models",
     ".sam_checkpoints",
@@ -70,11 +71,11 @@ def test_structure_document_matches_current_source_and_test_inventory() -> None:
     test_suites = sorted(
         path.name
         for path in (ROOT / "tests").iterdir()
-        if path.is_dir() and path.name != "__pycache__"
+        if path.is_dir() and path.name not in ("__pycache__", "fixtures")
     )
 
     assert len(python_packages) == 20
-    assert len(web_pages) == 29
+    assert len(web_pages) == 30
     assert set(test_suites) == REQUIRED_TEST_SUITES
 
     for package in python_packages:

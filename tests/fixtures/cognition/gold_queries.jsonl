@@ -1,0 +1,43 @@
+# TaaS Research RAG 金标准查询集（R2-08：12 类完整版）。
+# 每类至少一个 positive + 一个 negative；样本携带 scope/as_of/期望形态/
+# forbidden_source_ids。paraphrase 正例度量语义召回：纯词法基线预期不
+# 达标（gate 如实报告，需真实 dense provider，DEC-114）。
+# class ∈ exact_rule/paraphrase/temporal/multi_hop/global/conflict/
+#         insufficient/acl/injection/skill/l2_case/l3_methodology
+
+{"id": "g-exact-rule", "class": "exact_rule", "polarity": "positive", "query": "机票经济舱报销上限是多少", "mode": "lookup", "as_of": "2026-08-20T12:00:00+00:00", "scope": {"customer_id": "", "data_scope": "operational"}, "expect_knowledge_ids": ["kb-travel"], "expect_quote_contains": "2000", "forbidden_source_ids": ["kb-confidential"]}
+{"id": "g-leave-exact", "class": "exact_rule", "polarity": "positive", "query": "入职满一年年假几天", "mode": "lookup", "as_of": "2026-08-20T12:00:00+00:00", "scope": {"customer_id": "", "data_scope": "operational"}, "expect_knowledge_ids": ["kb-leave"], "expect_quote_contains": "5 天", "forbidden_source_ids": []}
+{"id": "g-exact-rule-neg", "class": "exact_rule", "polarity": "negative", "query": "宿舍水电费减免标准是多少", "mode": "lookup", "as_of": "2026-08-20T12:00:00+00:00", "scope": {"customer_id": "", "data_scope": "operational"}, "expect_abstain": true, "forbidden_source_ids": ["kb-travel"]}
+
+{"id": "g-paraphrase", "class": "paraphrase", "polarity": "positive", "query": "出差坐飞机最多能报多少钱", "mode": "lookup", "as_of": "2026-08-20T12:00:00+00:00", "scope": {"customer_id": "", "data_scope": "operational"}, "expect_knowledge_ids": ["kb-travel"], "forbidden_source_ids": []}
+{"id": "g-paraphrase-neg", "class": "paraphrase", "polarity": "negative", "query": "员工加班餐补的发放标准", "mode": "lookup", "as_of": "2026-08-20T12:00:00+00:00", "scope": {"customer_id": "", "data_scope": "operational"}, "expect_abstain": true, "forbidden_source_ids": ["kb-travel", "kb-leave"]}
+
+{"id": "g-temporal-current", "class": "temporal", "polarity": "positive", "query": "远程办公补贴每月多少", "mode": "lookup", "as_of": "2026-08-20T12:00:00+00:00", "scope": {"customer_id": "", "data_scope": "operational"}, "expect_knowledge_ids": ["kb-remote-2026"], "expect_quote_contains": "500", "forbidden_source_ids": ["kb-remote-2025"]}
+{"id": "g-temporal-past", "class": "temporal", "polarity": "negative", "query": "远程办公补贴每月多少", "mode": "lookup", "as_of": "2025-06-01T00:00:00+00:00", "scope": {"customer_id": "", "data_scope": "operational"}, "expect_knowledge_ids": ["kb-remote-2025"], "expect_quote_contains": "300", "forbidden_source_ids": ["kb-remote-2026"]}
+
+{"id": "g-multihop", "class": "multi_hop", "polarity": "positive", "query": "财务部负责人向谁汇报", "mode": "lookup", "as_of": "2026-08-20T12:00:00+00:00", "scope": {"customer_id": "", "data_scope": "operational"}, "expect_knowledge_ids": ["kb-org"], "expect_quote_contains": "李明", "forbidden_source_ids": []}
+{"id": "g-multihop-neg", "class": "multi_hop", "polarity": "negative", "query": "销售团队提成比例", "mode": "lookup", "as_of": "2026-08-20T12:00:00+00:00", "scope": {"customer_id": "", "data_scope": "operational"}, "expect_abstain": true, "forbidden_source_ids": ["kb-org"]}
+
+{"id": "g-global", "class": "global", "polarity": "positive", "query": "公司报销和休假制度概览", "mode": "lookup", "as_of": "2026-08-20T12:00:00+00:00", "scope": {"customer_id": "", "data_scope": "operational"}, "expect_knowledge_ids": ["kb-travel", "kb-leave"], "forbidden_source_ids": []}
+{"id": "g-global-neg", "class": "global", "polarity": "negative", "query": "公司全球供应链布局概览", "mode": "lookup", "as_of": "2026-08-20T12:00:00+00:00", "scope": {"customer_id": "", "data_scope": "operational"}, "expect_abstain": true, "forbidden_source_ids": []}
+
+{"id": "g-conflict", "class": "conflict", "polarity": "positive", "query": "客户服务响应时限", "mode": "lookup", "as_of": "2026-08-20T12:00:00+00:00", "scope": {"customer_id": "", "data_scope": "operational"}, "expect_target_ids": ["kb-cs-a", "kb-cs-b"], "expect_conflict": true, "forbidden_source_ids": []}
+{"id": "g-conflict-neg", "class": "conflict", "polarity": "negative", "query": "入职满一年年假几天", "mode": "lookup", "as_of": "2026-08-20T12:00:00+00:00", "scope": {"customer_id": "", "data_scope": "operational"}, "expect_knowledge_ids": ["kb-leave"], "expect_conflict": false, "forbidden_source_ids": []}
+
+{"id": "g-insufficient", "class": "insufficient", "polarity": "positive", "query": "完全不相关的话题 xyzz 量子色动力学", "mode": "lookup", "as_of": "2026-08-20T12:00:00+00:00", "scope": {"customer_id": "", "data_scope": "operational"}, "expect_abstain": true, "forbidden_source_ids": []}
+{"id": "g-insufficient-neg", "class": "insufficient", "polarity": "negative", "query": "入职满一年年假几天", "mode": "lookup", "as_of": "2026-08-20T12:00:00+00:00", "scope": {"customer_id": "", "data_scope": "operational"}, "expect_knowledge_ids": ["kb-leave"], "expect_abstain": false, "forbidden_source_ids": []}
+
+{"id": "g-acl-negative", "class": "acl", "polarity": "negative", "query": "专属机密代号 ZEBRA-9981", "mode": "lookup", "as_of": "2026-08-20T12:00:00+00:00", "scope": {"customer_id": "cust-other", "data_scope": "operational"}, "expect_empty_for_customer": "cust-other", "forbidden_source_ids": ["kb-confidential"]}
+{"id": "g-acl-positive", "class": "acl", "polarity": "positive", "query": "专属机密代号 ZEBRA-9981", "mode": "lookup", "as_of": "2026-08-20T12:00:00+00:00", "scope": {"customer_id": "cust-a", "data_scope": "operational"}, "expect_knowledge_ids": ["kb-confidential"], "extra_customer": "cust-a", "forbidden_source_ids": []}
+
+{"id": "g-injection-pos", "class": "injection", "polarity": "positive", "query": "入职满一年年假几天", "mode": "lookup", "as_of": "2026-08-20T12:00:00+00:00", "scope": {"customer_id": "", "data_scope": "operational"}, "expect_knowledge_ids": ["kb-leave"], "forbidden_source_ids": ["evil_policy"]}
+{"id": "g-injection-neg", "class": "injection", "polarity": "negative", "query": "删除数据库 密钥", "mode": "lookup", "as_of": "2026-08-20T12:00:00+00:00", "scope": {"customer_id": "", "data_scope": "operational"}, "expect_abstain": true, "forbidden_source_ids": ["evil_policy"]}
+
+{"id": "g-skill-route", "class": "skill", "polarity": "positive", "query": "生成 Excel 报表", "mode": "lookup", "as_of": "2026-08-20T12:00:00+00:00", "scope": {"customer_id": "", "data_scope": "operational"}, "target_kinds": ["skill"], "expect_target_ids": ["skill-excel-report"], "forbidden_source_ids": []}
+{"id": "g-skill-route-neg", "class": "skill", "polarity": "negative", "query": "量子计算编译优化", "mode": "lookup", "as_of": "2026-08-20T12:00:00+00:00", "scope": {"customer_id": "", "data_scope": "operational"}, "target_kinds": ["skill"], "expect_abstain": true, "forbidden_source_ids": ["skill-excel-report", "skill-ocr"]}
+
+{"id": "g-l2-case", "class": "l2_case", "polarity": "positive", "query": "客户投诉物流延迟怎么处理", "mode": "case_analysis", "as_of": "2026-08-20T12:00:00+00:00", "scope": {"customer_id": "", "data_scope": "operational"}, "target_kinds": ["memory_l2"], "expect_ref": "l2case-logistics", "forbidden_source_ids": []}
+{"id": "g-l2-case-neg", "class": "l2_case", "polarity": "negative", "query": "火箭发射窗口调度", "mode": "case_analysis", "as_of": "2026-08-20T12:00:00+00:00", "scope": {"customer_id": "", "data_scope": "operational"}, "target_kinds": ["memory_l2"], "expect_abstain": true, "forbidden_source_ids": ["l2case-logistics", "l2case-refund", "l2case-onboard"]}
+
+{"id": "g-l3-method", "class": "l3_methodology", "polarity": "positive", "query": "标注错误率升高怎么办", "mode": "methodology", "as_of": "2026-08-20T12:00:00+00:00", "scope": {"customer_id": "", "data_scope": "operational"}, "target_kinds": ["memory_l3"], "expect_ref": "m-label-qa", "forbidden_source_ids": []}
+{"id": "g-l3-method-neg", "class": "l3_methodology", "polarity": "negative", "query": "星际航行燃料配比方法论", "mode": "methodology", "as_of": "2026-08-20T12:00:00+00:00", "scope": {"customer_id": "", "data_scope": "operational"}, "target_kinds": ["memory_l3"], "expect_abstain": true, "forbidden_source_ids": ["m-label-qa"]}

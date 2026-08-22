@@ -1605,3 +1605,329 @@ export async function fetchAgentChat(sessionId: string, text: string): Promise<a
     "agent chat",
   );
 }
+
+/* ============================================================================
+   认知内核 / Research RAG / 治理（TaaS Research RAG V1）
+   —— 同源 /api/v1/cognition、/api/v1/research、/api/v1/governance
+   ========================================================================== */
+
+export interface CognitionCandidate {
+  target_kind: string;
+  target_id: string;
+  version: string;
+  summary: string;
+  score_breakdown: Record<string, number | null>;
+  spans: Array<{
+    span_id: string;
+    chunk_id: string;
+    normalized_quote: string;
+    locator: Record<string, unknown>;
+  }>;
+}
+
+export interface CognitionSearchResult {
+  query: string;
+  degraded: boolean;
+  index_snapshot_ids: string[];
+  policy_decision: Record<string, unknown>;
+  candidates: CognitionCandidate[];
+}
+
+export async function fetchKnowledgeSearch(
+  q: string,
+  opts?: { top_k?: number; customer_id?: string; project_id?: string },
+): Promise<CognitionSearchResult> {
+  const p = new URLSearchParams({ q });
+  if (opts?.top_k) p.set("top_k", String(opts.top_k));
+  if (opts?.customer_id) p.set("customer_id", opts.customer_id);
+  if (opts?.project_id) p.set("project_id", opts.project_id);
+  return get(`/api/v1/cognition/knowledge/search?${p.toString()}`, "knowledge search");
+}
+
+export async function fetchMemorySearch(
+  q: string,
+  layer: "memory_l2" | "memory_l3",
+  opts?: { top_k?: number },
+): Promise<CognitionSearchResult> {
+  const p = new URLSearchParams({ q, layer });
+  if (opts?.top_k) p.set("top_k", String(opts.top_k));
+  return get(`/api/v1/cognition/memory/search?${p.toString()}`, "memory search");
+}
+
+export async function fetchSkillsSearch(
+  q: string,
+  opts?: { top_k?: number },
+): Promise<CognitionSearchResult> {
+  const p = new URLSearchParams({ q });
+  if (opts?.top_k) p.set("top_k", String(opts.top_k));
+  return get(`/api/v1/cognition/skills/search?${p.toString()}`, "skills search");
+}
+
+export async function fetchSkillCanExecute(skillId: string): Promise<{
+  allowed: boolean;
+  requires_human_gate: boolean;
+  reasons: string[];
+}> {
+  return get(`/api/v1/cognition/skills/${skillId}/can-execute`, "skill can-execute");
+}
+
+export interface ResearchRun {
+  research_run_id: string;
+  business_run_id: string;
+  question: string;
+  mode: string;
+  status: string;
+  stop_reason: string | null;
+  budget: Record<string, number>;
+  consumed: Record<string, number>;
+  state: Record<string, unknown>;
+  // R2-03：服务端固化的 scope（客户端不得改写）
+  tenant_id?: string;
+  customer_id?: string;
+  project_id?: string;
+  test_run_id?: string;
+  data_scope?: string;
+}
+
+export async function fetchResearchStart(body: {
+  question: string;
+  mode?: string;
+  budget?: Record<string, number>;
+}): Promise<ResearchRun> {
+  return postJson("/api/v1/research/runs", body, undefined, "research start");
+}
+
+export async function fetchResearchStatus(runId: string): Promise<ResearchRun> {
+  return get(`/api/v1/research/runs/${runId}`, "research status");
+}
+
+export async function fetchResearchResume(runId: string): Promise<ResearchRun> {
+  return postJson(`/api/v1/research/runs/${runId}/resume`, {}, undefined, "research resume");
+}
+
+export async function fetchResearchCancel(runId: string): Promise<ResearchRun> {
+  return postJson(`/api/v1/research/runs/${runId}/cancel`, {}, undefined, "research cancel");
+}
+
+export async function fetchResearchDecideConflict(
+  runId: string,
+  resolution: string,
+): Promise<ResearchRun> {
+  return postJson(
+    `/api/v1/research/runs/${runId}/decide-conflict`,
+    { resolution },
+    undefined,
+    "research decide-conflict",
+  );
+}
+
+export interface ResearchClaim {
+  claim_id: string;
+  text: string;
+  claim_type: string;
+  importance: string;
+  support_status: string;
+  confidence: number;
+}
+
+export async function fetchResearchClaims(runId: string): Promise<{
+  count: number;
+  claims: ResearchClaim[];
+}> {
+  return get(`/api/v1/research/runs/${runId}/claims`, "research claims");
+}
+
+export interface CitationVerdict {
+  claim_id: string;
+  verdict: string;
+  reason: string;
+  valid_spans?: string[];
+}
+
+export async function fetchResearchCitations(runId: string): Promise<{
+  gate_ok: boolean;
+  blocking_claims: string[];
+  verdicts: CitationVerdict[];
+}> {
+  return get(`/api/v1/research/runs/${runId}/citations`, "research citations");
+}
+
+export interface ResearchReport {
+  report_id: string;
+  abstain: boolean;
+  claims: Array<{ claim_id: string; text: string; claim_type: string }>;
+  citations: Array<{ claim_id: string; span_id: string; relation: string }>;
+  snapshots: Record<string, unknown>;
+  body: Record<string, unknown>;
+}
+
+export async function fetchResearchSynthesize(runId: string): Promise<ResearchReport> {
+  return postJson(
+    `/api/v1/research/runs/${runId}/synthesize`,
+    {},
+    undefined,
+    "research synthesize",
+  );
+}
+
+export interface GovernanceApproval {
+  approval_id: string;
+  kind: string;
+  subject_ref: string;
+  decision: string;
+  requested_by: string;
+  decided_by?: string;
+}
+
+export async function fetchGovernanceRequestApproval(body: {
+  kind: string;
+  subject_ref: string;
+  requested_by?: string;
+}): Promise<GovernanceApproval> {
+  return postJson("/api/v1/governance/approvals/request", body, undefined, "approval request");
+}
+
+export async function fetchGovernanceDecideApproval(
+  approvalId: string,
+  decision: "approved" | "rejected",
+  reason?: string,
+): Promise<GovernanceApproval> {
+  return postJson(
+    `/api/v1/governance/approvals/${approvalId}/decide`,
+    { decision, reason: reason ?? "" },
+    undefined,
+    "approval decide",
+  );
+}
+
+export async function fetchGovernanceAlerts(): Promise<{
+  count: number;
+  alerts: Array<Record<string, unknown>>;
+}> {
+  return get("/api/v1/governance/alerts", "governance alerts");
+}
+
+/* ============================================================================
+   统一模型管理 V1（/api/v1/models/*）：连接/目录/绑定/治理。
+   纪律：凭据 write-only（SecretSubmit 提交后不回显）；GET 只返回元数据；
+   后端独立鉴权，前端投影只改善体验。
+   ========================================================================== */
+
+export interface ModelConnectionView {
+  connection_id: string;
+  version: number;
+  tenant_id: string;
+  name: string;
+  location: "local" | "api";
+  adapter_kind: "openai_compatible" | "anthropic";
+  api_flavor: string;
+  base_url: string;
+  timeout_ms: number;
+  max_retries: number;
+  status: string;
+  etag: string;
+  created_by: string;
+  created_at: string;
+  activated_at: string | null;
+  secret_configured: boolean;
+  secret_version: number | null;
+  last_rotated_at: string | null;
+  active_version?: number | null;
+}
+
+export interface ModelCatalogView {
+  catalog_id: string;
+  connection_id: string;
+  connection_version: number;
+  model_id: string;
+  model_revision: string;
+  capabilities: string[];
+  embedding_dimension: number | null;
+  normalization_version: string | null;
+  source: "discovered" | "manual";
+  probe_status: string;
+  last_verified_at: string | null;
+}
+
+export interface ModelBindingView {
+  binding_id: string;
+  version: number;
+  customer_id: string;
+  project_id: string;
+  subject_kind: "system_capability" | "module";
+  subject_id: string;
+  capability: string;
+  connection_id: string;
+  connection_version: number;
+  model_id: string;
+  status: string;
+  etag: string;
+  created_by: string;
+  created_at: string;
+  activated_at: string | null;
+}
+
+export async function fetchModelConnections(): Promise<{
+  count: number;
+  connections: ModelConnectionView[];
+}> {
+  return get("/api/v1/models/connections", "model connections");
+}
+
+export async function fetchModelConnection(
+  connectionId: string,
+): Promise<ModelConnectionView> {
+  return get(`/api/v1/models/connections/${connectionId}`, "model connection");
+}
+
+export async function fetchModelCatalog(params?: {
+  connection_id?: string;
+}): Promise<{ count: number; entries: ModelCatalogView[] }> {
+  const q = params?.connection_id
+    ? `?connection_id=${encodeURIComponent(params.connection_id)}`
+    : "";
+  return get(`/api/v1/models/catalog${q}`, "model catalog");
+}
+
+export async function fetchModelBindings(params?: {
+  subject_kind?: string;
+  capability?: string;
+  status?: string;
+}): Promise<{ count: number; bindings: ModelBindingView[] }> {
+  const q = new URLSearchParams();
+  if (params?.subject_kind) q.set("subject_kind", params.subject_kind);
+  if (params?.capability) q.set("capability", params.capability);
+  if (params?.status) q.set("status", params.status);
+  const s = q.toString();
+  return get(`/api/v1/models/bindings${s ? `?${s}` : ""}`, "model bindings");
+}
+
+/** 运行治理指标（M6）：账号级用量/预算/告警概览。 */
+export async function fetchModelUsageSummary(): Promise<Record<string, unknown>> {
+  return get("/api/v1/models/usage/summary", "model usage summary");
+}
+
+export async function fetchModelAlerts(): Promise<{
+  count: number;
+  alerts: Array<Record<string, unknown>>;
+}> {
+  return get("/api/v1/models/alerts", "model alerts");
+}
+
+/** 用量趋势（按小时桶；窗口可配）。 */
+export async function fetchModelUsageTimeseries(sinceHours = 24): Promise<{
+  buckets: Array<Record<string, unknown>>;
+}> {
+  return get(
+    `/api/v1/models/usage/timeseries?since_hours=${encodeURIComponent(sinceHours)}`,
+    "model usage timeseries");
+}
+
+/** 模型管理写操作统一通道（自动 CSRF；body 不含可回显凭据字段）。 */
+export async function postModelJson<T>(
+  path: string,
+  body: unknown,
+  label: string,
+): Promise<T> {
+  return postJson(`/api/v1/models/${path.replace(/^\/+/, "")}`, body, undefined, label);
+}

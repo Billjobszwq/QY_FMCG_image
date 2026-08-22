@@ -1,0 +1,6 @@
+{"id": "gc-1", "claim_text": "机票经济舱报销上限是 2000 元", "span_quote": "机票经济舱上限 2000 元。", "gold_relation": "supports", "importance": "high"}
+{"id": "gc-2", "claim_text": "机票经济舱报销上限是 2500 元", "span_quote": "机票经济舱上限 2000 元。", "gold_relation": "contradicts", "importance": "high"}
+{"id": "gc-3", "claim_text": "年假制度由人力资源部制定", "span_quote": "入职满一年年假 5 天。", "gold_relation": "context", "importance": "medium"}
+{"id": "gc-4", "claim_text": "入职满一年年假 5 天", "span_quote": "入职满一年年假 5 天。", "gold_relation": "supports", "importance": "high"}
+{"id": "gc-5", "claim_text": "远程办公补贴为每月 500 元", "span_quote": "远程办公补贴每月 300 元。", "gold_relation": "contradicts", "importance": "high"}
+{"id": "gc-6", "claim_text": "财务审批需要两级复核", "span_quote": "入职满一年年假 5 天。", "gold_relation": "insufficient", "importance": "high"}

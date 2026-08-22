@@ -2309,6 +2309,897 @@ CREATE TRIGGER IF NOT EXISTS gate_run_v1_no_delete
   END;
 """
 
+# TaaS 认知内核 Task 4（G2）：治理事实表 —— 版本化 Policy 规则、
+# 批准账本、告警、不可变快照、暂停请求。审批/快照/告警/暂停 append-only；
+# 状态迁移一律由服务层条件 UPDATE（CAS）完成。
+_M062 = """
+CREATE TABLE IF NOT EXISTS policy_rule_version (
+  rule_id TEXT NOT NULL,
+  version INTEGER NOT NULL,
+  status TEXT NOT NULL DEFAULT 'draft'
+    CHECK (status IN ('draft','published','superseded','revoked')),
+  summary TEXT NOT NULL DEFAULT '',
+  subjects_json TEXT NOT NULL DEFAULT '[]',
+  allow_json TEXT NOT NULL DEFAULT '[]',
+  deny_json TEXT NOT NULL DEFAULT '[]',
+  risk_level TEXT NOT NULL DEFAULT 'medium',
+  priority INTEGER NOT NULL DEFAULT 100,
+  effective_from TEXT,
+  effective_to TEXT,
+  approval_id TEXT NOT NULL DEFAULT '',
+  created_by TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL,
+  published_at TEXT,
+  PRIMARY KEY (rule_id, version)
+);
+CREATE TABLE IF NOT EXISTS governance_approval_v1 (
+  approval_id TEXT PRIMARY KEY,
+  kind TEXT NOT NULL,
+  subject_ref TEXT NOT NULL,
+  requested_by TEXT NOT NULL,
+  decided_by TEXT NOT NULL DEFAULT '',
+  decision TEXT NOT NULL DEFAULT 'pending'
+    CHECK (decision IN ('pending','approved','rejected')),
+  reason TEXT NOT NULL DEFAULT '',
+  requested_at TEXT NOT NULL,
+  decided_at TEXT
+);
+CREATE TRIGGER IF NOT EXISTS governance_approval_v1_no_delete
+  BEFORE DELETE ON governance_approval_v1
+  BEGIN
+    SELECT RAISE(ABORT, 'governance_approval_v1 append-only：禁止 DELETE');
+  END;
+CREATE TABLE IF NOT EXISTS governance_alert_v1 (
+  alert_id TEXT PRIMARY KEY,
+  severity TEXT NOT NULL CHECK (severity IN ('warning','critical')),
+  rule_id TEXT NOT NULL DEFAULT '',
+  source_agent TEXT NOT NULL,
+  affected_run_ids_json TEXT NOT NULL DEFAULT '[]',
+  evidence_refs_json TEXT NOT NULL DEFAULT '[]',
+  content TEXT NOT NULL,
+  recommended_action TEXT NOT NULL DEFAULT '',
+  pause_requested INTEGER NOT NULL DEFAULT 0,
+  status TEXT NOT NULL DEFAULT 'open'
+    CHECK (status IN ('open','acknowledged','resolved')),
+  created_by TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  resolved_at TEXT
+);
+CREATE TRIGGER IF NOT EXISTS governance_alert_v1_no_delete
+  BEFORE DELETE ON governance_alert_v1
+  BEGIN
+    SELECT RAISE(ABORT, 'governance_alert_v1 append-only：禁止 DELETE');
+  END;
+CREATE TABLE IF NOT EXISTS governance_snapshot_v1 (
+  snapshot_id TEXT PRIMARY KEY,
+  alert_id TEXT NOT NULL DEFAULT '',
+  subject_type TEXT NOT NULL,
+  subject_id TEXT NOT NULL,
+  state_hash TEXT NOT NULL,
+  state_json TEXT NOT NULL DEFAULT '{}',
+  created_by TEXT NOT NULL,
+  created_at TEXT NOT NULL
+);
+CREATE TRIGGER IF NOT EXISTS governance_snapshot_v1_no_delete
+  BEFORE DELETE ON governance_snapshot_v1
+  BEGIN
+    SELECT RAISE(ABORT, 'governance_snapshot_v1 不可变：禁止 DELETE');
+  END;
+CREATE TRIGGER IF NOT EXISTS governance_snapshot_v1_no_update
+  BEFORE UPDATE ON governance_snapshot_v1
+  BEGIN
+    SELECT RAISE(ABORT, 'governance_snapshot_v1 不可变：禁止 UPDATE');
+  END;
+CREATE TABLE IF NOT EXISTS pause_request_v1 (
+  pause_id TEXT PRIMARY KEY,
+  subject_type TEXT NOT NULL,
+  subject_id TEXT NOT NULL,
+  reason TEXT NOT NULL,
+  alert_id TEXT NOT NULL DEFAULT '',
+  requested_by TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'paused'
+    CHECK (status IN ('paused','resumed','rejected')),
+  resume_decided_by TEXT NOT NULL DEFAULT '',
+  version INTEGER NOT NULL DEFAULT 1,
+  requested_at TEXT NOT NULL,
+  decided_at TEXT
+);
+CREATE TRIGGER IF NOT EXISTS pause_request_v1_no_delete
+  BEFORE DELETE ON pause_request_v1
+  BEGIN
+    SELECT RAISE(ABORT, 'pause_request_v1 append-only：禁止 DELETE');
+  END;
+"""
+
+# TaaS 认知内核 Task 5（G3）：不可变 source → document version →
+# chunk → evidence span 链 + corpus snapshot。source/账本 append-only；
+# chunk/span/snapshot 完全不可变（禁 UPDATE/DELETE）。
+_M063 = """
+CREATE TABLE IF NOT EXISTS cognition_source_artifact_v1 (
+  source_id TEXT PRIMARY KEY,
+  artifact_ref TEXT NOT NULL,
+  source_type TEXT NOT NULL
+    CHECK (source_type IN ('file','url','api','database','manual')),
+  original_uri TEXT NOT NULL DEFAULT '',
+  media_type TEXT NOT NULL DEFAULT '',
+  sha256 TEXT NOT NULL,
+  tenant_id TEXT NOT NULL DEFAULT 'local',
+  customer_id TEXT NOT NULL DEFAULT '',
+  project_id TEXT NOT NULL DEFAULT '',
+  permission_tags_json TEXT NOT NULL DEFAULT '[]',
+  trust_tier TEXT NOT NULL DEFAULT 'unverified'
+    CHECK (trust_tier IN ('authoritative','internal','external_primary',
+                          'external_secondary','unverified')),
+  captured_at TEXT NOT NULL,
+  effective_from TEXT,
+  effective_to TEXT,
+  status TEXT NOT NULL DEFAULT 'active'
+    CHECK (status IN ('active','quarantined','superseded','revoked')),
+  quarantine_reason TEXT NOT NULL DEFAULT '',
+  created_by TEXT NOT NULL DEFAULT ''
+);
+CREATE INDEX IF NOT EXISTS idx_cognition_source_sha
+  ON cognition_source_artifact_v1(sha256);
+CREATE TRIGGER IF NOT EXISTS cognition_source_artifact_v1_no_delete
+  BEFORE DELETE ON cognition_source_artifact_v1
+  BEGIN
+    SELECT RAISE(ABORT,
+      'cognition_source_artifact_v1 append-only：禁止 DELETE');
+  END;
+CREATE TABLE IF NOT EXISTS cognition_document_version_v1 (
+  document_id TEXT NOT NULL,
+  version INTEGER NOT NULL,
+  source_id TEXT NOT NULL,
+  title TEXT NOT NULL DEFAULT '',
+  content_hash TEXT NOT NULL,
+  parser_version TEXT NOT NULL DEFAULT '',
+  normalization_version TEXT NOT NULL DEFAULT '',
+  language TEXT NOT NULL DEFAULT '',
+  status TEXT NOT NULL DEFAULT 'draft'
+    CHECK (status IN ('draft','reviewed','published','superseded',
+                      'revoked')),
+  owner TEXT NOT NULL DEFAULT '',
+  approved_by TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL,
+  published_at TEXT,
+  PRIMARY KEY (document_id, version)
+);
+CREATE TRIGGER IF NOT EXISTS cognition_document_version_v1_no_delete
+  BEFORE DELETE ON cognition_document_version_v1
+  BEGIN
+    SELECT RAISE(ABORT,
+      'cognition_document_version_v1 append-only：禁止 DELETE');
+  END;
+CREATE TABLE IF NOT EXISTS cognition_chunk_v1 (
+  chunk_id TEXT PRIMARY KEY,
+  document_id TEXT NOT NULL,
+  document_version INTEGER NOT NULL,
+  parent_chunk_id TEXT,
+  ordinal INTEGER NOT NULL,
+  heading_path_json TEXT NOT NULL DEFAULT '[]',
+  text TEXT NOT NULL,
+  token_count INTEGER NOT NULL DEFAULT 0,
+  char_start INTEGER NOT NULL,
+  char_end INTEGER NOT NULL,
+  page_start INTEGER,
+  page_end INTEGER,
+  table_ref TEXT,
+  content_hash TEXT NOT NULL,
+  UNIQUE(document_id, document_version, ordinal)
+);
+CREATE TRIGGER IF NOT EXISTS cognition_chunk_v1_no_delete
+  BEFORE DELETE ON cognition_chunk_v1
+  BEGIN
+    SELECT RAISE(ABORT, 'cognition_chunk_v1 不可变：禁止 DELETE');
+  END;
+CREATE TRIGGER IF NOT EXISTS cognition_chunk_v1_no_update
+  BEFORE UPDATE ON cognition_chunk_v1
+  BEGIN
+    SELECT RAISE(ABORT, 'cognition_chunk_v1 不可变：禁止 UPDATE');
+  END;
+CREATE TABLE IF NOT EXISTS cognition_evidence_span_v1 (
+  span_id TEXT PRIMARY KEY,
+  chunk_id TEXT NOT NULL,
+  quote_start INTEGER NOT NULL,
+  quote_end INTEGER NOT NULL,
+  quote_hash TEXT NOT NULL,
+  normalized_quote TEXT NOT NULL DEFAULT '',
+  locator_json TEXT NOT NULL DEFAULT '{}',
+  created_at TEXT NOT NULL
+);
+CREATE TRIGGER IF NOT EXISTS cognition_evidence_span_v1_no_delete
+  BEFORE DELETE ON cognition_evidence_span_v1
+  BEGIN
+    SELECT RAISE(ABORT, 'cognition_evidence_span_v1 不可变：禁止 DELETE');
+  END;
+CREATE TRIGGER IF NOT EXISTS cognition_evidence_span_v1_no_update
+  BEFORE UPDATE ON cognition_evidence_span_v1
+  BEGIN
+    SELECT RAISE(ABORT, 'cognition_evidence_span_v1 不可变：禁止 UPDATE');
+  END;
+CREATE TABLE IF NOT EXISTS cognition_corpus_snapshot_v1 (
+  corpus_snapshot_id TEXT PRIMARY KEY,
+  manifest_hash TEXT NOT NULL UNIQUE,
+  manifest_json TEXT NOT NULL,
+  item_count INTEGER NOT NULL DEFAULT 0,
+  status TEXT NOT NULL DEFAULT 'ready'
+    CHECK (status IN ('building','ready','revoked')),
+  created_by TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL
+);
+CREATE TRIGGER IF NOT EXISTS cognition_corpus_snapshot_v1_no_delete
+  BEFORE DELETE ON cognition_corpus_snapshot_v1
+  BEGIN
+    SELECT RAISE(ABORT,
+      'cognition_corpus_snapshot_v1 不可变：禁止 DELETE');
+  END;
+CREATE TRIGGER IF NOT EXISTS cognition_corpus_snapshot_v1_no_update
+  BEFORE UPDATE ON cognition_corpus_snapshot_v1
+  BEGIN
+    SELECT RAISE(ABORT,
+      'cognition_corpus_snapshot_v1 不可变：禁止 UPDATE');
+  END;
+"""
+
+# TaaS 认知内核 Task 6（G4）：规范三层记忆 L1/L2/L3。
+# L1 只追加（禁 UPDATE/DELETE）；L2/L3 append-only + 状态 CAS；
+# L2 幂等键 (source_hash, consolidator_version)。
+_M064 = """
+CREATE TABLE IF NOT EXISTS memory_l1_event (
+  event_id TEXT PRIMARY KEY,
+  task_id TEXT NOT NULL DEFAULT '',
+  run_id TEXT NOT NULL DEFAULT '',
+  node_id TEXT NOT NULL DEFAULT '',
+  actor_id TEXT NOT NULL,
+  actor_kind TEXT NOT NULL
+    CHECK (actor_kind IN ('human','agent','system')),
+  event_type TEXT NOT NULL,
+  payload_json TEXT NOT NULL DEFAULT '{}',
+  context_meaning TEXT,
+  evidence_refs_json TEXT NOT NULL DEFAULT '[]',
+  occurred_at TEXT NOT NULL,
+  ingested_at TEXT NOT NULL,
+  permission_tags_json TEXT NOT NULL DEFAULT '[]',
+  retention_class TEXT NOT NULL DEFAULT 'permanent',
+  supersedes TEXT,
+  tenant_id TEXT NOT NULL DEFAULT 'local',
+  customer_id TEXT NOT NULL DEFAULT '',
+  project_id TEXT NOT NULL DEFAULT '',
+  data_scope TEXT NOT NULL DEFAULT 'operational',
+  test_run_id TEXT NOT NULL DEFAULT ''
+);
+CREATE INDEX IF NOT EXISTS idx_memory_l1_task
+  ON memory_l1_event(task_id, occurred_at);
+CREATE TRIGGER IF NOT EXISTS memory_l1_event_no_delete
+  BEFORE DELETE ON memory_l1_event
+  BEGIN
+    SELECT RAISE(ABORT, 'memory_l1_event 只追加：禁止 DELETE');
+  END;
+CREATE TRIGGER IF NOT EXISTS memory_l1_event_no_update
+  BEFORE UPDATE ON memory_l1_event
+  BEGIN
+    SELECT RAISE(ABORT, 'memory_l1_event 只追加：禁止 UPDATE');
+  END;
+CREATE TABLE IF NOT EXISTS memory_l2_episode (
+  episode_id TEXT PRIMARY KEY,
+  task_id TEXT NOT NULL DEFAULT '',
+  period_start TEXT NOT NULL,
+  period_end TEXT NOT NULL,
+  entities_json TEXT NOT NULL DEFAULT '[]',
+  solution TEXT NOT NULL DEFAULT '',
+  result TEXT NOT NULL DEFAULT '',
+  issues_json TEXT NOT NULL DEFAULT '[]',
+  conflicts_json TEXT NOT NULL DEFAULT '[]',
+  responsibility_status TEXT NOT NULL DEFAULT 'unjudged'
+    CHECK (responsibility_status IN ('unjudged','pending_human',
+                                     'decided')),
+  human_decision TEXT,
+  source_l1_ids_json TEXT NOT NULL DEFAULT '[]',
+  source_hash TEXT NOT NULL,
+  consolidator_version TEXT NOT NULL DEFAULT 'consolidator@1',
+  confidence REAL NOT NULL DEFAULT 0.5,
+  status TEXT NOT NULL DEFAULT 'candidate'
+    CHECK (status IN ('candidate','published','superseded','archived',
+                      'conflict')),
+  permission_tags_json TEXT NOT NULL DEFAULT '[]',
+  created_by TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL,
+  approved_by TEXT NOT NULL DEFAULT '',
+  published_at TEXT,
+  UNIQUE(source_hash, consolidator_version)
+);
+CREATE TRIGGER IF NOT EXISTS memory_l2_episode_no_delete
+  BEFORE DELETE ON memory_l2_episode
+  BEGIN
+    SELECT RAISE(ABORT, 'memory_l2_episode append-only：禁止 DELETE');
+  END;
+CREATE TABLE IF NOT EXISTS memory_l3_methodology_version (
+  methodology_id TEXT NOT NULL,
+  version INTEGER NOT NULL,
+  statement TEXT NOT NULL,
+  trigger_conditions_json TEXT NOT NULL DEFAULT '[]',
+  scope_json TEXT NOT NULL DEFAULT '{}',
+  confidence REAL NOT NULL DEFAULT 0.5,
+  source_l2_ids_json TEXT NOT NULL DEFAULT '[]',
+  supporting_event_count INTEGER NOT NULL DEFAULT 0,
+  counterexample_ids_json TEXT NOT NULL DEFAULT '[]',
+  status TEXT NOT NULL DEFAULT 'candidate'
+    CHECK (status IN ('candidate','published','superseded','revoked')),
+  approved_by TEXT NOT NULL DEFAULT '',
+  approval_id TEXT NOT NULL DEFAULT '',
+  skill_ref TEXT,
+  created_by TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL,
+  published_at TEXT,
+  PRIMARY KEY (methodology_id, version)
+);
+CREATE TRIGGER IF NOT EXISTS memory_l3_methodology_version_no_delete
+  BEFORE DELETE ON memory_l3_methodology_version
+  BEGIN
+    SELECT RAISE(ABORT,
+      'memory_l3_methodology_version append-only：禁止 DELETE');
+  END;
+"""
+
+# TaaS 认知内核 Task 6（G4）：规范三层记忆 L1/L2/L3。
+# L1 只追加（禁 UPDATE/DELETE）；L2/L3 append-only + 状态 CAS；
+# L2 幂等键 (source_hash, consolidator_version)。
+# TaaS 认知内核 Task 7（G5）：Knowledge / Skill 独立生命周期。
+# 两表均 append-only（禁 DELETE）；发布/降级/撤销由服务层 CAS。
+_M065 = """
+CREATE TABLE IF NOT EXISTS knowledge_item_version (
+  knowledge_id TEXT NOT NULL,
+  version INTEGER NOT NULL,
+  type TEXT NOT NULL
+    CHECK (type IN ('organization','policy','process','contract',
+                    'finance','technical','conduct','law')),
+  title TEXT NOT NULL,
+  body TEXT NOT NULL DEFAULT '',
+  summary TEXT NOT NULL DEFAULT '',
+  owner TEXT NOT NULL DEFAULT '',
+  effective_from TEXT NOT NULL DEFAULT '',
+  effective_to TEXT,
+  status TEXT NOT NULL DEFAULT 'draft'
+    CHECK (status IN ('draft','published','superseded','revoked')),
+  permission_tags_json TEXT NOT NULL DEFAULT '[]',
+  source_span_ids_json TEXT NOT NULL DEFAULT '[]',
+  related_knowledge_json TEXT NOT NULL DEFAULT '[]',
+  extracted_entities_json TEXT NOT NULL DEFAULT '{}',
+  approval_id TEXT NOT NULL DEFAULT '',
+  approved_by TEXT NOT NULL DEFAULT '',
+  created_by TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL,
+  published_at TEXT,
+  PRIMARY KEY (knowledge_id, version)
+);
+CREATE TRIGGER IF NOT EXISTS knowledge_item_version_no_delete
+  BEFORE DELETE ON knowledge_item_version
+  BEGIN
+    SELECT RAISE(ABORT, 'knowledge_item_version append-only：禁止 DELETE');
+  END;
+CREATE TABLE IF NOT EXISTS skill_definition_version (
+  skill_id TEXT NOT NULL,
+  version INTEGER NOT NULL,
+  name TEXT NOT NULL,
+  description TEXT NOT NULL DEFAULT '',
+  skill_type TEXT NOT NULL DEFAULT 'curated'
+    CHECK (skill_type IN ('builtin','curated','derived')),
+  input_schema_json TEXT NOT NULL DEFAULT '{}',
+  output_schema_json TEXT NOT NULL DEFAULT '{}',
+  execution_ref TEXT NOT NULL DEFAULT '',
+  tool_scopes_json TEXT NOT NULL DEFAULT '[]',
+  dependency_versions_json TEXT NOT NULL DEFAULT '{}',
+  applicable_scenarios_json TEXT NOT NULL DEFAULT '[]',
+  forbidden_scenarios_json TEXT NOT NULL DEFAULT '[]',
+  risk_level TEXT NOT NULL DEFAULT 'medium'
+    CHECK (risk_level IN ('','low','medium','high','critical')),
+  approval_policy_id TEXT NOT NULL DEFAULT '',
+  permission_tags_json TEXT NOT NULL DEFAULT '[]',
+  source_refs_json TEXT NOT NULL DEFAULT '[]',
+  evaluation_ref TEXT NOT NULL DEFAULT '',
+  status TEXT NOT NULL DEFAULT 'draft'
+    CHECK (status IN ('draft','validated','published','degraded',
+                      'revoked')),
+  degraded_reason TEXT NOT NULL DEFAULT '',
+  approved_by TEXT NOT NULL DEFAULT '',
+  created_by TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL,
+  published_at TEXT,
+  PRIMARY KEY (skill_id, version)
+);
+CREATE TRIGGER IF NOT EXISTS skill_definition_version_no_delete
+  BEFORE DELETE ON skill_definition_version
+  BEGIN
+    SELECT RAISE(ABORT,
+      'skill_definition_version append-only：禁止 DELETE');
+  END;
+"""
+
+# TaaS 认知内核 Task 8（G6）：认知对象补结构化 scope 列（ACL 前置过滤
+# 的物理前提，02 §1/§8.2）+ 索引构建/激活注册表（索引是可重建派生物，
+# active 用显式 registry + hash CAS，不按 mtime 选择）。
+_M066 = """
+ALTER TABLE knowledge_item_version ADD COLUMN tenant_id TEXT NOT NULL DEFAULT 'local';
+ALTER TABLE knowledge_item_version ADD COLUMN customer_id TEXT NOT NULL DEFAULT '';
+ALTER TABLE knowledge_item_version ADD COLUMN project_id TEXT NOT NULL DEFAULT '';
+ALTER TABLE knowledge_item_version ADD COLUMN data_scope TEXT NOT NULL DEFAULT 'operational';
+ALTER TABLE knowledge_item_version ADD COLUMN test_run_id TEXT NOT NULL DEFAULT '';
+ALTER TABLE skill_definition_version ADD COLUMN tenant_id TEXT NOT NULL DEFAULT 'local';
+ALTER TABLE skill_definition_version ADD COLUMN customer_id TEXT NOT NULL DEFAULT '';
+ALTER TABLE skill_definition_version ADD COLUMN project_id TEXT NOT NULL DEFAULT '';
+ALTER TABLE skill_definition_version ADD COLUMN data_scope TEXT NOT NULL DEFAULT 'operational';
+ALTER TABLE skill_definition_version ADD COLUMN test_run_id TEXT NOT NULL DEFAULT '';
+ALTER TABLE memory_l2_episode ADD COLUMN tenant_id TEXT NOT NULL DEFAULT 'local';
+ALTER TABLE memory_l2_episode ADD COLUMN customer_id TEXT NOT NULL DEFAULT '';
+ALTER TABLE memory_l2_episode ADD COLUMN project_id TEXT NOT NULL DEFAULT '';
+ALTER TABLE memory_l2_episode ADD COLUMN data_scope TEXT NOT NULL DEFAULT 'operational';
+ALTER TABLE memory_l2_episode ADD COLUMN test_run_id TEXT NOT NULL DEFAULT '';
+ALTER TABLE memory_l3_methodology_version ADD COLUMN tenant_id TEXT NOT NULL DEFAULT 'local';
+ALTER TABLE memory_l3_methodology_version ADD COLUMN customer_id TEXT NOT NULL DEFAULT '';
+ALTER TABLE memory_l3_methodology_version ADD COLUMN project_id TEXT NOT NULL DEFAULT '';
+ALTER TABLE memory_l3_methodology_version ADD COLUMN data_scope TEXT NOT NULL DEFAULT 'operational';
+ALTER TABLE memory_l3_methodology_version ADD COLUMN test_run_id TEXT NOT NULL DEFAULT '';
+CREATE TABLE IF NOT EXISTS cognition_index_build_v1 (
+  index_snapshot_id TEXT PRIMARY KEY,
+  target_kind TEXT NOT NULL
+    CHECK (target_kind IN ('knowledge','memory_l2','memory_l3','skill')),
+  corpus_snapshot_id TEXT NOT NULL,
+  backend TEXT NOT NULL,
+  embedding_model TEXT,
+  reranker_model TEXT,
+  analyzer_version TEXT NOT NULL DEFAULT 'lex@1',
+  chunk_policy_version TEXT NOT NULL DEFAULT 'chunk@1',
+  parameters_json TEXT NOT NULL DEFAULT '{}',
+  item_count INTEGER NOT NULL DEFAULT 0,
+  source_manifest_hash TEXT NOT NULL,
+  build_status TEXT NOT NULL DEFAULT 'building'
+    CHECK (build_status IN ('building','ready','failed','revoked')),
+  quality_report_json TEXT NOT NULL DEFAULT '{}',
+  artifact_ref TEXT NOT NULL DEFAULT '',
+  created_by TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL
+);
+CREATE TRIGGER IF NOT EXISTS cognition_index_build_v1_no_delete
+  BEFORE DELETE ON cognition_index_build_v1
+  BEGIN
+    SELECT RAISE(ABORT, 'cognition_index_build_v1 append-only：禁止 DELETE');
+  END;
+CREATE TABLE IF NOT EXISTS cognition_index_activation_v1 (
+  activation_id TEXT PRIMARY KEY,
+  target_kind TEXT NOT NULL,
+  index_snapshot_id TEXT NOT NULL,
+  expected_hash TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'active'
+    CHECK (status IN ('active','retired')),
+  activated_by TEXT NOT NULL DEFAULT '',
+  activated_at TEXT NOT NULL,
+  retired_at TEXT
+);
+CREATE TRIGGER IF NOT EXISTS cognition_index_activation_v1_no_delete
+  BEFORE DELETE ON cognition_index_activation_v1
+  BEGIN
+    SELECT RAISE(ABORT,
+      'cognition_index_activation_v1 append-only：禁止 DELETE');
+  END;
+"""
+
+# TaaS 认知内核 Task 9（G7）：可恢复 Research Graph。
+# run/state/step 持久化 checkpoint；query/claim/claim_evidence 账本
+# append-only；所有节点挂统一 BusinessRun/NodeAttempt/Usage/Evidence。
+_M067 = """
+CREATE TABLE IF NOT EXISTS research_run_v1 (
+  research_run_id TEXT PRIMARY KEY,
+  parent_run_id TEXT NOT NULL DEFAULT '',
+  business_run_id TEXT NOT NULL DEFAULT '',
+  question TEXT NOT NULL,
+  mode TEXT NOT NULL
+    CHECK (mode IN ('lookup','case_analysis','methodology',
+                    'deep_research')),
+  plan_version INTEGER NOT NULL DEFAULT 1,
+  corpus_snapshot_id TEXT NOT NULL DEFAULT '',
+  index_snapshot_ids_json TEXT NOT NULL DEFAULT '[]',
+  budget_json TEXT NOT NULL DEFAULT '{}',
+  consumed_json TEXT NOT NULL DEFAULT '{}',
+  state_json TEXT NOT NULL DEFAULT '{}',
+  status TEXT NOT NULL DEFAULT 'planned'
+    CHECK (status IN ('planned','running','waiting_human','succeeded',
+                      'failed','cancelled')),
+  stop_reason TEXT,
+  tenant_id TEXT NOT NULL DEFAULT 'local',
+  customer_id TEXT NOT NULL DEFAULT '',
+  project_id TEXT NOT NULL DEFAULT '',
+  data_scope TEXT NOT NULL DEFAULT 'operational',
+  test_run_id TEXT NOT NULL DEFAULT '',
+  permission_tags_json TEXT NOT NULL DEFAULT '[]',
+  created_by TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS research_step_v1 (
+  step_id TEXT PRIMARY KEY,
+  research_run_id TEXT NOT NULL,
+  seq INTEGER NOT NULL,
+  node TEXT NOT NULL,
+  status TEXT NOT NULL
+    CHECK (status IN ('pending','running','succeeded','failed',
+                      'skipped')),
+  input_json TEXT NOT NULL DEFAULT '{}',
+  output_json TEXT NOT NULL DEFAULT '{}',
+  error TEXT NOT NULL DEFAULT '',
+  started_at TEXT,
+  ended_at TEXT,
+  UNIQUE(research_run_id, seq)
+);
+CREATE TABLE IF NOT EXISTS research_query_v1 (
+  query_id TEXT PRIMARY KEY,
+  research_run_id TEXT NOT NULL,
+  subquestion_id TEXT NOT NULL DEFAULT '',
+  query_text TEXT NOT NULL,
+  target_kinds_json TEXT NOT NULL DEFAULT '[]',
+  strategy TEXT NOT NULL DEFAULT 'hybrid',
+  iteration INTEGER NOT NULL DEFAULT 1,
+  hits_json TEXT NOT NULL DEFAULT '[]',
+  created_at TEXT NOT NULL
+);
+CREATE TRIGGER IF NOT EXISTS research_query_v1_no_delete
+  BEFORE DELETE ON research_query_v1
+  BEGIN
+    SELECT RAISE(ABORT, 'research_query_v1 append-only：禁止 DELETE');
+  END;
+CREATE TABLE IF NOT EXISTS research_claim_v1 (
+  claim_id TEXT PRIMARY KEY,
+  research_run_id TEXT NOT NULL,
+  subquestion_id TEXT NOT NULL DEFAULT '',
+  text TEXT NOT NULL,
+  claim_type TEXT NOT NULL
+    CHECK (claim_type IN ('fact','inference','recommendation','unknown')),
+  importance TEXT NOT NULL
+    CHECK (importance IN ('low','medium','high')),
+  support_status TEXT NOT NULL DEFAULT 'unsupported'
+    CHECK (support_status IN ('supported','partially_supported',
+                              'contradicted','unsupported')),
+  confidence REAL NOT NULL DEFAULT 0.0,
+  created_at TEXT NOT NULL
+);
+CREATE TRIGGER IF NOT EXISTS research_claim_v1_no_delete
+  BEFORE DELETE ON research_claim_v1
+  BEGIN
+    SELECT RAISE(ABORT, 'research_claim_v1 append-only：禁止 DELETE');
+  END;
+CREATE TABLE IF NOT EXISTS claim_evidence_v1 (
+  claim_id TEXT NOT NULL,
+  span_id TEXT NOT NULL,
+  relation TEXT NOT NULL
+    CHECK (relation IN ('supports','contradicts','context')),
+  verifier_score REAL NOT NULL DEFAULT 0.0,
+  verifier_version TEXT NOT NULL DEFAULT 'verifier@1',
+  created_at TEXT NOT NULL,
+  PRIMARY KEY (claim_id, span_id, relation)
+);
+CREATE TRIGGER IF NOT EXISTS claim_evidence_v1_no_delete
+  BEFORE DELETE ON claim_evidence_v1
+  BEGIN
+    SELECT RAISE(ABORT, 'claim_evidence_v1 append-only：禁止 DELETE');
+  END;
+"""
+
+# TaaS 认知内核 Task 10（G8）：研究报告与引证快照。
+# 报告不可变；绑定 corpus/index/model/prompt/policy snapshot。
+_M068 = """
+CREATE TABLE IF NOT EXISTS research_report_v1 (
+  report_id TEXT PRIMARY KEY,
+  research_run_id TEXT NOT NULL,
+  abstain INTEGER NOT NULL DEFAULT 0,
+  body_json TEXT NOT NULL DEFAULT '{}',
+  claims_json TEXT NOT NULL DEFAULT '[]',
+  citations_json TEXT NOT NULL DEFAULT '[]',
+  corpus_snapshot_id TEXT NOT NULL DEFAULT '',
+  index_snapshot_ids_json TEXT NOT NULL DEFAULT '[]',
+  model_profile_ids_json TEXT NOT NULL DEFAULT '[]',
+  prompt_version TEXT NOT NULL DEFAULT '',
+  policy_version TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL
+);
+CREATE TRIGGER IF NOT EXISTS research_report_v1_no_delete
+  BEFORE DELETE ON research_report_v1
+  BEGIN
+    SELECT RAISE(ABORT, 'research_report_v1 不可变：禁止 DELETE');
+  END;
+CREATE TRIGGER IF NOT EXISTS research_report_v1_no_update
+  BEFORE UPDATE ON research_report_v1
+  BEGIN
+    SELECT RAISE(ABORT, 'research_report_v1 不可变：禁止 UPDATE');
+  END;
+"""
+
+# R2-03：research_run_v1 增加 CAS version 列（并发 resume/cancel/decide
+# 只能一个成功）。追加式 ALTER，不改写历史行。
+_M069 = """
+ALTER TABLE research_run_v1 ADD COLUMN version INTEGER NOT NULL DEFAULT 1;
+"""
+
+# R2-07：claim_evidence_v1 relation CHECK 扩展。SQLite 无法原地改 CHECK，
+# 以重建表方式前向演进（不改写 001-068 历史迁移）：新增 unverified（
+# ClaimBuilder 初始关系，验证前不得写 supports）与 insufficient（支持性
+# 验证判定）。PK 收敛为 (claim_id, span_id)：同一证据对只保留当前判定。
+_M070 = """
+CREATE TABLE IF NOT EXISTS claim_evidence_v2 (
+  claim_id TEXT NOT NULL,
+  span_id TEXT NOT NULL,
+  relation TEXT NOT NULL
+    CHECK (relation IN ('supports','contradicts','context','unverified',
+                        'insufficient')),
+  verifier_score REAL NOT NULL DEFAULT 0.0,
+  verifier_version TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL,
+  PRIMARY KEY (claim_id, span_id)
+);
+INSERT OR IGNORE INTO claim_evidence_v2 (claim_id, span_id, relation,
+    verifier_score, verifier_version, created_at)
+  SELECT claim_id, span_id, relation, verifier_score, verifier_version,
+         created_at FROM claim_evidence_v1;
+DROP TABLE claim_evidence_v1;
+ALTER TABLE claim_evidence_v2 RENAME TO claim_evidence_v1;
+"""
+
+# R2-09：Research mutation 幂等账本（Idempotency-Key 重放返回首次结果，
+# 不重复执行）。纯追加新表。
+_M071 = """
+CREATE TABLE IF NOT EXISTS research_idempotency_v1 (
+  principal_id TEXT NOT NULL,
+  idempotency_key TEXT NOT NULL,
+  endpoint TEXT NOT NULL,
+  response_json TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  PRIMARY KEY (principal_id, idempotency_key)
+);
+"""
+
+# 统一模型管理 V1（M1/G0）：Connection/Catalog/Binding 事实对象。
+# 纯追加；不修改 001–071，不 drop/rename 任何旧表。
+# 状态机（01-ARCHITECTURE §3）：
+#   ConnectionVersion: draft→testing→ready→pending_approval→active；
+#     ↘rejected；active→superseded|disabled；测试失败回 draft/failed。
+#   BindingVersion: draft→validated→pending_approval→canary→active→superseded；
+#     ↘rejected；失败/回滚 → failed|disabled|rolled_back。
+# CHECK 使用两文档状态机的并集（fail-closed：未知状态拒绝写入）。
+_M072 = """
+CREATE TABLE IF NOT EXISTS model_connection_version_v1 (
+  connection_id TEXT NOT NULL,
+  version INTEGER NOT NULL,
+  tenant_id TEXT NOT NULL,
+  name TEXT NOT NULL,
+  location TEXT NOT NULL CHECK(location IN ('local','api')),
+  adapter_kind TEXT NOT NULL CHECK(adapter_kind IN (
+    'openai_compatible','anthropic')),
+  api_flavor TEXT NOT NULL DEFAULT '',
+  base_url TEXT NOT NULL,
+  secret_ref TEXT NOT NULL DEFAULT '',
+  timeout_ms INTEGER NOT NULL,
+  max_retries INTEGER NOT NULL,
+  config_json TEXT NOT NULL DEFAULT '{}',
+  status TEXT NOT NULL CHECK(status IN (
+    'draft','testing','ready','pending_approval','active',
+    'superseded','disabled','rejected','failed')),
+  etag TEXT NOT NULL,
+  approval_id TEXT,
+  created_by TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  activated_at TEXT,
+  PRIMARY KEY(connection_id, version)
+);
+CREATE TRIGGER IF NOT EXISTS model_connection_version_v1_no_delete
+  BEFORE DELETE ON model_connection_version_v1
+  BEGIN
+    SELECT RAISE(ABORT,
+      'model_connection_version_v1 版本历史不得物理删除（用状态机弃用）');
+  END;
+CREATE UNIQUE INDEX IF NOT EXISTS model_connection_one_active
+  ON model_connection_version_v1(connection_id) WHERE status='active';
+CREATE INDEX IF NOT EXISTS model_connection_tenant_status
+  ON model_connection_version_v1(tenant_id, status);
+
+CREATE TABLE IF NOT EXISTS model_catalog_entry_v1 (
+  catalog_id TEXT PRIMARY KEY,
+  tenant_id TEXT NOT NULL,
+  connection_id TEXT NOT NULL,
+  connection_version INTEGER NOT NULL,
+  model_id TEXT NOT NULL,
+  model_revision TEXT NOT NULL DEFAULT '',
+  capabilities_json TEXT NOT NULL,
+  embedding_dimension INTEGER,
+  normalization_version TEXT,
+  source TEXT NOT NULL CHECK(source IN ('discovered','manual')),
+  probe_status TEXT NOT NULL CHECK(probe_status IN (
+    'unprobed','probing','ready','failed')),
+  probe_json TEXT NOT NULL DEFAULT '{}',
+  last_verified_at TEXT,
+  UNIQUE(tenant_id, connection_id, connection_version, model_id)
+);
+CREATE TRIGGER IF NOT EXISTS model_catalog_entry_v1_no_delete
+  BEFORE DELETE ON model_catalog_entry_v1
+  BEGIN
+    SELECT RAISE(ABORT, 'model_catalog_entry_v1 不得物理删除');
+  END;
+CREATE INDEX IF NOT EXISTS model_catalog_connection
+  ON model_catalog_entry_v1(tenant_id, connection_id, connection_version);
+
+CREATE TABLE IF NOT EXISTS model_binding_version_v1 (
+  binding_id TEXT NOT NULL,
+  version INTEGER NOT NULL,
+  tenant_id TEXT NOT NULL,
+  customer_id TEXT NOT NULL DEFAULT '',
+  project_id TEXT NOT NULL DEFAULT '',
+  subject_kind TEXT NOT NULL CHECK(subject_kind IN (
+    'system_capability','module')),
+  subject_id TEXT NOT NULL,
+  capability TEXT NOT NULL,
+  connection_id TEXT NOT NULL,
+  connection_version INTEGER NOT NULL,
+  model_id TEXT NOT NULL,
+  fallback_json TEXT NOT NULL DEFAULT '[]',
+  status TEXT NOT NULL CHECK(status IN (
+    'draft','validated','pending_approval','canary','active',
+    'superseded','rejected','failed','disabled','rolled_back')),
+  etag TEXT NOT NULL,
+  approval_id TEXT,
+  created_by TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  activated_at TEXT,
+  PRIMARY KEY(binding_id, version)
+);
+CREATE TRIGGER IF NOT EXISTS model_binding_version_v1_no_delete
+  BEFORE DELETE ON model_binding_version_v1
+  BEGIN
+    SELECT RAISE(ABORT,
+      'model_binding_version_v1 版本历史不得物理删除（用状态机弃用）');
+  END;
+CREATE UNIQUE INDEX IF NOT EXISTS model_binding_one_active
+  ON model_binding_version_v1(
+    tenant_id, customer_id, project_id, subject_kind, subject_id, capability)
+  WHERE status='active';
+CREATE UNIQUE INDEX IF NOT EXISTS model_binding_one_canary
+  ON model_binding_version_v1(
+    tenant_id, customer_id, project_id, subject_kind, subject_id, capability)
+  WHERE status='canary';
+CREATE INDEX IF NOT EXISTS model_binding_scope_lookup
+  ON model_binding_version_v1(
+    tenant_id, customer_id, project_id, subject_kind, subject_id,
+    capability, status);
+"""
+
+# 统一模型管理 V1：Secret envelope（DEC-M005 凭据只写不读）。
+# KEK 不入库；wrapped_dek/nonce/ciphertext 任何 API 不得选择或返回。
+_M073 = """
+CREATE TABLE IF NOT EXISTS model_secret_envelope_v1 (
+  secret_ref TEXT NOT NULL,
+  version INTEGER NOT NULL,
+  tenant_id TEXT NOT NULL,
+  algorithm TEXT NOT NULL,
+  key_id TEXT NOT NULL,
+  wrapped_dek BLOB NOT NULL,
+  nonce BLOB NOT NULL,
+  ciphertext BLOB NOT NULL,
+  aad_hash TEXT NOT NULL,
+  status TEXT NOT NULL CHECK(status IN ('active','rotated','revoked')),
+  created_by TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  rotated_at TEXT,
+  PRIMARY KEY(secret_ref, version)
+);
+CREATE TRIGGER IF NOT EXISTS model_secret_envelope_v1_no_delete
+  BEFORE DELETE ON model_secret_envelope_v1
+  BEGIN
+    SELECT RAISE(ABORT, 'model_secret_envelope_v1 不得物理删除（轮换/撤销用状态）');
+  END;
+CREATE INDEX IF NOT EXISTS model_secret_tenant_status
+  ON model_secret_envelope_v1(tenant_id, status);
+"""
+
+# 统一模型管理 V1：账号级计量、调用账本、预算与价格快照（03 §1/§3/§4/§5）。
+# usage_event_v2 只追加归属列（旧行默认值不变）；调用意图/结算状态进
+# model_call_ledger_v1；预算与价格为独立配置表，不改变 usage 事实源。
+_M074 = """
+ALTER TABLE usage_event_v2 ADD COLUMN principal_id TEXT NOT NULL DEFAULT '';
+ALTER TABLE usage_event_v2 ADD COLUMN principal_kind TEXT NOT NULL DEFAULT '';
+ALTER TABLE usage_event_v2 ADD COLUMN model_call_id TEXT NOT NULL DEFAULT '';
+ALTER TABLE usage_event_v2 ADD COLUMN connection_id TEXT NOT NULL DEFAULT '';
+ALTER TABLE usage_event_v2 ADD COLUMN connection_version INTEGER;
+ALTER TABLE usage_event_v2 ADD COLUMN binding_id TEXT NOT NULL DEFAULT '';
+ALTER TABLE usage_event_v2 ADD COLUMN binding_version INTEGER;
+ALTER TABLE usage_event_v2 ADD COLUMN provider_request_id TEXT NOT NULL DEFAULT '';
+ALTER TABLE usage_event_v2 ADD COLUMN meter_source TEXT NOT NULL DEFAULT '';
+ALTER TABLE usage_event_v2 ADD COLUMN outcome TEXT NOT NULL DEFAULT '';
+ALTER TABLE usage_event_v2 ADD COLUMN error_code TEXT NOT NULL DEFAULT '';
+CREATE INDEX IF NOT EXISTS usage_event_v2_model_call
+  ON usage_event_v2(model_call_id) WHERE model_call_id != '';
+CREATE INDEX IF NOT EXISTS usage_event_v2_scope_time
+  ON usage_event_v2(tenant_id, customer_id, project_id, occurred_at);
+CREATE INDEX IF NOT EXISTS usage_event_v2_principal_time
+  ON usage_event_v2(principal_id, occurred_at);
+
+CREATE TABLE IF NOT EXISTS model_call_ledger_v1 (
+  model_call_id TEXT PRIMARY KEY,
+  tenant_id TEXT NOT NULL DEFAULT 'local',
+  customer_id TEXT NOT NULL DEFAULT '',
+  project_id TEXT NOT NULL DEFAULT '',
+  principal_id TEXT NOT NULL DEFAULT '',
+  principal_kind TEXT NOT NULL DEFAULT '',
+  run_id TEXT NOT NULL DEFAULT '',
+  work_id TEXT NOT NULL DEFAULT '',
+  agent_id TEXT NOT NULL DEFAULT '',
+  module TEXT NOT NULL DEFAULT '',
+  capability TEXT NOT NULL DEFAULT '',
+  connection_id TEXT NOT NULL DEFAULT '',
+  connection_version INTEGER,
+  binding_id TEXT NOT NULL DEFAULT '',
+  binding_version INTEGER,
+  model_id TEXT NOT NULL DEFAULT '',
+  model_revision TEXT NOT NULL DEFAULT '',
+  idempotency_key TEXT NOT NULL DEFAULT '',
+  status TEXT NOT NULL CHECK(status IN (
+    'requested','succeeded','failed','metering_incomplete','settled')),
+  meter_source TEXT NOT NULL DEFAULT '',
+  outcome TEXT NOT NULL DEFAULT '',
+  error_code TEXT NOT NULL DEFAULT '',
+  provider_request_id TEXT NOT NULL DEFAULT '',
+  reserved_output_tokens REAL NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL,
+  finalized_at TEXT
+);
+CREATE TRIGGER IF NOT EXISTS model_call_ledger_v1_no_delete
+  BEFORE DELETE ON model_call_ledger_v1
+  BEGIN
+    SELECT RAISE(ABORT, 'model_call_ledger_v1 调用账本不得物理删除');
+  END;
+CREATE INDEX IF NOT EXISTS model_call_ledger_status_time
+  ON model_call_ledger_v1(status, created_at);
+CREATE INDEX IF NOT EXISTS model_call_ledger_principal_time
+  ON model_call_ledger_v1(tenant_id, principal_id, created_at);
+
+CREATE TABLE IF NOT EXISTS model_rate_card_v1 (
+  rate_card_id TEXT PRIMARY KEY,
+  tenant_id TEXT NOT NULL DEFAULT 'local',
+  connection_id TEXT NOT NULL DEFAULT '',
+  model_id TEXT NOT NULL DEFAULT '',
+  model_revision TEXT NOT NULL DEFAULT '',
+  unit TEXT NOT NULL CHECK(unit IN (
+    'model_request','input_token','output_token','cached_input_token',
+    'reasoning_token','embedding_input','embedding_vector',
+    'input_character','model_compute_ms')),
+  price_minor INTEGER NOT NULL,
+  currency TEXT NOT NULL DEFAULT 'CNY',
+  cost_kind TEXT NOT NULL DEFAULT 'resource_cost' CHECK(cost_kind IN (
+    'resource_cost','internal_cost','customer_price')),
+  effective_from TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'active' CHECK(status IN (
+    'active','superseded','disabled')),
+  created_by TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS model_budget_v1 (
+  budget_id TEXT PRIMARY KEY,
+  tenant_id TEXT NOT NULL DEFAULT 'local',
+  principal_id TEXT NOT NULL DEFAULT '',
+  customer_id TEXT NOT NULL DEFAULT '',
+  project_id TEXT NOT NULL DEFAULT '',
+  subject_kind TEXT NOT NULL DEFAULT '',
+  subject_id TEXT NOT NULL DEFAULT '',
+  period TEXT NOT NULL CHECK(period IN ('minute','hour','day','month')),
+  unit TEXT NOT NULL CHECK(unit IN (
+    'request','input_token','output_token','total_token',
+    'compute_ms','customer_price')),
+  hard_limit REAL NOT NULL,
+  soft_limit REAL,
+  status TEXT NOT NULL DEFAULT 'active' CHECK(status IN (
+    'active','disabled')),
+  etag TEXT NOT NULL DEFAULT '',
+  created_by TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL
+);
+"""
+
 MIGRATIONS: tuple[tuple[str, str], ...] = (
     ("001_platform_init", _M001),
     ("002_labeling_inbox", _M002),
@@ -2371,6 +3262,19 @@ MIGRATIONS: tuple[tuple[str, str], ...] = (
     ("059_import_scope_lineage_v1", _M059),
     ("060_quarantine_adjudication_v1", _M060),
     ("061_gate_run_v1", _M061),
+    ("062_governance_policy_alert_pause_v1", _M062),
+    ("063_cognition_sources_documents_v1", _M063),
+    ("064_cognition_memory_l1_l2_l3_v1", _M064),
+    ("065_cognition_knowledge_skill_v1", _M065),
+    ("066_cognition_index_and_scope_v1", _M066),
+    ("067_cognition_research_v1", _M067),
+    ("068_cognition_research_report_v1", _M068),
+    ("069_research_run_cas_version", _M069),
+    ("070_claim_evidence_relation_extend", _M070),
+    ("071_research_idempotency_v1", _M071),
+    ("072_model_management_core_v1", _M072),
+    ("073_model_secret_envelope_v1", _M073),
+    ("074_model_usage_metering_v1", _M074),
 )
 
 
@@ -3911,7 +4815,7 @@ class PlatformStore:
         "running": {"running", "succeeded", "failed", "partial_failed",
                     "cancelled",
                     "paused", "waiting_human", "waiting_timer"},
-        "failed": {"running"},          # 只能经 retry 重新进入 running
+        "failed": {"running", "cancelled"},  # retry 重新 running；R2-03：显式 cancel 可覆盖 failed（终态一致）
         "partial_failed": {"running"},  # UFC T9：部分工具失败可 retry
         "paused": {"running", "cancelled"},
         "waiting_human": {"running", "cancelled"},

@@ -9,8 +9,8 @@ import { HedgehogLoader } from "@/components/ui/loader";
 import {
   AGENT_GROUP,
   CORE_GROUP,
-  MODULE_GROUPS,
   SUPERVISOR_GLYPH,
+  visibleGroups,
 } from "@/modules/registry";
 import type { ModuleGroup } from "@/modules/registry";
 import { useAuth } from "@/store/auth";
@@ -55,7 +55,15 @@ export default function DemoDesktop() {
   const me = useAuth((s) => s.me);
   const checking = useAuth((s) => s.checking);
   const refresh = useAuth((s) => s.refresh);
+  const scopes = useAuth((s) => s.scopes);
   const order = useWindowManager((s) => s.order);
+
+  /**
+   * 权限投影（04 §6）：只渲染命中 required scope 的分组；
+   * scopes 未加载/失败时受限分组 fail-closed 隐藏。
+   * 后端仍独立鉴权——隐藏只是体验，不是权限边界。
+   */
+  const groups = useMemo(() => visibleGroups(scopes), [scopes]);
   /** 桌面图标选中态（单击选中，背景双击清除）。 */
   const [selectedGroup, setSelectedGroup] = useState<string | null>(null);
 
@@ -78,7 +86,8 @@ export default function DemoDesktop() {
   /** 打开模块分组窗口（1080×720，层叠偏移）；已打开则不重复创建。 */
   const openModuleGroupWindow = useCallback(
     (groupKey: string) => {
-      const group = MODULE_GROUPS.find((g) => g.group === groupKey);
+      // 权限投影守卫：不可见（无权限）分组不创建窗口、不泄漏路由
+      const group = groups.find((g) => g.group === groupKey);
       if (!group) return;
       const wm = useWindowManager.getState();
       const id = MOD_PREFIX + groupKey;
@@ -94,7 +103,7 @@ export default function DemoDesktop() {
         minHeight: MODULE_MIN_SIZE.height,
       });
     },
-    [nextCascade],
+    [groups, nextCascade],
   );
 
   /** 打开登录窗口（未登录时桌面唯一窗口；closable=false 隐藏关闭钮，居中）。 */
@@ -226,7 +235,7 @@ export default function DemoDesktop() {
         <Desktop onBackgroundDoubleClick={() => setSelectedGroup(null)}>
           {/* 桌面图标层：一组一图标（应用），单击选中 / 双击开窗 */}
           <div className="flex flex-wrap content-start gap-1 p-3">
-            {MODULE_GROUPS.map((group) => (
+            {groups.map((group) => (
               <DesktopIcon
                 key={group.group}
                 icon={groupIcon(group)}

@@ -71,6 +71,7 @@ const VisionEvidence = lazy(() => import("../pages/Vision").then(
   (m) => ({ default: m.VisionEvidence })));
 const VisionModels = lazy(() => import("../pages/Vision").then(
   (m) => ({ default: m.VisionModels })));
+const ModelManagementNotice = lazy(() => import("../pages/ModelManagementNotice"));
 const VisionTasks = lazy(() => import("../pages/Vision").then(
   (m) => ({ default: m.VisionTasks })));
 const ImportCenter = lazy(() => import("../pages/ImportCenter"));
@@ -163,7 +164,12 @@ export const MODULE_ROUTES: Record<
   "/vision/annotation": (ctx) => wide(
     <VisionAnnotation health={ctx.health} />),
   "/vision/datasets": () => wide(<VisionDatasets />),
-  "/vision/models": () => wide(<VisionModels />),
+  // 统一模型管理（独立系统模块；完整交互在桌面端，旧树诚实指引）
+  "/models/connections": () => wide(<ModelManagementNotice tab="连接管理" />),
+  "/models/catalog": () => wide(<ModelManagementNotice tab="模型目录" />),
+  "/models/bindings": () => wide(<ModelManagementNotice tab="能力分配" />),
+  "/models/governance": () => wide(<ModelManagementNotice tab="运行治理" />),
+  "/models/local": () => wide(<VisionModels />),
   "/vision/evidence": () => wide(<VisionEvidence />),
   // 数据与资产
   "/data/import": () => wide(<ImportCenter />),
@@ -214,6 +220,9 @@ export const MODULE_ROUTES: Record<
 // 一级模块默认重定向（primary_route → 首个二级路由）
 export const MODULE_REDIRECTS: Record<string, string> = {
   "/vision": "/vision/recognize",
+  "/models": "/models/connections",
+  // 兼容别名（04 §3.5）：旧 /vision/models → /models/local（不得删除）
+  "/vision/models": "/models/local",
   "/workflow": "/workflow/studio",
   "/iam": "/iam/accounts",
   "/master": "/master/customers",

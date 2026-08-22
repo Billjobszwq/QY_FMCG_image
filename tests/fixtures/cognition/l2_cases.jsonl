@@ -1,0 +1,3 @@
+{"episode_id_hint": "l2case-logistics", "task_id": "task-log-1", "solution": "客户投诉物流延迟后，先核对揽收时间线，再与承运商对账并给出补偿方案", "result": "客户接受补偿，投诉关闭", "entities": ["客户", "物流", "承运商"], "issues": ["揽收时间记录缺失"]}
+{"episode_id_hint": "l2case-refund", "task_id": "task-ref-1", "solution": "报销超限时先核验制度版本与生效期，再按现行上限复核金额", "result": "按现行制度复核通过", "entities": ["报销", "制度版本"], "issues": []}
+{"episode_id_hint": "l2case-onboard", "task_id": "task-onb-1", "solution": "新员工入职流程按清单逐项确认设备与权限发放", "result": "入职当日完成", "entities": ["入职", "设备", "权限"], "issues": []}

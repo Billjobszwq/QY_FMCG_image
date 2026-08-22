@@ -33,6 +33,11 @@ export interface ModuleGroup {
   group: string;
   label: string;
   items: ModuleItem[];
+  /**
+   * 可见性投影（04 §6）：至少命中一个 scope 才渲染该分组。
+   * 未定义 = 所有登录用户可见。前端投影只改善体验；所有 API 仍独立鉴权。
+   */
+  requiredScopes?: string[];
 }
 
 /* ============================================================================
@@ -279,12 +284,20 @@ const Tasks = lazy(() => import("@/pages/vision/Tasks"));
 const Annotation = lazy(() => import("@/pages/vision/Annotation"));
 // P3 智能识别（后段）
 const Datasets = lazy(() => import("@/pages/vision/Datasets"));
-const Models = lazy(() => import("@/pages/vision/Models"));
 const Evidence = lazy(() => import("@/pages/vision/Evidence"));
+// P3.5 统一模型管理（系统级独立模块，M5/G4）
+const ModelConnections = lazy(() => import("@/pages/models/Connections"));
+const ModelCatalog = lazy(() => import("@/pages/models/Catalog"));
+const ModelBindings = lazy(() => import("@/pages/models/Bindings"));
+const ModelGovernance = lazy(() => import("@/pages/models/Governance"));
+const ModelLocal = lazy(() => import("@/pages/models/LocalModels"));
 // P4 数据与资产
 const Import = lazy(() => import("@/pages/data/Import"));
 const Assets = lazy(() => import("@/pages/data/Assets"));
 const Quality = lazy(() => import("@/pages/data/Quality"));
+const KnowledgeGovernance = lazy(() => import("@/pages/data/KnowledgeGovernance"));
+// P4.5 认知内核 / 研究（TaaS Research RAG V1）
+const ResearchWorkbench = lazy(() => import("@/pages/research/Workbench"));
 // P5 工作流与 Agent
 const Runs = lazy(() => import("@/pages/workflow/Runs"));
 const Templates = lazy(() => import("@/pages/workflow/Templates"));
@@ -352,8 +365,20 @@ export const MODULE_GROUPS: ModuleGroup[] = [
       { route: "/vision/tasks", label: "识别任务", icon: ListCheckIcon, Page: Tasks },
       { route: "/vision/annotation", label: "标注协同", icon: PenIcon, Page: Annotation },
       { route: "/vision/datasets", label: "数据集管理", icon: LayersIcon, Page: Datasets },
-      { route: "/vision/models", label: "模型管理", icon: CubeIcon, Page: Models },
       { route: "/vision/evidence", label: "证据链", icon: SealIcon, Page: Evidence },
+    ],
+  },
+  {
+    group: "models",
+    label: "模型管理",
+    // 04 §6：至少命中一个 required scope 才渲染；后端独立鉴权不依赖前端隐藏。
+    requiredScopes: ["models.config.read", "models.usage.read"],
+    items: [
+      { route: "/models/connections", label: "连接管理", icon: PlugIcon, Page: ModelConnections },
+      { route: "/models/catalog", label: "模型目录", icon: CubeIcon, Page: ModelCatalog },
+      { route: "/models/bindings", label: "能力分配", icon: TargetIcon, Page: ModelBindings },
+      { route: "/models/governance", label: "运行治理", icon: AuditIcon, Page: ModelGovernance },
+      { route: "/models/local", label: "本地模型", icon: LayersIcon, Page: ModelLocal },
     ],
   },
   {
@@ -363,6 +388,14 @@ export const MODULE_GROUPS: ModuleGroup[] = [
       { route: "/data/import", label: "导入中心", icon: ImportIcon, Page: Import },
       { route: "/data/assets", label: "资产台账", icon: <FolderGlyph />, Page: Assets },
       { route: "/data/quality", label: "质量金标准", icon: ShieldCheckIcon, Page: Quality },
+      { route: "/data/knowledge", label: "知识治理", icon: <DocGlyph />, Page: KnowledgeGovernance },
+    ],
+  },
+  {
+    group: "research",
+    label: "研究与认知",
+    items: [
+      { route: "/research/workbench", label: "研究工作台", icon: <TerminalGlyph />, Page: ResearchWorkbench },
     ],
   },
   {
@@ -432,3 +465,32 @@ export const MODULE_ITEMS: ModuleItem[] = MODULE_GROUPS.flatMap((g) => g.items);
 export const MODULE_BY_ROUTE: Record<string, ModuleItem> = Object.fromEntries(
   MODULE_ITEMS.map((item) => [item.route, item]),
 );
+
+/**
+ * 兼容路由别名（04 §3.5）：旧 /vision/models 映射到 /models/local。
+ * 兼容期结束前不得移除；别名解析只转发，不复制组件状态源。
+ */
+export const ROUTE_ALIASES: Record<string, string> = {
+  "/vision/models": "/models/local",
+};
+
+/** 按路由取条目：先查别名，再查正式路由。 */
+export function itemForRoute(route: string): ModuleItem | undefined {
+  const resolved = ROUTE_ALIASES[route] ?? route;
+  return MODULE_BY_ROUTE[resolved];
+}
+
+/**
+ * 可见分组投影（04 §6）：
+ * —— 无 requiredScopes 的分组对所有登录用户可见；
+ * —— scopes 为 null/undefined（whoami 未加载或失败）时受限分组
+ *    fail-closed 隐藏；
+ * —— 命中任一 required scope 即可见（细粒度动作由后端独立鉴权）。
+ */
+export function visibleGroups(scopes: string[] | null | undefined): ModuleGroup[] {
+  return MODULE_GROUPS.filter((g) => {
+    if (!g.requiredScopes || g.requiredScopes.length === 0) return true;
+    if (!scopes || scopes.length === 0) return false;
+    return g.requiredScopes.some((s) => scopes.includes(s));
+  });
+}

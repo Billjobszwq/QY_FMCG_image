@@ -36,15 +36,15 @@
 | `src/models/` | 模型 bundle 契约与本地解析 |
 | `src/modules/` | 可插拔业务模块与领域服务 |
 | `src/pipeline/` | 识别/评测流水线入口 |
-| `src/platform/` | 平台内核、Graph+Loop、Agent、API 与控制面 |
+| `src/platform/` | 平台内核、Graph+Loop、Agent、API、控制面、认知内核（`cognition/`）、治理平面（`governance/`）与统一模型管理（`models/`） |
 | `src/recognize/` | 在线识别 API、服务和推理适配 |
 | `src/review/` | 人工审核队列、导出与审核载荷 |
 | `src/sam_assist/` | SAM 辅助标注、候选框和提示 |
 | `src/training/` | 数据集构建、训练、门禁、监控与 VLM 训练 |
 
-## Web 页面（29）
+## Web 页面（30）
 
-页面源码统一位于 `web/src/pages/`，路由由 `web/src/platform/ui_registry.tsx` 和 `web/src/App.tsx` 组装。以下分组覆盖当前全部 29 个页面文件。
+页面源码统一位于 `web/src/pages/`，路由由 `web/src/platform/ui_registry.tsx` 和 `web/src/App.tsx` 组装。以下分组覆盖当前全部 30 个页面文件。
 
 ### 平台首页、主管与帮助（6）
 
@@ -61,8 +61,10 @@
 - `WorkflowCanvas`：工作流画布
 - `GraphRuns`：Graph/Loop 运行中心
 
-### 识别、标注、模型与训练（8）
+### 识别、标注、模型与训练（9）
 
+- `ModelManagementNotice`：统一模型管理旧树指引页（完整交互在桌面端；
+  /models/local 复用模型驻留内容）
 - `Vision`：即时识别与视觉领域入口
 - `CascadeTasks`：级联识别任务
 - `Annotation`：标注与审核
@@ -90,7 +92,7 @@
 - `SurveyBuilder`：问卷设计
 - `IamMaster`：账号、权限与主数据
 
-## 测试套件（4）
+## 测试套件（7）
 
 | 路径 | 验证范围 |
 |---|---|
@@ -98,5 +100,9 @@
 | `tests/contract/` | 跨模块接口、数据不变量和仓库结构合同 |
 | `tests/platform/` | 平台 API、Graph+Loop、Agent、领域模块和持久化集成 |
 | `tests/promotion/` | 面向发布/推广产物的验收测试 |
+| `tests/cognition/` | 认知内核：基线资产锁定、CognitiveContext 与 typed contracts |
+| `tests/governance/` | 治理平面：Agent Definition 投影、Policy/告警/暂停控制链 |
+| `tests/research/` | Research RAG：Research Graph 状态机、预算/断点恢复、Claim 引证 |
+| `tests/models/` | 统一模型管理：迁移保护、SecretStore/EndpointPolicy、Provider Adapter 合同 |
 
 默认入口是 `.venv/bin/python -m pytest`；真实宿主硬件探针使用独立 marker，不包含在默认 hermetic 套件中。

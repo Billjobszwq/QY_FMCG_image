@@ -1,5 +1,12 @@
 # Agentic Business OS（识别为首个 Domain Pack）
 
+> **2026-08-21 Agent/Memory/Research RAG 专项入口：** 当前状态为
+> `BLOCKED_BY_SECURITY_MIGRATION_AND_EVALUATION`。下一轮从
+> [`TaaS Research RAG Round 2 收口包`](./implementation/taas-research-rag-agent-memory-v1/round-2-hardening/README.md)
+> 开始，执行时使用其中的
+> [`完整开发提示词`](./implementation/taas-research-rag-agent-memory-v1/round-2-hardening/AGENT-EXECUTION-PROMPT.md)。
+> 该专项不替代识别/训练工作台入口，也不授权训练、生产切换或部署。
+
 > **2026-08-12 当前唯一实施入口：** 用户验收重新打开了“有模块、无工作面”的系统性问题，旧 `READY_FOR_USER_ACCEPTANCE` 已撤销。下一轮必须完整执行 [`可运营工作台 V3`](./implementation/agentic-business-os-operational-workbench-v3/README.md) 及其 [`Agent 连续执行提示词`](./implementation/agentic-business-os-operational-workbench-v3/AGENT-EXECUTION-PROMPT.md)。V3 先统一首页/任务/日历/日志/进度和真实 Agent Runtime，再完成可视化 Workflow、用户自定义问卷/BI/IAM/主数据、地址地图、V4 best 识别与自主训练控制面，最终以真实客户/地址/问卷 UAT 为唯一完成标准。
 
 > **2026-08-11 历史实施入口：** Workbench V1 与 Domain Packs V2 的连续性修复和纵向样板已完成一轮，但随后用户验收重新打开了可运营性问题。相关 [`Domain Packs V2`](./implementation/agentic-business-os-domain-packs-v2/README.md) 和 [`Agent 执行提示词`](./implementation/agentic-business-os-domain-packs-v2/AGENT-EXECUTION-PROMPT.md) 只作为 V3 的事实与契约前置阅读，不再直接开工。

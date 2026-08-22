@@ -55,9 +55,6 @@ def _vision() -> ModuleManifestV2:
             NavRoute(route="/vision/datasets", label="数据集",
                      description="数据资产、快照与质量门禁",
                      actions=("资产台账", "快照", "质量门禁")),
-            NavRoute(route="/vision/models", label="模型与训练",
-                     description="候选模型、驻留与训练治理（只读）",
-                     actions=("候选状态", "模型驻留", "训练控制")),
             NavRoute(route="/vision/evidence", label="质量与证据",
                      description="质量判定、证据链与 Graph trail",
                      actions=("质量判定", "证据浏览", "Trail")),
@@ -178,6 +175,39 @@ def build_default_module_registry() -> ModuleRegistry:
         agents=("fieldops_agent",),
     ))
     reg.register(_vision())
+    # 统一模型管理 V1（M5/G4，DEC-M001）：独立系统级一级模块。
+    # 智能识别不再承载系统级模型连接/分配；旧 /vision/models 经前端
+    # alias 映射到 /models/local（兼容期结束前不得移除该别名）。
+    reg.register(ModuleManifestV2(
+        module_id="models", name="模型管理", version="1.0.0",
+        domain="model_management", status="live", theme_token="orange",
+        primary_route="/models",
+        navigation=(
+            NavRoute(route="/models/connections", label="连接管理",
+                     description="统一管理本地与外部模型服务；仅授权角色可见",
+                     actions=("新建连接", "测试连接", "轮换凭据", "停用")),
+            NavRoute(route="/models/catalog", label="模型目录",
+                     description="发现/人工登记/能力探针（已验证能力）",
+                     actions=("发现模型", "人工登记", "探针")),
+            NavRoute(route="/models/bindings", label="能力分配",
+                     description="系统能力/模块/Agent 的版本化模型绑定",
+                     actions=("新建绑定", "影响分析", "回滚")),
+            NavRoute(route="/models/governance", label="运行治理",
+                     description="账号级用量/预算/告警/审批与审计",
+                     actions=("用量监控", "告警", "待审批", "审计")),
+            NavRoute(route="/models/local", label="本地模型",
+                     description="本地模型驻留、训练门禁与 OMLX 健康（只读）",
+                     actions=("驻留状态", "训练门禁", "健康")),
+        ),
+        agents=(),
+        queries=("models.connections.list", "models.catalog.list",
+                 "models.bindings.list", "models.usage.summary"),
+        api_prefix="/api/v1/models", openapi_tag="models",
+        permission_scopes=("models.config.read", "models.usage.read"),
+        billing_units=("model_call",),
+        compatibility={"legacy_route": "/vision/models → /models/local"},
+        health_checks=("omlx",),
+    ))
     reg.register(ModuleManifestV2(
         module_id="analytics", name="分析与 BI", version="1.0.0",
         domain="analytics", status="live", theme_token="indigo",

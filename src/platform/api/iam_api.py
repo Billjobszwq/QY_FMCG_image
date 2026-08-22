@@ -138,9 +138,20 @@ def create_iam_router(store: Any, auth: AuthService | None) -> APIRouter:
         p = require_principal(auth, request, csrf=False)
         actor = p["actor"]
         vis = iam.visible_customers(actor)
+        roles = iam.roles_of(actor)
+        scopes = iam.scopes_of(actor)
+        # 平台角色（env admin / owner / platform_admin）的后端授权是
+        # 全量的；投影必须如实反映，否则前端 fail-closed 会错误隐藏
+        # 受限模块（如模型管理）。投影仅改善体验，后端仍独立鉴权。
+        is_platform = (p.get("role") == "admin"
+                       or "owner" in roles
+                       or "platform_admin" in roles)
+        if is_platform:
+            from ..iam import SCOPES as _ALL_SCOPES
+            scopes = sorted(set(scopes) | set(_ALL_SCOPES))
         return {"actor": actor, "session_role": p["role"],
-                "roles": iam.roles_of(actor),
-                "scopes": iam.scopes_of(actor),
+                "roles": roles,
+                "scopes": scopes,
                 "memberships": iam.memberships_of(actor),
                 # ABOSV3-P1-015：多客户授权全部返回（None=平台角色）
                 "visible_customers": vis,

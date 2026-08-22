@@ -10,7 +10,7 @@
  */
 import { Suspense } from "react";
 import { cn } from "@/lib/utils";
-import { MODULE_GROUPS } from "@/modules/registry";
+import { MODULE_GROUPS, itemForRoute } from "@/modules/registry";
 import { useModuleTabs } from "@/store/moduleTabs";
 import { HedgehogLoader } from "@/components/ui/loader";
 
@@ -26,8 +26,12 @@ export function ModuleWorkbench({ groupKey }: ModuleWorkbenchProps) {
   if (!group) return null;
 
   // 缺省回退到组内第一个条目（tabs 未写入时）。
+  // 兼容别名（04 §3.5）：旧 /vision/models 等经 itemForRoute 映射到
+  // 新模块页签，不复制组件状态源。
   const active =
-    group.items.find((i) => i.route === activeRoute) ?? group.items[0];
+    group.items.find((i) => i.route === activeRoute) ??
+    (activeRoute ? itemForRoute(activeRoute) : undefined) ??
+    group.items[0];
   const Page = active.Page;
 
   return (

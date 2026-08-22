@@ -76,7 +76,8 @@ def test_default_catalog_modules_and_status():
     reg = build_default_module_registry()
     ids = {m.module_id for m in reg.modules()}
     for need in ("home", "data", "survey", "geo", "vision", "analytics",
-                 "workflow", "finance", "system", "reference.echo"):
+                 "workflow", "finance", "system", "reference.echo",
+                 "models"):
         assert need in ids, f"缺少一级模块 {need}"
 
 
@@ -86,12 +87,26 @@ def test_vision_second_level_routes_real_and_unique():
     routes = [n.route for n in vision.navigation]
     assert len(routes) == len(set(routes))
     for r in ("/vision/recognize", "/vision/tasks", "/vision/annotation",
-              "/vision/datasets", "/vision/models", "/vision/evidence"):
+              "/vision/datasets", "/vision/evidence"):
         assert r in routes, f"识别域缺少二级路由 {r}"
+    # 统一模型管理 V1（DEC-M001）：系统级模型管理不再位于智能识别
+    assert "/vision/models" not in routes, (
+        "/vision/models 必须迁出智能识别可见导航")
     # 三级 actions 必须存在
     assert all(len(n.actions) >= 0 for n in vision.navigation)
     rec = next(n for n in vision.navigation if n.route == "/vision/recognize")
     assert rec.actions
+
+
+def test_models_module_is_independent_system_module():
+    reg = build_default_module_registry()
+    models = reg.get("models")
+    routes = [n.route for n in models.navigation]
+    assert routes == ["/models/connections", "/models/catalog",
+                      "/models/bindings", "/models/governance",
+                      "/models/local"], "模型管理必须固定五个页签"
+    assert set(models.permission_scopes) >= {
+        "models.config.read", "models.usage.read"}
 
 
 def test_module_agent_association_verifiable():

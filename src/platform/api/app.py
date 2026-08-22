@@ -49,6 +49,7 @@ def create_app(
     cascade_router=None,
     profiles_service=None,
     agent_on_approved=None,
+    model_adapter_factory=None,
 ) -> FastAPI:
     app = FastAPI(
         title="Agentic Business OS API",
@@ -264,6 +265,82 @@ def create_app(
         app.include_router(create_usage_router(
             bundle.store, IAMService(bundle.store),
             auth=AuthService(bundle.store)))
+
+        # TaaS 统一模型管理 V1（M4/M7）：唯一 ModelManagementServices，
+        # 必须先于认知内核装配（认知 embedding 优先走受管绑定）。
+        # KEK 仅运行时经 TAAS_MODEL_SECRET_KEK（base64 32B）注入；
+        # 缺失 → SecretStore 不可用（503），绝不使用默认 key。
+        from src.platform.iam import IAMService as _ModelIAM
+        from src.platform.models.secrets import EncryptedSQLiteSecretStore
+        from src.platform.models.service import ModelManagementServices
+        from src.platform.api.model_management_api import (
+            create_model_management_router)
+        import base64 as _b64
+        import binascii as _binascii
+        _kek_raw = os.environ.get("TAAS_MODEL_SECRET_KEK", "")
+        _kek: bytes | None = None
+        if _kek_raw:
+            try:
+                _decoded = _b64.b64decode(_kek_raw, validate=True)
+                if len(_decoded) == 32:
+                    _kek = _decoded
+            except (_binascii.Error, ValueError):
+                _kek = None
+        _model_services = ModelManagementServices(
+            bundle.store,
+            secret_store=EncryptedSQLiteSecretStore(bundle.store,
+                                                    kek=_kek),
+            iam=_ModelIAM(bundle.store),
+            adapter_factory=model_adapter_factory)
+        app.state.models = _model_services
+        # M8：Agent Runtime 的 LLM 合成经统一模型管理调用端口
+        # （解析 published Definition 的受管 provider/model，调用落账本）。
+        from src.platform.models.invocation import ModelInvocationService
+        agent_runtime.model_invocation = ModelInvocationService(
+            _model_services)
+        app.include_router(create_model_management_router(
+            _model_services, auth=AuthService(bundle.store),
+            iam=_ModelIAM(bundle.store)))
+
+        # TaaS 认知内核（Task 11）：Cognition/Research/Governance API。
+        # CAS/索引用 DB 同级目录；可经环境变量覆盖。
+        from src.platform.cognition.composition import (
+            build_cognition_services)
+        from src.platform.cognition.index.providers import (
+            provider_from_env)
+        from src.platform.api.cognition_api import (
+            create_cognition_router)
+        from src.platform.api.research_api import create_research_router
+        from src.platform.api.governance_api import (
+            create_governance_router)
+        # M7：embedding provider 优先级 = 受管绑定（统一模型管理）→
+        # 受控环境回退（source=legacy_env）→ UnavailableVectorProvider。
+        from src.platform.models.integrations import (
+            resolve_embedding_provider)
+        _managed_vector_provider = None
+        try:
+            _managed_vector_provider = resolve_embedding_provider(
+                _model_services, principal_id="platform-composition")
+        except Exception:
+            _managed_vector_provider = None
+        _db_dir = Path(bundle.store._path).parent
+        _cognition = build_cognition_services(
+            bundle.store,
+            cas_root=os.environ.get("COGNITION_CAS_ROOT",
+                                    str(_db_dir / "cas")),
+            index_root=os.environ.get("COGNITION_INDEX_ROOT",
+                                      str(_db_dir / "index")),
+            vector_provider=(_managed_vector_provider
+                             or provider_from_env()))
+        app.state.cognition = _cognition
+        app.include_router(create_cognition_router(
+            _cognition, auth=AuthService(bundle.store),
+            iam=IAMService(bundle.store)))
+        app.include_router(create_research_router(
+            _cognition, auth=AuthService(bundle.store),
+            iam=IAMService(bundle.store)))
+        app.include_router(create_governance_router(
+            bundle.store, auth=AuthService(bundle.store)))
 
         def _timer_poller():
             import time as _time

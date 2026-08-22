@@ -46,6 +46,12 @@ DEFAULT_RULES: dict[str, tuple[int, int, int]] = {
     "workflow.run.start": (60, 60, 10),
     "model.switch": (10, 60, 0),
     "url.download": (60, 60, 10),
+    # R2-09：Research mutation 限流
+    "research.run.start": (30, 60, 5),
+    "research.run.resume": (30, 60, 5),
+    "research.run.cancel": (30, 60, 5),
+    "research.run.decide": (30, 60, 5),
+    "research.synthesize": (30, 60, 5),
 }
 
 

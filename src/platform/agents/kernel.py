@@ -64,6 +64,8 @@ class AgentManifest:
     approval_rules: list[str]
     billing_unit: str
     health_endpoint: str
+    # Task 3：published=来自已发布 Definition 投影；declared=仅模块声明
+    definition_status: str = "declared"
 
 
 _BUILTIN = [
@@ -168,11 +170,11 @@ class AgentRegistry:
         self._ensure_builtin()
 
     def _ensure_builtin(self) -> None:
-        for m in _BUILTIN:
-            if not self.store._conn.execute(
-                    "SELECT 1 FROM agent_manifest_v1 WHERE agent_id=?",
-                    (m.agent_id,)).fetchone():
-                self.register(m, _builtin=True)
+        # Task 3：Manifest 不再是独立事实源，而是“已发布 Definition +
+        # 模块元数据（_BUILTIN）”的只读投影；构造注册表即幂等重建，
+        # 禁止在各处另行双写。
+        from .manifest_projection import rebuild_manifest_projection
+        rebuild_manifest_projection(self.store)
 
     def register(self, m: AgentManifest, *, _builtin: bool = False) -> None:
         bad = set(m.capability_scopes) - GRANTABLE_SCOPES

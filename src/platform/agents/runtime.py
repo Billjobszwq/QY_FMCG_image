@@ -24,62 +24,9 @@ from typing import Any
 HIGH_RISK_TOOLS = frozenset({"recognition.create.preview",
                              "production.switch"})
 
-_SEVEN_AGENTS = {
-    "supervisor": {
-        "soul": {"identity": "主管 Agent：规划、委派、追踪、升级",
-                 "values": ["不借用管理员身份", "高风险必须人工批准",
-                            "诚实降级，不伪装成功"]},
-        "prompt": "你是主管 Agent。优先从工具目录检索可用动作，生成有界"
-                  "计划；只读工具直接执行，写入动作生成命令预览待批准；"
-                  "结果写 Run/Event/Evidence/Usage。",
-        "tools": ["work.progress.query", "master.skus.summary",
-                  "survey.list", "geo.addresses.missing_coords",
-                  "usage.query", "workflow.draft.create",
-                  "analytics.report.draft", "recognition.create.preview",
-                  "kb.search"],
-    },
-    "modelops": {
-        "soul": {"identity": "ModelOps Agent：模型/制品/训练治理",
-                 "values": ["生产切换必须人工批准", "弱模型不自动晋级"]},
-        "prompt": "你负责模型制品与训练控制面事实查询；发布与生产切换"
-                  "永远生成待批准命令。",
-        "tools": ["modelops.artifacts.query", "work.progress.query"],
-    },
-    "data_steward": {
-        "soul": {"identity": "Data Steward：主数据与数据质量 steward",
-                 "values": ["主数据变更留审计", "不删除历史"]},
-        "prompt": "你负责客户/项目/SKU/地址等主数据事实与数据质量查询。",
-        "tools": ["master.skus.summary", "master.data.summary",
-                  "geo.addresses.missing_coords"],
-    },
-    "survey_agent": {
-        "soul": {"identity": "Survey Agent：问卷域助手",
-                 "values": ["模型输出只是 suggestion，人工才是 final"]},
-        "prompt": "你负责问卷定义/分配/响应事实查询与打开问卷页面。",
-        "tools": ["survey.list", "survey.responses.summary"],
-    },
-    "analytics_agent": {
-        "soul": {"identity": "Analytics Agent：BI 语义层助手",
-                 "values": ["禁止任意 SQL", "发布必须人工批准"]},
-        "prompt": "你把业务问题映射到已注册指标并生成报表 draft；"
-                  "发布由人工批准。",
-        "tools": ["analytics.report.draft", "analytics.metrics.list"],
-    },
-    "fieldops_agent": {
-        "soul": {"identity": "FieldOps Agent：位置与外勤助手",
-                 "values": ["低置信地址不自动派发",
-                            "人脸比对需显式授权"]},
-        "prompt": "你负责地址/坐标/任务/路线事实查询。",
-        "tools": ["geo.addresses.missing_coords", "geo.tasks.summary"],
-    },
-    "finance_agent": {
-        "soul": {"identity": "Finance Agent：Usage 与账单助手",
-                 "values": ["账单只来自 immutable Usage",
-                            "结算后不原地改写"]},
-        "prompt": "你负责客户 Usage/账单事实查询与导出建议。",
-        "tools": ["usage.query"],
-    },
-}
+# Task 3：seed 所有权收敛到 definition_service（单一事实源）；
+# 本别名仅为兼容本模块内旧引用（save_draft 的未知 Agent 校验）。
+from .definition_service import AGENT_SEEDS as _SEVEN_AGENTS
 
 
 def _now() -> str:
@@ -107,27 +54,9 @@ class AgentRuntime:
     # ---------- 版本化定义 ----------
 
     def _seed_definitions(self) -> None:
-        conn = self.store._conn
-        for aid, cfg in _SEVEN_AGENTS.items():
-            if conn.execute(
-                    "SELECT 1 FROM agent_definition_v1 WHERE agent_id=?",
-                    (aid,)).fetchone():
-                continue
-            conn.execute(
-                "INSERT INTO agent_definition_v1 (agent_id, version,"
-                " status, soul_json, system_prompt, provider, model,"
-                " budget_json, approval_json, tool_allowlist_json,"
-                " memory_acl_json, created_by, created_at, updated_at)"
-                " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
-                (aid, 1, "published",
-                 json.dumps(cfg["soul"], ensure_ascii=False),
-                 cfg["prompt"], "rules_tool_loop", "",
-                 json.dumps({"max_tool_calls_per_turn": 4}),
-                 json.dumps({"high_risk_requires_approval": True}),
-                 json.dumps(cfg["tools"]),
-                 json.dumps({"levels": ["L0", "L1", "L2"]}),
-                 "system", _now(), _now()))
-        conn.commit()
+        # Task 3：seed 逻辑唯一归属 AgentDefinitionService（禁止双写）。
+        from .definition_service import AgentDefinitionService
+        AgentDefinitionService(self.store).ensure_seed_definitions()
 
     def get_definition(self, agent_id: str,
                        version: int | None = None) -> dict | None:
@@ -847,22 +776,41 @@ class AgentRuntime:
     def _llm_compose(self, definition: dict, text: str,
                      tool_output: str) -> str | None:
         """Provider SPI：LLM 只用于把工具结果合成自然语言；
-        失败/未配置 → None（保持规则输出，诚实降级）。"""
+        失败/未配置 → None（保持规则输出，诚实降级）。
+
+        M8：优先经统一模型管理调用端口（解析 published Definition 的
+        受管 provider/model，调用落账本）；未注入端口时保留旧环境变量
+        回退（source=legacy_env，可观测、可逐步停用）。
+        """
+        if not tool_output:
+            return None
+        invocation = getattr(self, "model_invocation", None)
+        messages = [
+            {"role": "system",
+             "content": definition["system_prompt"]
+             + "\nSoul: " + json.dumps(definition["soul"],
+                                        ensure_ascii=False)
+             + "\n只基于下面的工具事实回答，不编造。"},
+            {"role": "user",
+             "content": f"用户：{text}\n工具事实：{tool_output}"}]
+        if invocation is not None:
+            try:
+                out = invocation.chat_for_agent(
+                    definition["agent_id"],
+                    published_definition=definition,
+                    messages=messages, principal_id="agent-runtime",
+                    run_id="", work_id="", max_tokens=1024)
+                return out.get("text") or None
+            except Exception:
+                return None
+        # legacy 回退（未注入统一端口时）
         import os
         key = os.environ.get("DEEPSEEK_API_KEY", "")
-        if not key or not tool_output:
+        if not key:
             return None
         import urllib.request
         body = {"model": os.environ.get("DEEPSEEK_MODEL", "deepseek-chat"),
-                "messages": [
-                    {"role": "system",
-                     "content": definition["system_prompt"]
-                     + "\nSoul: " + json.dumps(definition["soul"],
-                                                ensure_ascii=False)
-                     + "\n只基于下面的工具事实回答，不编造。"},
-                    {"role": "user",
-                     "content": f"用户：{text}\n工具事实：{tool_output}"}],
-                "temperature": 0.3}
+                "messages": messages, "temperature": 0.3}
         req = urllib.request.Request(
             "https://api.deepseek.com/chat/completions",
             data=json.dumps(body).encode(),

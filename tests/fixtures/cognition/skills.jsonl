@@ -1,0 +1,2 @@
+{"skill_id": "skill-excel-report", "name": "Excel 报表生成", "description": "把结构化数据生成 Excel 报表并导出", "skill_type": "builtin", "applicable_scenarios": ["生成 Excel 报表", "数据导出"], "forbidden_scenarios": ["对外发布"], "risk_level": "low"}
+{"skill_id": "skill-ocr", "name": "OCR 识别", "description": "对图片做 OCR 文本识别", "skill_type": "builtin", "applicable_scenarios": ["图片文字识别"], "forbidden_scenarios": [], "risk_level": "low"}

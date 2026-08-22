@@ -50,7 +50,9 @@ PLATFORM_COMMANDS: dict[str, str] = {
 UI_ROUTES_MIRROR: tuple[str, ...] = (
     "/home",
     "/vision/recognize", "/vision/tasks", "/vision/annotation",
-    "/vision/datasets", "/vision/models", "/vision/evidence",
+    "/vision/datasets", "/vision/evidence",
+    "/models/connections", "/models/catalog", "/models/bindings",
+    "/models/governance", "/models/local",
     "/data/import", "/data/assets", "/data/quality",
     "/workflow/studio", "/workflow/templates", "/workflow/runs",
     "/workflow/approvals", "/workflow/connectors", "/workflow/agents",

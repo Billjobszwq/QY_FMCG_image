@@ -1,12 +1,19 @@
 """omlx（OpenAI 兼容）本地模型客户端：嵌入 / VLM 结构化抽取 / OCR。
 
 所有调用走本地端点，图像不出网。带 thinking 的模型会把 token 预算耗在 reasoning 上，
-故 _chat 在 content 为空时自动放大 max_tokens 重试一次。"""
+故 _chat 在 content 为空时自动放大 max_tokens 重试一次。
+
+统一模型管理 V1（M8/DEC-M010）：本模块是**迁移期兼容层**——
+平台运行态（认知索引/Agent）已改经统一模型管理的受管连接与账本；
+独立 CLI（pipeline/labeling/catalog）仍走本 legacy env 通道。
+约束：兼容层不是第二配置真源；``provider_source()`` 显式暴露来源，
+首次使用写一次性告警，便于观测与逐步停用。"""
 from __future__ import annotations
 
 import base64
 import json
 import re
+import warnings
 from functools import lru_cache
 from typing import Any
 
@@ -14,12 +21,27 @@ from openai import OpenAI
 
 from .config import get_settings
 
+_LEGACY_WARNED = False
+
+
+def provider_source() -> str:
+    """显式配置来源标注（可观测的迁移期回退，不是受管连接）。"""
+    return "legacy_env:OMLX_API_KEY"
+
 
 @lru_cache(maxsize=1)
 def _client() -> OpenAI:
+    global _LEGACY_WARNED
     s = get_settings()
     if not s.omlx_api_key:
         raise RuntimeError("OMLX_API_KEY 未设置（见 .env.example）")
+    if not _LEGACY_WARNED:
+        _LEGACY_WARNED = True
+        warnings.warn(
+            "omlx 客户端使用 legacy env 通道（%s）；平台运行态请改经"
+            "统一模型管理受管连接（见 taas-unified-model-management-v1）"
+            % provider_source(),
+            stacklevel=2)
     return OpenAI(base_url=s.omlx_base_url, api_key=s.omlx_api_key, timeout=s.request_timeout)
 
 
